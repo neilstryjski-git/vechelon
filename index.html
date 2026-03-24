@@ -41,8 +41,14 @@
 
     .ring-svg {
       display: block;
-      animation: spin 18s linear infinite;
       filter: drop-shadow(0 0 18px rgba(59,130,246,0.35)) drop-shadow(0 0 6px rgba(59,130,246,0.2));
+      overflow: visible;
+    }
+
+    .ring-group {
+      animation: spin 18s linear infinite;
+      transform-box: fill-box;
+      transform-origin: center;
     }
 
     @keyframes spin {
@@ -143,7 +149,9 @@
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
       </defs>
-      <path fill="#3B82F6" fill-rule="evenodd" filter="url(#glow)" d="${buildChainring(0, 0)}"/>
+      <g class="ring-group">
+        <path fill="#3B82F6" fill-rule="evenodd" filter="url(#glow)" d="${buildChainring(0, 0)}"/>
+      </g>
     `;
   </script>
 
