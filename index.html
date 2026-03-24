@@ -59,16 +59,16 @@
       text-align: center;
     }
 
-    /* clips the ring — only the top arc is visible */
+    /* height reserves layout space; clipping is handled by SVG clipPath inside */
     .ring-window {
       width: 200px;
       height: 94px;
-      overflow: hidden;
       margin-bottom: 5px;
     }
 
     .ring-svg {
       display: block;
+      overflow: visible; /* allows glow to bleed beyond the layout box */
       filter: drop-shadow(0 0 18px rgba(59,130,246,0.35)) drop-shadow(0 0 6px rgba(59,130,246,0.2));
     }
 
@@ -195,13 +195,12 @@
     const svg = document.getElementById('chainring');
     svg.innerHTML = `
       <defs>
-        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
+        <clipPath id="topclip">
+          <rect x="-145" y="-145" width="290" height="136"/>
+        </clipPath>
       </defs>
-      <g class="ring-group">
-        <path fill="#3B82F6" fill-rule="evenodd" filter="url(#glow)" d="${buildChainring(0, 0)}"/>
+      <g class="ring-group" clip-path="url(#topclip)">
+        <path fill="#3B82F6" fill-rule="evenodd" d="${buildChainring(0, 0)}"/>
       </g>
     `;
 
