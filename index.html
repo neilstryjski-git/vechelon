@@ -72,17 +72,6 @@
       filter: drop-shadow(0 0 18px rgba(59,130,246,0.35)) drop-shadow(0 0 6px rgba(59,130,246,0.2));
     }
 
-    /* rotate around the ring's own geometric centre, not the clipped viewport */
-    .ring-group {
-      animation: spin 18s linear infinite;
-      transform-box: view-box;
-      transform-origin: 50% 50%;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
 
     /* colour picker */
     .swatch-wrap {
@@ -199,8 +188,10 @@
           <rect x="-145" y="-145" width="290" height="136"/>
         </clipPath>
       </defs>
-      <g class="ring-group" clip-path="url(#topclip)">
-        <path fill="#3B82F6" fill-rule="evenodd" d="${buildChainring(0, 0)}"/>
+      <g class="ring-group">
+        <g clip-path="url(#topclip)">
+          <path fill="#3B82F6" fill-rule="evenodd" d="${buildChainring(0, 0)}"/>
+        </g>
       </g>
     `;
 
@@ -244,6 +235,16 @@
     }
 
     paint(col);
+
+    // rotate around SVG origin (0,0) = ring geometric centre
+    const ringGroup = svg.querySelector('.ring-group');
+    const duration = 18000;
+    const t0 = performance.now();
+    (function tick(now) {
+      const angle = ((now - t0) / duration * 360) % 360;
+      ringGroup.setAttribute('transform', `rotate(${angle})`);
+      requestAnimationFrame(tick);
+    })(t0);
   </script>
 
 </body>
