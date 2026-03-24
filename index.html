@@ -19,16 +19,20 @@
       overflow: hidden;
     }
 
-    body::before {
-      content: '';
+    #ambient-glow {
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       width: 1400px;
       height: 1400px;
-      background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.04) 25%, rgba(59,130,246,0.01) 50%, transparent 75%);
       pointer-events: none;
+      z-index: 0;
+    }
+
+    body > *:not(#ambient-glow) {
+      position: relative;
+      z-index: 1;
     }
 
     .wordmark {
@@ -54,7 +58,7 @@
       font-weight: 700;
       letter-spacing: 0.46em;
       text-transform: uppercase;
-      color: #2A4A6A;
+      color: #5A8AA8;
       margin-top: 10px;
       text-align: center;
     }
@@ -132,6 +136,8 @@
   </style>
 </head>
 <body>
+
+  <div id="ambient-glow"></div>
 
   <div class="ring-window">
     <svg class="ring-svg" id="chainring" viewBox="-145 -145 290 290" width="200" height="200"></svg>
@@ -224,14 +230,24 @@
     pk.oninput = e => paint(e.target.value);
     sr.appendChild(pk);
 
+    function hexToRgb(hex) {
+      const r = parseInt(hex.slice(1,3), 16);
+      const g = parseInt(hex.slice(3,5), 16);
+      const b = parseInt(hex.slice(5,7), 16);
+      return `${r},${g},${b}`;
+    }
+
     function paint(c) {
       col = c;
       pk.value = c;
+      const rgb = hexToRgb(c);
       document.querySelector('.ring-group path').setAttribute('fill', c);
       document.querySelector('.ring-svg').style.filter =
         `drop-shadow(0 0 18px ${c}55) drop-shadow(0 0 6px ${c}33)`;
       document.querySelectorAll('.accent-letter').forEach(el => el.style.color = c);
       document.querySelectorAll('.sw').forEach(el => el.classList.toggle('on', el.dataset.h === c));
+      document.getElementById('ambient-glow').style.background =
+        `radial-gradient(circle, rgba(${rgb},0.08) 0%, rgba(${rgb},0.04) 25%, rgba(${rgb},0.01) 50%, transparent 75%)`;
     }
 
     paint(col);
