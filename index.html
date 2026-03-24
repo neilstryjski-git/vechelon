@@ -75,8 +75,8 @@
     /* rotate around the ring's own geometric centre, not the clipped viewport */
     .ring-group {
       animation: spin 18s linear infinite;
-      transform-box: fill-box;
-      transform-origin: center;
+      transform-box: view-box;
+      transform-origin: 50% 50%;
     }
 
     @keyframes spin {
