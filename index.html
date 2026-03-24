@@ -1,49 +1,151 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vechelon</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vechelon — Club Command</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&display=swap" rel="stylesheet"/>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0a0a0a;
-      color: #f0f0f0;
+      background: #050A12;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Barlow Condensed', sans-serif;
+      overflow: hidden;
+    }
+
+    /* Subtle radial ambient glow behind logo */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -55%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .logo-wrap {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
-    .container {
+    .ring-svg {
+      display: block;
+      animation: spin 18s linear infinite;
+      filter: drop-shadow(0 0 18px rgba(59,130,246,0.35)) drop-shadow(0 0 6px rgba(59,130,246,0.2));
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .wordmark {
+      font-size: clamp(52px, 10vw, 80px);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      margin-top: 28px;
       text-align: center;
-      padding: 2rem;
     }
 
-    h1 {
-      font-size: 3rem;
+    .bold-letter {
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .accent-letter {
+      font-weight: 800;
+      color: #3B82F6;
+    }
+
+    .tagline {
+      font-size: 9px;
       font-weight: 700;
-      letter-spacing: 0.05em;
-      margin-bottom: 1rem;
+      letter-spacing: 0.46em;
+      text-transform: uppercase;
+      color: #2A4A6A;
+      margin-top: 14px;
+      text-align: center;
     }
 
-    p {
-      font-size: 1.1rem;
-      color: #888;
-      letter-spacing: 0.02em;
+    .coming {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: #0D1E30;
+      margin-top: 56px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Vechelon</h1>
-    <p>Something is coming.</p>
+
+  <div class="logo-wrap">
+    <svg class="ring-svg" id="chainring" viewBox="-145 -145 290 290" width="200" height="200"></svg>
   </div>
+
+  <div class="wordmark">
+    <span class="bold-letter">VE</span><span class="accent-letter">che</span><span class="bold-letter">LO</span><span class="accent-letter">n</span>
+  </div>
+
+  <div class="tagline">Club Command</div>
+
+  <div class="coming">Coming Soon</div>
+
+  <script>
+    const toR = d => d * Math.PI / 180;
+    const pt  = (cx, cy, r, deg) => [cx + r * Math.cos(toR(deg)), cy + r * Math.sin(toR(deg))];
+    const f   = n => parseFloat(n.toFixed(3));
+
+    function hole(cx, cy, r) {
+      return `M${f(cx+r)},${f(cy)} A${r},${r},0,1,0,${f(cx-r)},${f(cy)} A${r},${r},0,1,0,${f(cx+r)},${f(cy)}Z`;
+    }
+
+    function buildChainring(cx, cy) {
+      const N=40, rT=138, rV=114, rI=51, bR=85, bRad=13;
+      const thW=3.8, thN=2.2;
+      const [sx,sy] = pt(cx,cy,rV,-90-thW);
+      let d = `M${f(sx)},${f(sy)}`;
+      for(let i=0;i<N;i++){
+        const A = -90 + i*(360/N);
+        const th = (i%2===0) ? thW : thN;
+        const vE=A-th, tE=A+th;
+        const[a,b]=pt(cx,cy,rV,vE); d+=` A${rV},${rV},0,0,1,${f(a)},${f(b)}`;
+        const[c,e]=pt(cx,cy,rT,vE); d+=` L${f(c)},${f(e)}`;
+        const[g,h]=pt(cx,cy,rT,tE); d+=` A${rT},${rT},0,0,1,${f(g)},${f(h)}`;
+        const[j,k]=pt(cx,cy,rV,tE); d+=` L${f(j)},${f(k)}`;
+      }
+      d += "Z";
+      d += " " + hole(cx, cy, rI);
+      for(let b=0;b<5;b++){
+        const[bx,by]=pt(cx,cy,bR,-90+b*72);
+        d += " " + hole(bx,by,bRad);
+      }
+      return d;
+    }
+
+    const svg = document.getElementById('chainring');
+    svg.innerHTML = `
+      <defs>
+        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path fill="#3B82F6" fill-rule="evenodd" filter="url(#glow)" d="${buildChainring(0, 0)}"/>
+    `;
+  </script>
+
 </body>
 </html>
