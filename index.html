@@ -27,7 +27,7 @@
       transform: translate(-50%, -50%);
       width: 600px;
       height: 600px;
-      background: radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, rgba(59,130,246,0.03) 35%, rgba(59,130,246,0.01) 60%, transparent 100%);
       pointer-events: none;
     }
 
@@ -64,7 +64,7 @@
       width: 200px;
       height: 94px;
       overflow: hidden;
-      margin-top: 5px;
+      margin-bottom: 5px;
     }
 
     .ring-svg {
@@ -144,18 +144,17 @@
 </head>
 <body>
 
+  <div class="ring-window">
+    <svg class="ring-svg" id="chainring" viewBox="-145 -145 290 290" width="200" height="200"></svg>
+  </div>
+
   <div class="wordmark">
     <span class="bold-letter">VE</span><span class="accent-letter">che</span><span class="bold-letter">LO</span><span class="accent-letter">n</span>
   </div>
 
   <div class="tagline">Club Command</div>
 
-  <div class="ring-window">
-    <svg class="ring-svg" id="chainring" viewBox="-145 -145 290 290" width="200" height="200"></svg>
-  </div>
-
   <div class="swatch-wrap">
-    <span class="swatch-cap">Club Colour</span>
     <div class="sw-row" id="swatches"></div>
   </div>
 
