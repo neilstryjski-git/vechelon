@@ -42,7 +42,7 @@
     }
 
     .hero-section {
-      height: 90vh; /* Pulled up to show headers below the fold */
+      height: 90vh;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -158,6 +158,20 @@
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     }
 
+    .mobile-header {
+      display: none;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      font-size: 24px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--primary-color);
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 10px;
+    }
+
     .grid-container {
       display: grid;
       grid-template-columns: 100px repeat(3, 1fr);
@@ -213,6 +227,7 @@
     }
 
     .item-label {
+      font-family: 'Barlow Condensed', sans-serif;
       font-size: 14px;
       font-weight: 800;
       letter-spacing: 0.2em;
@@ -261,16 +276,23 @@
     }
 
     @media (max-width: 768px) {
+      .mobile-header {
+        display: block;
+      }
       .grid-container {
         grid-template-columns: 1fr;
         gap: 20px;
       }
-      .grid-header, .row-divider {
+      .grid-header {
         display: none;
       }
+      .row-divider {
+        display: block;
+        margin: 20px 0;
+      }
       .grid-item {
-        padding-bottom: 20px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        margin-bottom: 10px;
+        border-bottom: none; /* Removed in favor of row-divider */
       }
     }
   </style>
@@ -299,6 +321,7 @@
   </section>
 
   <section id="logic" class="cap-section">
+    <div class="mobile-header">VECHELON OUTCOMES</div>
     <div class="grid-container">
       <!-- Headers -->
       <div></div>
