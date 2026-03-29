@@ -262,13 +262,57 @@
     .grid-row-wrap:hover .item-title {
       color: var(--primary-color);
     }
+    
+    .grid-row-wrap:hover .hover-line {
+      animation: expand-and-settle 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes expand-and-settle {
+      0% {
+        transform: scaleX(0);
+        background: #ffffff;
+        opacity: 0;
+      }
+      40% {
+        opacity: 1;
+        background: #ffffff;
+      }
+      100% {
+        transform: scaleX(1);
+        background: linear-gradient(90deg, transparent 5%, var(--primary-color) 25%, var(--primary-color) 75%, transparent 95%);
+        opacity: 1;
+      }
+    }
+
+    .row-divider-container {
+      grid-column: 1 / -1;
+      position: relative;
+      height: 1px;
+      margin: 10px 0 30px;
+    }
 
     .row-divider {
-      grid-column: 1 / -1;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
       height: 1px;
       background: linear-gradient(90deg, transparent 5%, var(--primary-color) 25%, var(--primary-color) 75%, transparent 95%);
       opacity: 1;
-      margin: 10px 0 30px;
+    }
+
+    .hover-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: #ffffff;
+      transform: scaleX(0);
+      opacity: 0;
+      transform-origin: center;
+      pointer-events: none;
+      z-index: 3;
     }
 
     .visual-container {
@@ -292,15 +336,6 @@
       fill: none;
       opacity: 0.8;
       transition: all 0.3s ease;
-    }
-
-    .status-tag {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 8px;
-      font-weight: 700;
-      color: var(--primary-color);
-      opacity: 0.6;
-      margin-bottom: 2px;
     }
 
     .item-label {
@@ -367,7 +402,7 @@
       .grid-header {
         display: none;
       }
-      .row-divider {
+      .row-divider-container {
         display: block;
         margin: 20px 0;
       }
@@ -460,9 +495,11 @@
           <div class="item-title">Consistent Group Rides</div>
           <div class="item-copy">A pre-defined tactical map ensures every rider knows the plan, regardless of experience level.</div>
         </div>
+        <div class="row-divider-container">
+            <div class="row-divider"></div>
+            <div class="hover-line"></div>
+        </div>
       </div>
-
-      <div class="row-divider"></div>
 
       <!-- 02 ROLLOUT -->
       <div class="grid-row-wrap">
@@ -490,9 +527,11 @@
           <div class="item-title">Unified Group Presence</div>
           <div class="item-copy">Real-time reconciliation of the active roster ensures no rider is left behind or lost in the crowd.</div>
         </div>
+        <div class="row-divider-container">
+            <div class="row-divider"></div>
+            <div class="hover-line"></div>
+        </div>
       </div>
-
-      <div class="row-divider"></div>
 
       <!-- 03 THE RIDE -->
       <div class="grid-row-wrap">
@@ -510,7 +549,7 @@
         </div>
         <div class="grid-item">
           <div class="item-title">Loss of Contact</div>
-          <div class="item-copy">High-speed pace changes or third-party event traffic make it impossible to gauge the group’s relative position.</div>
+          <div class="item-copy">High-speed pace changes and third-party event traffic make it impossible to gauge the group’s relative position—especially in Gran Fondos where thousands of riders can swallow the club unit.</div>
         </div>
         <div class="grid-item">
           <div class="item-title">Tactical Presence</div>
@@ -518,11 +557,13 @@
         </div>
         <div class="grid-item">
           <div class="item-title">Relative Positioning</div>
-          <div class="item-copy">Maintain a distinct club unit and visual awareness even in a crowd of thousands.</div>
+          <div class="item-copy">Maintain a distinct club identity and visual awareness even in a crowd of thousands.</div>
+        </div>
+        <div class="row-divider-container">
+            <div class="row-divider"></div>
+            <div class="hover-line"></div>
         </div>
       </div>
-
-      <div class="row-divider"></div>
 
       <!-- 04 SUPPORT -->
       <div class="grid-row-wrap">
@@ -550,9 +591,11 @@
           <div class="item-title">Informed Intercept</div>
           <div class="item-copy">Rapid, targeted assistance via one-tap phone links and precise situational mapping.</div>
         </div>
+        <div class="row-divider-container">
+            <div class="row-divider"></div>
+            <div class="hover-line"></div>
+        </div>
       </div>
-
-      <div class="row-divider"></div>
 
       <!-- 05 AFTERMATH -->
       <div class="grid-row-wrap">

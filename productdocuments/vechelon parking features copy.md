@@ -14,9 +14,9 @@
 
 ## 03. THE RIDE
 - **VISUAL:** "Sweeping" radar icon with rider detection.
-- **The Problem:** Loss of Contact. High-speed pace changes or third-party event traffic make it impossible to gauge the group’s relative position.
+- **The Problem:** Loss of Contact. High-speed pace changes and third-party event traffic make it impossible to gauge the group’s relative position—especially in Gran Fondos where thousands of riders can swallow the club unit.
 - **The Value:** Tactical Presence. Real-time state mapping: Moving, Stopped (5-min Halo), or Inactive (15-min Fade).
-- **VEcheLOn Outcome:** Relative Positioning. Maintain a distinct club unit and visual awareness even in a crowd of thousands.
+- **VEcheLOn Outcome:** Relative Positioning. Maintain a distinct club identity and visual awareness even in a crowd of thousands.
 
 ## 04. SUPPORT
 - **VISUAL:** Tactical "Targeting" crosshair with aid indicator.
