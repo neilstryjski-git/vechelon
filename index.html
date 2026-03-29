@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Vechelon — Club Command</title>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
   <style>
     :root {
       --primary-color: #3B82F6;
@@ -156,6 +156,46 @@
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--primary-color);
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scan-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+      opacity: 0.08;
+      pointer-events: none;
+      animation: scan 8s linear infinite;
+      z-index: 2;
+    }
+
+    @keyframes scan {
+      0% { top: -5%; }
+      100% { top: 105%; }
+    }
+
+    .intro-block {
+      max-width: 800px;
+      margin: 0 auto 60px;
+      text-align: center;
+    }
+
+    .intro-text {
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1.5;
+      color: #A0aec0;
+      letter-spacing: 0.02em;
+    }
+
+    .intro-text em {
+      color: #ffffff;
+      font-style: normal;
+      font-weight: 700;
     }
 
     .mobile-header {
@@ -190,11 +230,37 @@
       margin-bottom: 20px;
     }
 
+    .grid-row-wrap {
+      display: contents;
+    }
+
+    .row-meta {
+      grid-column: 2 / -1;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: -10px;
+      pointer-events: none;
+    }
+
     .grid-item {
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
+      transition: all 0.3s ease;
+    }
+
+    .grid-row-wrap:hover .visual-container {
+      border-color: #ffffff;
+      background: rgba(var(--primary-rgb), 0.1);
+      box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.3);
+    }
+    .grid-row-wrap:hover .visual-svg {
+      stroke: #ffffff;
+      opacity: 1;
+    }
+    .grid-row-wrap:hover .item-title {
+      color: var(--primary-color);
     }
 
     .row-divider {
@@ -215,6 +281,7 @@
       justify-content: center;
       overflow: hidden;
       position: relative;
+      transition: all 0.3s ease;
     }
 
     .visual-svg {
@@ -224,6 +291,16 @@
       stroke-width: 1.5;
       fill: none;
       opacity: 0.8;
+      transition: all 0.3s ease;
+    }
+
+    .status-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--primary-color);
+      opacity: 0.6;
+      margin-bottom: 2px;
     }
 
     .item-label {
@@ -244,6 +321,7 @@
       text-transform: uppercase;
       margin-bottom: 12px;
       line-height: 1.2;
+      transition: color 0.3s ease;
     }
 
     .item-copy {
@@ -273,9 +351,12 @@
       .visual-container {
         display: none;
       }
+      .row-meta {
+        grid-column: 1 / -1;
+      }
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 768px), (max-height: 600px) and (orientation: landscape) {
       .mobile-header {
         display: block;
       }
@@ -292,7 +373,22 @@
       }
       .grid-item {
         margin-bottom: 10px;
-        border-bottom: none; /* Removed in favor of row-divider */
+        border-bottom: none;
+      }
+      .hero-section {
+        height: auto;
+        min-height: 100vh;
+        padding: 40px 0;
+      }
+      .intro-block {
+        margin-bottom: 30px;
+      }
+      .intro-text {
+        font-size: 16px;
+      }
+      .row-meta {
+        grid-column: 1 / -1;
+        margin-bottom: 10px;
       }
     }
   </style>
@@ -321,7 +417,16 @@
   </section>
 
   <section id="logic" class="cap-section">
+    <div class="scan-line"></div>
+    
+    <div class="intro-block">
+        <p class="intro-text">
+            VEcheLOn transforms the group ride from a series of individual GPS tracks into a <em>unified tactical unit</em>. Our logic focuses on the distance between the lead rider and the support van.
+        </p>
+    </div>
+
     <div class="mobile-header">VECHELON OUTCOMES</div>
+    
     <div class="grid-container">
       <!-- Headers -->
       <div></div>
@@ -330,130 +435,150 @@
       <div class="grid-header">VECHELON OUTCOME</div>
 
       <!-- 01 PLANNING -->
-      <div class="grid-item">
-        <div class="visual-container">
-          <svg class="visual-svg" viewBox="0 0 100 100">
-            <path d="M20,80 L40,40 L60,60 L80,20" />
-            <circle cx="20" cy="80" r="3" fill="var(--primary-color)" stroke="none" />
-            <circle cx="80" cy="20" r="3" fill="var(--primary-color)" stroke="none" />
-          </svg>
+      <div class="grid-row-wrap">
+        <div class="row-meta">
+            <div class="item-label">01. PLANNING</div>
         </div>
-      </div>
-      <div class="grid-item">
-        <div class="item-label">01. PLANNING</div>
-        <div class="item-title">Route Fragmentation</div>
-        <div class="item-copy">Inconsistent sharing and manual setup of ride markers.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Pinned GPX</div>
-        <div class="item-copy">Admins pin a route; the system auto-parses Start, End, and Coffee stops.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Zero-Admin Setup</div>
-        <div class="item-copy">Riders get the Garmin file; the map gets the tactical data.</div>
+        <div class="grid-item">
+          <div class="visual-container">
+            <svg class="visual-svg" viewBox="0 0 100 100">
+              <path d="M20,80 L40,40 L60,60 L80,20" />
+              <circle cx="20" cy="80" r="3" fill="var(--primary-color)" stroke="none" />
+              <circle cx="80" cy="20" r="3" fill="var(--primary-color)" stroke="none" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Ad-hoc Routes</div>
+          <div class="item-copy">Newer riders are often unfamiliar with the course, leading to fragmentation and uncertainty during the ride.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Official Route Locking</div>
+          <div class="item-copy">Admins pin a GPX route and communicate clear start/stop points to build group confidence.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Consistent Group Rides</div>
+          <div class="item-copy">A pre-defined tactical map ensures every rider knows the plan, regardless of experience level.</div>
+        </div>
       </div>
 
       <div class="row-divider"></div>
 
       <!-- 02 ROLLOUT -->
-      <div class="grid-item">
-        <div class="visual-container">
-          <svg class="visual-svg" viewBox="0 0 100 100">
-            <rect x="30" y="30" width="40" height="40" stroke-dasharray="4,2" />
-            <circle cx="50" cy="50" r="10" />
-            <path d="M50,20 L50,30 M80,50 L70,50 M50,80 L50,70 M20,50 L30,50" />
-          </svg>
+      <div class="grid-row-wrap">
+        <div class="row-meta">
+            <div class="item-label">02. ROLLOUT</div>
         </div>
-      </div>
-      <div class="grid-item">
-        <div class="item-label">02. ROLLOUT</div>
-        <div class="item-title">The Vanishing Group</div>
-        <div class="item-copy">Once a ride starts, fragmentation happens instantly. In Gran Fondos, club members are swallowed by the crowd.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Passive Participation</div>
-        <div class="item-copy">Single-tap "Start" for members; instant QR scan for guests.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Seamless Entry</div>
-        <div class="item-copy">A real-time roster reconciles "Expected" vs "Active" in seconds.</div>
+        <div class="grid-item">
+          <div class="visual-container">
+            <svg class="visual-svg" viewBox="0 0 100 100">
+              <rect x="30" y="30" width="40" height="40" stroke-dasharray="4,2" />
+              <circle cx="50" cy="50" r="10" />
+              <path d="M50,20 L50,30 M80,50 L70,50 M50,80 L50,70 M20,50 L30,50" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Natural Fragmentation</div>
+          <div class="item-copy">This happens instantly in mixed-ability groups, where pace differences can swallow riders and make it hard to maintain the club unit.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Group Persistence</div>
+          <div class="item-copy">A single-tap "Start" keeps every member on the tactical roster, no matter their speed.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Unified Group Presence</div>
+          <div class="item-copy">Real-time reconciliation of the active roster ensures no rider is left behind or lost in the crowd.</div>
+        </div>
       </div>
 
       <div class="row-divider"></div>
 
       <!-- 03 THE RIDE -->
-      <div class="grid-item">
-        <div class="visual-container">
-          <svg class="visual-svg" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="35" stroke-dasharray="10,5" />
-            <line x1="50" y1="50" x2="80" y2="20" stroke-linecap="round" />
-            <circle cx="80" cy="20" r="4" fill="var(--primary-color)" stroke="none" />
-          </svg>
+      <div class="grid-row-wrap">
+        <div class="row-meta">
+            <div class="item-label">03. THE RIDE</div>
         </div>
-      </div>
-      <div class="grid-item">
-        <div class="item-label">03. THE RIDE</div>
-        <div class="item-title">Loss of Contact</div>
-        <div class="item-copy">High-speed pace changes or third-party event traffic make it impossible to gauge the group’s relative position.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Tactical Presence</div>
-        <div class="item-copy">Real-time state mapping: Moving, Stopped (5-min Halo), or Inactive (15-min Fade).</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Relative Positioning</div>
-        <div class="item-copy">Maintain a distinct club unit and visual awareness even in a crowd of thousands.</div>
+        <div class="grid-item">
+          <div class="visual-container">
+            <svg class="visual-svg" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="35" stroke-dasharray="10,5" />
+              <line x1="50" y1="50" x2="80" y2="20" stroke-linecap="round" />
+              <circle cx="80" cy="20" r="4" fill="var(--primary-color)" stroke="none" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Loss of Contact</div>
+          <div class="item-copy">High-speed pace changes or third-party event traffic make it impossible to gauge the group’s relative position.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Tactical Presence</div>
+          <div class="item-copy">Real-time state mapping: Moving, Stopped (5-min Halo), or Inactive (15-min Fade).</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Relative Positioning</div>
+          <div class="item-copy">Maintain a distinct club unit and visual awareness even in a crowd of thousands.</div>
+        </div>
       </div>
 
       <div class="row-divider"></div>
 
       <!-- 04 SUPPORT -->
-      <div class="grid-item">
-        <div class="visual-container">
-          <svg class="visual-svg" viewBox="0 0 100 100">
-            <path d="M50,15 L50,85 M15,50 L85,50" stroke-width="1" stroke-dasharray="2,2" />
-            <path d="M40,40 L60,40 L60,60 L40,60 Z" fill="rgba(245, 158, 11, 0.2)" stroke="#F59E0B" />
-            <path d="M50,45 L50,55 M45,50 L55,50" stroke="#F59E0B" stroke-width="2" />
-          </svg>
+      <div class="grid-row-wrap">
+        <div class="row-meta">
+            <div class="item-label">04. SUPPORT</div>
         </div>
-      </div>
-      <div class="grid-item">
-        <div class="item-label">04. SUPPORT</div>
-        <div class="item-title">Blind Sweeping</div>
-        <div class="item-copy">The Support Van cannot efficiently locate or contact riders in distress.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Intercept Logic</div>
-        <div class="item-copy">Direct navigation to Halo icons with One-Click Calling.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Direct Intercept</div>
-        <div class="item-copy">Rapid, informed aid via one-tap phone links to the rider.</div>
+        <div class="grid-item">
+          <div class="visual-container">
+            <svg class="visual-svg" viewBox="0 0 100 100">
+              <path d="M50,15 L50,85 M15,50 L85,50" stroke-width="1" stroke-dasharray="2,2" />
+              <path d="M40,40 L60,40 L60,60 L40,60 Z" fill="rgba(245, 158, 11, 0.2)" stroke="#F59E0B" />
+              <path d="M50,45 L50,55 M45,50 L55,50" stroke="#F59E0B" stroke-width="2" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Off-the-Pack Fragmentation</div>
+          <div class="item-copy">Support vans cannot efficiently locate or contact riders who have dropped off or had an incident away from the main group.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Direct Communication</div>
+          <div class="item-copy">Real-time tactical icons for isolated riders include one-click calling and pre-populated contact info for the support team.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Informed Intercept</div>
+          <div class="item-copy">Rapid, targeted assistance via one-tap phone links and precise situational mapping.</div>
+        </div>
       </div>
 
       <div class="row-divider"></div>
 
       <!-- 05 AFTERMATH -->
-      <div class="grid-item">
-        <div class="visual-container">
-          <svg class="visual-svg" viewBox="0 0 100 100">
-            <path d="M20,30 H80 M20,50 H80 M20,70 H80" stroke-dasharray="2,4" />
-            <path d="M30,20 L70,80 M70,20 L30,80" stroke-width="1" opacity="0.3" />
-          </svg>
+      <div class="grid-row-wrap">
+        <div class="row-meta">
+            <div class="item-label">05. AFTERMATH</div>
         </div>
-      </div>
-      <div class="grid-item">
-        <div class="item-label">05. AFTERMATH</div>
-        <div class="item-title">Data Toxicity</div>
-        <div class="item-copy">Privacy risks from long-term storage of sensitive GPS breadcrumbs.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Selective Hard Purge</div>
-        <div class="item-copy">Automated scrub of tactical data exactly 4 hours post-ride.</div>
-      </div>
-      <div class="grid-item">
-        <div class="item-title">Zero-Footprint Safety</div>
-        <div class="item-copy">Club history is preserved; sensitive tracks are erased forever.</div>
+        <div class="grid-item">
+          <div class="visual-container">
+            <svg class="visual-svg" viewBox="0 0 100 100">
+              <path d="M20,30 H80 M20,50 H80 M20,70 H80" stroke-dasharray="2,4" />
+              <path d="M30,20 L70,80 M70,20 L30,80" stroke-width="1" opacity="0.3" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Responsible Data</div>
+          <div class="item-copy">Privacy risks from long-term storage of sensitive GPS breadcrumbs.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Responsible Data Hygiene</div>
+          <div class="item-copy">Automated scrub of tactical data exactly 4 hours post-ride.</div>
+        </div>
+        <div class="grid-item">
+          <div class="item-title">Zero-Footprint Safety</div>
+          <div class="item-copy">Club history is preserved; sensitive tracks are erased forever.</div>
+        </div>
       </div>
     </div>
   </section>
