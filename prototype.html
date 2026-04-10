@@ -502,7 +502,7 @@
       </g>
 
       <!-- ═══ CAPTAIN VIEW: user active dot — blue so captain can identify 'you' ═══ -->
-      <g id="r-me-active" transform="translate(138,215)">
+      <g id="r-me-active" class="r-hit" onclick="openSheet(event,'guest4')" transform="translate(138,215)">
         <circle r="20" fill="transparent"/>
         <circle r="10" fill="#4285F4" stroke="white" stroke-width="2"/>
       </g>
@@ -958,6 +958,10 @@ function toggleRSVP() {
    QR JOIN
 ════════════════════════════════════════════ */
 function joinRide() {
+  const name  = document.getElementById('guest-name').value.trim();
+  const phone = document.getElementById('guest-phone').value.trim();
+  RIDERS['guest4'].name  = name  || 'Guest [4]';
+  RIDERS['guest4'].phone = phone || null;
   document.getElementById('qr-form').style.display = 'none';
   document.getElementById('qr-success').classList.add('visible');
 }
