@@ -22,11 +22,11 @@ export const useRideRealtime = (rideId: string | null) => {
     });
 
     channel
-      .on('broadcast', { event: 'beacon_fired' }, ({ payload }) => {
+      .on('broadcast', { event: 'beacon_fired' }, ({ payload }: { payload: any }) => {
         console.log('Tactical Alert: Support Beacon Fired', payload);
         addActiveBeacon(payload.participantId);
       })
-      .on('broadcast', { event: 'beacon_cancelled' }, ({ payload }) => {
+      .on('broadcast', { event: 'beacon_cancelled' }, ({ payload }: { payload: any }) => {
         console.log('Tactical Update: Beacon Cancelled', payload);
         removeActiveBeacon(payload.participantId);
       })
