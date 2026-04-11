@@ -41,7 +41,7 @@ const Layout: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <img
-              src="/racer-sportif-logo.png"
+              src="/admin/racer-sportif-logo.png"
               alt="Racer Sportif"
               className="h-6 w-auto object-contain"
             />
@@ -55,7 +55,7 @@ const Layout: React.FC = () => {
               {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
             </span>
             <img
-              src="/vechelon-halfchainring.svg"
+              src="/admin/vechelon-halfchainring.svg"
               alt="Vechelon"
               className="h-5 w-auto object-contain"
             />
