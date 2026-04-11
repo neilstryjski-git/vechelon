@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@theme {
+  /* ===================================================================
+   * COLOR PALETTE: Velo Modern — "The Silent Sentinel"
+   * Multi-tenant architecture: --brand-primary / --brand-accent
+   * injected at runtime via useBranding hook.
+   * =================================================================== */
+
+  /* Primary (neutral-warm monochrome) */
+  --color-primary:                  #5f5e5e;
+  --color-primary-dim:              #535252;
+  --color-primary-fixed:            #e5e2e1;
+  --color-primary-fixed-dim:        #d6d4d3;
+  --color-primary-container:        #e5e2e1;
+  --color-on-primary:               #faf7f6;
+  --color-on-primary-fixed:         #403f3f;
+  --color-on-primary-fixed-variant: #5c5b5b;
+  --color-on-primary-container:     #525151;
+  --color-inverse-primary:          #ffffff;
+
+  /* Secondary */
+  --color-secondary:                  #5f5f5f;
+  --color-secondary-dim:              #535353;
+  --color-secondary-fixed:            #e4e2e2;
+  --color-secondary-fixed-dim:        #d6d4d4;
+  --color-secondary-container:        #e4e2e2;
+  --color-on-secondary:               #fbf8f8;
+  --color-on-secondary-fixed:         #3f3f3f;
+  --color-on-secondary-fixed-variant: #5c5b5b;
+  --color-on-secondary-container:     #525252;
+
+  /* Tertiary (signal green — success / active states) */
+  --color-tertiary:                  #006e35;
+  --color-tertiary-dim:              #00602e;
+  --color-tertiary-fixed:            #3fff8b;
+  --color-tertiary-fixed-dim:        #24f07e;
+  --color-tertiary-container:        #3fff8b;
+  --color-on-tertiary:               #e8ffe8;
+  --color-on-tertiary-fixed:         #004820;
+  --color-on-tertiary-fixed-variant: #006832;
+  --color-on-tertiary-container:     #005d2c;
+
+  /* Error (signal red — alerts / priority mode) */
+  --color-error:              #9e3f4e;
+  --color-error-dim:          #4f0116;
+  --color-error-container:    #ff8b9a;
+  --color-on-error:           #fff7f7;
+  --color-on-error-container: #782232;
+
+  /* Surface hierarchy — Tonal Layering (No-Line philosophy)
+   * Level 0 (Base):              surface           #f9f9fb
+   * Level 1 (Sections):          surface-container-low    #f2f4f6
+   * Level 2 (Cards/Interaction): surface-container-lowest #ffffff
+   * Level 3 (Tactical overlays): surface-container-highest #dde3e9  */
+  --color-surface:                    #f9f9fb;
+  --color-surface-dim:                #d3dbe2;
+  --color-surface-bright:             #f9f9fb;
+  --color-surface-tint:               #5f5e5e;
+  --color-surface-variant:            #dde3e9;
+  --color-surface-container-lowest:   #ffffff;
+  --color-surface-container-low:      #f2f4f6;
+  --color-surface-container:          #ebeef2;
+  --color-surface-container-high:     #e4e9ee;
+  --color-surface-container-highest:  #dde3e9;
+  --color-on-surface:                 #2d3338;
+  --color-on-surface-variant:         #596065;
+  --color-inverse-surface:            #0c0e10;
+  --color-inverse-on-surface:         #9c9d9f;
+
+  /* Background */
+  --color-background:    #f9f9fb;
+  --color-on-background: #2d3338;
+
+  /* Outline — ghost-border fallback only, never solid separators */
+  --color-outline:         #757c81;
+  --color-outline-variant: #acb3b8;
+
+  /* Brand injection — fallbacks to primary neutral until useBranding fires */
+  --color-brand-primary: var(--brand-primary, #5f5e5e);
+  --color-brand-accent:  var(--brand-accent, #aa3bff);
+
+  /* ===================================================================
+   * TYPOGRAPHY: Editorial tri-font strategy
+   * =================================================================== */
+  --font-sans:     "Inter", sans-serif;       /* Tailwind base override */
+  --font-body:     "Inter", sans-serif;       /* Workhorse UI text */
+  --font-headline: "Manrope", sans-serif;     /* Display & headlines */
+  --font-label:    "Space Grotesk", monospace;/* Tactical data / telemetry */
+
+  /* ===================================================================
+   * BORDER RADIUS: Minimal, editorial
+   * =================================================================== */
+  --radius:    0.125rem; /* DEFAULT — near-square for tactical feel */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem; /* Buttons */
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;   /* Cards, sheets */
+  --radius-2xl: 0.75rem;
+  --radius-full: 9999px; /* Keep full as pill for avatar/badge */
+}
+
+/* =======================================================================
+ * BASE
+ * ======================================================================= */
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+/* =======================================================================
+ * UTILITY CLASSES
+ * ======================================================================= */
+
+/* Signature Texture — primary CTA gradient */
+.signature-gradient {
+  background: linear-gradient(15deg, #5f5e5e 0%, #535252 100%);
+}
+
+/* Glassmorphism — floating bottom sheets & map overlays (85% opacity) */
+.glass {
+  background-color: rgb(255 255 255 / 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Ambient shadow — replaces drop shadows with diffused occlusion */
+.shadow-ambient {
+  box-shadow: 0 12px 40px rgba(45, 51, 56, 0.06);
+}
+
+/* Ghost border — accessibility fallback at 15% opacity only */
+.ghost-border {
+  outline: 1px solid rgb(172 179 184 / 0.15);
+}
+
+/* =======================================================================
+ * MATERIAL SYMBOLS CONFIG
+ * ======================================================================= */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
