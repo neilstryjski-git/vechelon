@@ -39,7 +39,6 @@ const Settings = () => (
 
 function AppContent() {
   // Dynamic branding fetch from Supabase
-  // In production, current tenant would be derived from subdomain or user profile
   const { data: tenant } = useQuery({
     queryKey: ['tenant-config'],
     queryFn: async () => {
@@ -51,14 +50,19 @@ function AppContent() {
       
       if (error) throw error;
       return data;
-    }
+    },
+    retry: false, // Don't spam if keys are missing
   });
 
+  // Fallback to Velo Modern defaults if tenant fetch fails
   useBranding(tenant ? {
     primaryColor: tenant.primary_color,
     accentColor: tenant.accent_color,
     logoUrl: tenant.logo_url || undefined,
-  } : null);
+  } : {
+    primaryColor: '#5f5e5e',
+    accentColor: '#006e35',
+  });
 
   return (
     <Router basename="/admin">

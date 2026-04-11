@@ -3,13 +3,30 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Vechelon] Supabase env vars missing — real-time features disabled. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to admin/.env')
+const isConfigured = Boolean(supabaseUrl && supabaseAnonKey)
+
+if (!isConfigured) {
+  console.warn('[Vechelon] Supabase env vars missing — App running in Mock Mode.')
 }
 
-// Use placeholder URL so createClient doesn't throw when env vars are absent.
-// Real-time channels will silently no-op until valid credentials are provided.
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key',
-)
+// Create a safe proxy that no-ops if not configured
+export const supabase = isConfigured 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : (new Proxy({}, {
+      get: () => () => ({
+        select: () => ({
+          limit: () => ({
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+          eq: () => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+          order: () => ({
+            limit: () => Promise.resolve({ data: [], error: null }),
+          })
+        }),
+        on: () => ({ subscribe: () => ({}) }),
+        channel: () => ({ on: () => ({ subscribe: () => ({}) }), send: () => ({}) }),
+      })
+    }) as any);
