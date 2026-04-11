@@ -2,5 +2,8 @@
   "name": "vechelon-root",
   "private": true,
   "version": "1.0.0",
-  "description": "Root for Vechelon Landing Page and Admin Desktop"
+  "description": "Root for Vechelon Landing Page and Admin Desktop",
+  "scripts": {
+    "build": "bash build.sh"
+  }
 }
