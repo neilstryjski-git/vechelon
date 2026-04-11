@@ -61,7 +61,7 @@ function AppContent() {
   } : null);
 
   return (
-    <Router>
+    <Router basename="/admin">
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index      element={<Dashboard />}    />
