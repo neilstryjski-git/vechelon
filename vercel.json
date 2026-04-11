@@ -1,18 +1,8 @@
 {
-  "cleanUrls": true,
-  "trailingSlash": true,
-  "rewrites": [
-    {
-      "source": "/admin",
-      "destination": "/admin/index.html"
-    },
-    {
-      "source": "/admin/:path*",
-      "destination": "/admin/index.html"
-    },
-    {
-      "source": "/prototype",
-      "destination": "/prototype.html"
-    }
+  "routes": [
+    { "src": "/admin/(.*)", "dest": "/admin/index.html" },
+    { "src": "/admin", "dest": "/admin/index.html" },
+    { "src": "/prototype", "dest": "/prototype.html" },
+    { "src": "/(.*)", "dest": "/$1" }
   ]
 }
