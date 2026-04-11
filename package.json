@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "cd admin && npm install && npm run build && cd .. && rm -rf public && mkdir -p public/admin && cp -r admin/dist/* public/admin/ && cp index.html public/ && cp prototype.html public/ && cp echelon-logo-v10.html public/ && cp admin/public/favicon.svg public/admin/ 2>/dev/null || true && cp racer-sportif-logo.png public/ 2>/dev/null || true && cp vechelon-halfchainring.svg public/ 2>/dev/null || true"
+    "build": "cd admin && rm -rf dist && npm install --legacy-peer-deps && npm run build && cd .. && rm -rf public && mkdir -p public/admin && cp -r admin/dist/* public/admin/ && cp index.html public/ && cp prototype.html public/ && cp echelon-logo-v10.html public/ && cp admin/public/favicon.svg public/admin/ 2>/dev/null || true && cp racer-sportif-logo.png public/ 2>/dev/null || true && cp vechelon-halfchainring.svg public/ 2>/dev/null || true"
   }
 }
