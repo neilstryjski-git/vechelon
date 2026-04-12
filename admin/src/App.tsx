@@ -5,9 +5,11 @@ import Layout from './components/Layout';
 import RiderLayout from './components/RiderLayout';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
+import RouteLibraryPage from './pages/RouteLibrary';
 import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
 import { supabase } from './lib/supabase';
+import { useAppStore } from './store/useAppStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,36 +20,26 @@ const queryClient = new QueryClient({
   },
 });
 
-// Phase-gated placeholders — styled with Velo Modern tokens
-const RouteLibrary = () => (
-  <div className="py-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
-    <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-4">
-      Coming Soon
-    </span>
-    <h2 className="font-headline text-4xl font-extrabold text-on-background mb-3">Route Library</h2>
-    <p className="font-body text-on-surface-variant max-w-md mx-auto">Official club routes are being curated for your next ride.</p>
-  </div>
-);
+/**
+ * Adaptive UI Switcher.
+ * Returns the Admin Sidebar layout or Rider Top-Nav layout based on status.
+ * Fulfills the "Responsive Entry Point" requirement.
+ */
+function AdaptiveLayout() {
+  // In a real session, we check the account_tenants role.
+  // For now, we use a simple toggle or look at the userTier.
+  const userTier = useAppStore((state) => state.userTier);
+  const membershipStatus = useAppStore((state) => state.membershipStatus);
 
-const Settings = () => (
-  <div className="py-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
-    <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-4">
-      Configuration
-    </span>
-    <h2 className="font-headline text-4xl font-extrabold text-on-background mb-3">Club Settings</h2>
-    <p className="font-body text-on-surface-variant">System and tenant configurations module initializing.</p>
-  </div>
-);
+  // LOGIC: If the user is an admin, show the full Sidebar layout.
+  // For this prototype phase, we'll default to Layout (Admin) if no tier is found,
+  // or RiderLayout if they are a Guest/Member.
+  if (userTier === 'guest' || membershipStatus === 'initiated') {
+    return <RiderLayout />;
+  }
 
-const Profile = () => (
-  <div className="py-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
-    <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-4">
-      Identity
-    </span>
-    <h2 className="font-headline text-4xl font-extrabold text-on-background mb-3">Your Profile</h2>
-    <p className="font-body text-on-surface-variant">Personal details and preferences management initializing.</p>
-  </div>
-);
+  return <Layout />;
+}
 
 function AppContent() {
   // Dynamic branding fetch from Supabase
@@ -76,31 +68,19 @@ function AppContent() {
   });
 
   return (
-    <Router basename="/admin">
+    <Router basename="/portal">
       <Routes>
-        {/* ADMIN ROUTES */}
-        <Route path="/manage" element={<Layout />}>
+        {/* ONE UNIFIED ENTRY POINT */}
+        <Route path="/" element={<AdaptiveLayout />}>
           <Route index      element={<Dashboard />}    />
           <Route path="calendar" element={<CalendarGrid />} />
-          <Route path="rides"    element={<RouteLibrary />} />
+          <Route path="routes"   element={<RouteLibraryPage />} />
           <Route path="members"  element={<Members />}      />
-          <Route path="settings" element={<Settings />}     />
-          {/* Catch-all for sub-paths under manage */}
-          <Route path="*"       element={<Navigate to="/manage" replace />} />
+          <Route path="profile"  element={<Dashboard />} /> {/* Placeholder */}
+          
+          {/* Catch-all redirects back to the adaptive home */}
+          <Route path="*"       element={<Navigate to="/" replace />} />
         </Route>
-
-        {/* RIDER PORTAL ROUTES */}
-        <Route path="/" element={<RiderLayout />}>
-          <Route index      element={<Dashboard />}    />
-          <Route path="calendar" element={<CalendarGrid />} />
-          <Route path="routes"   element={<RouteLibrary />} />
-          <Route path="profile"  element={<Profile />}      />
-          {/* Members redirect for riders */}
-          <Route path="members"  element={<Navigate to="/manage/members" replace />} />
-        </Route>
-
-        {/* Global Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

@@ -2,12 +2,12 @@
   "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/admin/assets/:path*",
-      "destination": "/admin/assets/:path*"
+      "source": "/portal/assets/:path*",
+      "destination": "/portal/assets/:path*"
     },
     {
-      "source": "/admin/(.*)",
-      "destination": "/admin/index.html"
+      "source": "/portal/(.*)",
+      "destination": "/portal/index.html"
     },
     {
       "source": "/prototype",
