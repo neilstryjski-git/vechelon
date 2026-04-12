@@ -36,7 +36,7 @@ function createSafeProxy(): any {
       return target[prop]
     },
     // Make the proxy callable (e.g., supabase.from('table'))
-    apply(target, thisArg, argumentsList) {
+    apply(_target, _thisArg, _argumentsList) {
       return createSafeProxy()
     }
   }
