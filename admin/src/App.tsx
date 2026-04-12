@@ -2,14 +2,12 @@ import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-quer
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import RiderLayout from './components/RiderLayout';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import RouteLibraryPage from './pages/RouteLibrary';
 import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
 import { supabase } from './lib/supabase';
-import { useAppStore } from './store/useAppStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,18 +24,7 @@ const queryClient = new QueryClient({
  * Fulfills the "Responsive Entry Point" requirement.
  */
 function AdaptiveLayout() {
-  // In a real session, we check the account_tenants role.
-  // For now, we use a simple toggle or look at the userTier.
-  const userTier = useAppStore((state) => state.userTier);
-  const membershipStatus = useAppStore((state) => state.membershipStatus);
-
-  // LOGIC: If the user is an admin, show the full Sidebar layout.
-  // For this prototype phase, we'll default to Layout (Admin) if no tier is found,
-  // or RiderLayout if they are a Guest/Member.
-  if (userTier === 'guest' || membershipStatus === 'initiated') {
-    return <RiderLayout />;
-  }
-
+  // Restore Admin Layout as default for development/testing
   return <Layout />;
 }
 

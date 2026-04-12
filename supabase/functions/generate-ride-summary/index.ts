@@ -1,61 +1,90 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getAIService, AIProviderType } from '../_shared/ai-provider.ts'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getAIProvider } from '../_shared/ai-provider.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
   try {
-    const { rideId } = await req.json()
-    const supabase = createClient(
+    const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
-    // 1. Fetch tenant AI config for the ride
-    const { data: ride, error: rideError } = await supabase
+    const { rideId } = await req.json();
+
+    // 1. Fetch Ride Metadata & Tenant Config
+    const { data: ride, error: rideError } = await supabaseClient
       .from('rides')
-      .select('tenant_id')
+      .select('*, tenants!inner(*)')
       .eq('id', rideId)
-      .single()
+      .single();
 
-    if (rideError) throw rideError
+    if (rideError) throw rideError;
 
-    const { data: tenant, error: tenantError } = await supabase
-      .from('tenants')
-      .select('ai_provider, ai_api_key')
-      .eq('id', ride.tenant_id)
-      .single()
+    // 2. Fetch Participant Count & Stats
+    const { count: participantCount } = await supabaseClient
+      .from('ride_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('ride_id', rideId);
 
-    if (tenantError) throw tenantError
-    if (!tenant.ai_api_key) throw new Error('No AI API key configured for this tenant.')
-
-    // 2. Get the specific AI service
-    const aiService = getAIService(tenant.ai_provider as AIProviderType)
-
-    // 3. Generate summary (using a placeholder prompt for now)
-    const prompt = "Please provide a concise pro-tour style summary for a group cycling ride that just finished."
-    const result = await aiService.generateText(prompt, tenant.ai_api_key)
-
-    if (result.status !== 'success') {
-      return new Response(JSON.stringify({ 
-        status: result.status, 
-        message: result.error || 'AI generation failed' 
-      }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: result.status === 'invalid_key' ? 401 : 500,
-      })
+    // 3. Fetch Weather from Open-Meteo (at finish_coords)
+    let weatherData = {};
+    if (ride.finish_coords) {
+      // Point type is typically "(long,lat)" in postgis, but we store as standard Point
+      // Extracting from standard PostGIS point string format if necessary, 
+      // but assuming we passed them as lat/long in the request or they are readable.
+      try {
+        const [lng, lat] = ride.finish_coords.replace(/[()]/g, '').split(',');
+        const weatherRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat.trim()}&longitude=${lng.trim()}&current_weather=true`
+        );
+        weatherData = await weatherRes.json();
+      } catch (e) {
+        console.warn('Weather fetch failed', e);
+      }
     }
 
-    return new Response(JSON.stringify({ 
-      summary: result.content,
-      provider: tenant.ai_provider
-    }), {
-      headers: { 'Content-Type': 'application/json' },
+    // 4. Construct AI Prompt
+    const prompt = `
+      You are an elite cycling tour director. Write a professional, punchy summary for a WhatsApp group post.
+      Club: ${ride.tenants.name}
+      Ride: ${ride.title}
+      Participants: ${participantCount}
+      Weather: ${JSON.stringify(weatherData.current_weather || 'Clear')}
+      Instructions: Use 3 bullet points. Include one tactical observation. End with "See you next time."
+    `;
+
+    // 5. Generate Summary using Provider Factory
+    const provider = getAIProvider(ride.tenants);
+    const summary = await provider.generateSummary(prompt);
+
+    // 6. Persist to ride_summaries
+    const { error: summaryError } = await supabaseClient
+      .from('ride_summaries')
+      .upsert({
+        ride_id: rideId,
+        post_ride_summary: summary,
+        weather_data: weatherData,
+        generated_at: new Date().toISOString()
+      });
+
+    if (summaryError) throw summaryError;
+
+    return new Response(JSON.stringify({ summary, weather: weatherData }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
-    })
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      headers: { 'Content-Type': 'application/json' },
-      status: 500,
-    })
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    });
   }
-})
+});

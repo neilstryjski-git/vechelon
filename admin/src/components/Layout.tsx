@@ -41,7 +41,7 @@ const Layout: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <img
-              src="/admin/racer-sportif-logo.png"
+              src="/portal/racer-sportif-logo.png"
               alt="Racer Sportif"
               className="h-6 w-auto object-contain"
             />
@@ -55,7 +55,7 @@ const Layout: React.FC = () => {
               {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
             </span>
             <img
-              src="/admin/vechelon-halfchainring.svg"
+              src="/portal/vechelon-halfchainring.svg"
               alt="Vechelon"
               className="h-5 w-auto object-contain"
             />
@@ -65,7 +65,7 @@ const Layout: React.FC = () => {
           <div className="hidden md:flex items-center gap-8 font-headline font-medium text-sm tracking-tight">
             <NavLink to="/"         end className={navLinkClass}>Dashboard</NavLink>
             <NavLink to="/calendar" className={navLinkClass}>Calendar</NavLink>
-            <NavLink to="/rides"    className={navLinkClass}>Route Library</NavLink>
+            <NavLink to="/routes"   className={navLinkClass}>Route Library</NavLink>
             <NavLink to="/members"  className={navLinkClass}>Member Directory</NavLink>
           </div>
 

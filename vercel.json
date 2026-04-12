@@ -5,16 +5,7 @@
   "trailingSlash": true,
   "rewrites": [
     {
-      "source": "/portal/assets/:path*",
-      "destination": "/portal/assets/:path*"
-    },
-    {
-      "source": "/portal",
-      "destination": "/portal/index.html"
-    },
-    {
-      "source": "/portal/",
-      "destination": "/portal/index.html"
+      "handle": "filesystem"
     },
     {
       "source": "/portal/(.*)",

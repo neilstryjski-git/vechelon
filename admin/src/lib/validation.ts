@@ -14,12 +14,17 @@ export const parseGPXCoords = (gpxString: string) => {
       throw new Error('No track points found in GPX');
     }
 
-    const points = gpx.tracks[0].points;
+    const track  = gpx.tracks[0];
+    const points = track.points;
+    
     return {
-      start: { lat: points[0].lat, lon: points[0].lon },
-      end: { lat: points[points.length - 1].lat, lon: points[points.length - 1].lon },
-      pointCount: points.length,
-      distance: gpx.tracks[0].distance.total
+      // Robust name extraction: check metadata first, then track name
+      name:           gpx.metadata?.name || track.name || null,
+      start:          { lat: points[0].lat, lon: points[0].lon },
+      end:            { lat: points[points.length - 1].lat, lon: points[points.length - 1].lon },
+      pointCount:     points.length,
+      distance_km:    track.distance.total / 1000,
+      elevation_gain: Math.round(track.elevation.pos ?? 0),
     };
   } catch (error) {
     console.error('GPX Parsing Error:', error);
