@@ -1,10 +1,20 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "cleanUrls": true,
+  "trailingSlash": true,
   "rewrites": [
     {
       "source": "/portal/assets/:path*",
       "destination": "/portal/assets/:path*"
+    },
+    {
+      "source": "/portal",
+      "destination": "/portal/index.html"
+    },
+    {
+      "source": "/portal/",
+      "destination": "/portal/index.html"
     },
     {
       "source": "/portal/(.*)",
