@@ -51,7 +51,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      currentTenantId: null,
+      currentTenantId: '00000000-0000-0000-0000-000000000001',
       isSidebarOpen: true,
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       isPriorityMode: false,
@@ -196,7 +196,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'vechelon-admin-storage',
       partialize: (state) => ({ 
-        currentTenantId: state.currentTenantId,
+        isSidebarOpen: state.isSidebarOpen,
       }),
     }
   )

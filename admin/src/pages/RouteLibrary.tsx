@@ -68,7 +68,7 @@ function useUploadRoute() {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
 
-      const { data: tenantRow, error: tenantErr } = await supabase
+      const { data: tenantRow } = await supabase
         .from('account_tenants')
         .select('tenant_id')
         .eq('account_id', userId)
