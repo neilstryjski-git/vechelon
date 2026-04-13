@@ -59,9 +59,9 @@ function useUploadRoute() {
 
   return useMutation({
     mutationFn: async ({ file, name, externalUrl, hash }: { file: File; name: string; externalUrl: string; hash: string }) => {
-      console.log('[v1.2.3] Starting upload mutation...');
+      console.log('[v1.2.6] Starting upload mutation...');
       const text    = await file.text();
-      console.log('[v1.2.3] GPX text read, parsing...');
+      console.log('[v1.2.6] GPX text read, parsing...');
       const parsed  = parseGPXCoords(text);
       if (!parsed) throw new Error('GPX file contains no track data');
 
@@ -71,17 +71,17 @@ function useUploadRoute() {
 
       const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
 
-      console.log('[v1.2.3] Fetching auth user...');
+      console.log('[v1.2.6] Fetching auth user...');
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
-      console.log('[v1.2.3] Auth check complete, userId:', userId);
+      console.log('[v1.2.6] Auth check complete, userId:', userId);
 
       // FORCE: Always use Racer Sportif tenant for prototype stability
       const tenantId = '00000000-0000-0000-0000-000000000001';
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 
-      console.log(`[v1.2.4] Attempting storage upload: ${filePath}`);
+      console.log(`[v1.2.6] Attempting storage upload: ${filePath}`);
 
       // Add a 30-second timeout to the storage upload
       const uploadPromise = supabase.storage
@@ -98,11 +98,11 @@ function useUploadRoute() {
       ]) as any;
       
       if (uploadErr) {
-        console.error('[v1.2.4] Storage Error:', uploadErr);
+        console.error('[v1.2.6] Storage Error:', uploadErr);
         throw new Error(`Storage upload failed: ${uploadErr.message}`);
       }
 
-      console.log('[v1.2.3] Storage upload successful, inserting to DB...');
+      console.log('[v1.2.6] Storage upload successful, inserting to DB...');
 
       const { error: insertErr } = await supabase
         .from('route_library')
@@ -120,12 +120,12 @@ function useUploadRoute() {
         });
 
       if (insertErr) {
-        console.error('[v1.2.3] Database Error:', insertErr);
+        console.error('[v1.2.6] Database Error:', insertErr);
         await supabase.storage.from('gpx-routes').remove([filePath]);
         throw new Error(`Database insert failed: ${insertErr.message}`);
       }
       
-      console.log('[v1.2.3] Upload fully successful');
+      console.log('[v1.2.6] Upload fully successful');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
