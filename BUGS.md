@@ -12,4 +12,6 @@
 | **D1** (Production Deployment) | Resolved asset 404s and SPA routing issues in Vercel using `handle: filesystem` and simplified rewrites. | 2026-04-12 |
 | **D2** (GPX Schema Sync) | Fixed \"out of sync\" errors by consolidating migrations and forcing PostgREST cache reloads. | 2026-04-12 |
 | **T1** (Tenant Resolution) | Implemented Global Tenant Override in `useAppStore` to force Racer Sportif tenant ID, stabilizing production for the prototype. | 2026-04-12 |
+| **U1** (Logo Positioning) | Restored Racer Sportif logo to far-left and unified branding area with dynamic Supabase assets. | 2026-04-12 |
+| **U2** (Upload Robustness) | Added 30s timeout and Web Crypto safety checks to prevent indefinite hangs during GPX uploads. | 2026-04-12 |
 
