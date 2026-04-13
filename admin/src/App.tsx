@@ -30,9 +30,10 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
 
 function AppContent() {
   // Dynamic branding fetch from Supabase
-  const { data: tenant, error: tenantError } = useQuery({
+  const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant-config'],
     queryFn: async () => {
+      console.log('[v1.2.9] Fetching tenant config...');
       const { data, error } = await supabase
         .from('tenants')
         .select('primary_color, accent_color, logo_url')
@@ -40,15 +41,16 @@ function AppContent() {
         .maybeSingle();
       
       if (error) {
-        console.error('[Vechelon] Tenant config fetch failed:', error);
+        console.error('[v1.2.9] Tenant config fetch failed:', error);
         return {};
       }
+      console.log('[v1.2.9] Tenant config fetched:', data);
       return data || {};
     },
   });
 
   if (tenantError) {
-    console.warn('[Vechelon] Using fallback branding due to query error.');
+    console.warn('[v1.2.9] Using fallback branding due to query error:', tenantError);
   }
 
   // Fallback to Velo Modern defaults
@@ -60,6 +62,10 @@ function AppContent() {
     primaryColor: '#5f5e5e',
     accentColor: '#006e35',
   });
+
+  if (tenantLoading) {
+    return <div className="p-20 text-center font-label animate-pulse">SYNCHRONIZING TACTICAL DATA...</div>;
+  }
 
   return (
     <Router basename="/portal">
@@ -73,7 +79,7 @@ function AppContent() {
           <Route path="profile"  element={<Dashboard />} /> {/* Placeholder */}
           
           {/* Catch-all redirects back to the adaptive home */}
-          <Route path="*"       element={<Navigate to="/" replace />} />
+          <Route path="*"       element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
         </Route>
       </Routes>
     </Router>
