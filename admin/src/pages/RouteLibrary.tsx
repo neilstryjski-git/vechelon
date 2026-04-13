@@ -26,6 +26,10 @@ interface RouteRow {
 // ---------------------------------------------------------------------------
 
 async function calculateHash(text: string): Promise<string> {
+  if (!window.crypto || !window.crypto.subtle) {
+    console.warn('[Vechelon] Web Crypto API not available, using fallback hash');
+    return Date.now().toString(16); // Fallback for unsafe contexts
+  }
   const msgUint8 = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -77,14 +81,24 @@ function useUploadRoute() {
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 
-      console.log(`[v1.2.3] Attempting storage upload: ${filePath}`);
+      console.log(`[v1.2.4] Attempting storage upload: ${filePath}`);
 
-      const { error: uploadErr } = await supabase.storage
+      // Add a 30-second timeout to the storage upload
+      const uploadPromise = supabase.storage
         .from('gpx-routes')
         .upload(filePath, file, { contentType: 'application/gpx+xml', upsert: false });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Storage upload timed out after 30s')), 30000)
+      );
+
+      const { data: uploadData, error: uploadErr } = await Promise.race([
+        uploadPromise,
+        timeoutPromise
+      ]) as any;
       
       if (uploadErr) {
-        console.error('[v1.2.3] Storage Error:', uploadErr);
+        console.error('[v1.2.4] Storage Error:', uploadErr);
         throw new Error(`Storage upload failed: ${uploadErr.message}`);
       }
 
