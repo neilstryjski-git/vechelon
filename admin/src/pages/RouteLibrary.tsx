@@ -68,22 +68,21 @@ function useUploadRoute() {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
 
-      const { data: tenantRow } = await supabase
-        .from('account_tenants')
-        .select('tenant_id')
-        .eq('account_id', userId)
-        .limit(1)
-        .maybeSingle();
-
-      // PROTOTYPE BYPASS: If no tenant found, use the mock Racer Sportif tenant
-      const tenantId = tenantRow?.tenant_id || '00000000-0000-0000-0000-000000000001';
+      // FORCE: Always use Racer Sportif tenant for prototype stability
+      const tenantId = '00000000-0000-0000-0000-000000000001';
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
+
+      console.log(`[v1.2.2] Attempting upload: ${filePath} for user: ${userId}`);
 
       const { error: uploadErr } = await supabase.storage
         .from('gpx-routes')
         .upload(filePath, file, { contentType: 'application/gpx+xml', upsert: false });
-      if (uploadErr) throw new Error(`[v1.2.1] Storage upload failed: ${uploadErr.message}`);
+      
+      if (uploadErr) {
+        console.error('[v1.2.2] Storage Error:', uploadErr);
+        throw new Error(`Storage upload failed: ${uploadErr.message}`);
+      }
 
       const { error: insertErr } = await supabase
         .from('route_library')
@@ -101,9 +100,12 @@ function useUploadRoute() {
         });
 
       if (insertErr) {
+        console.error('[v1.2.2] Database Error:', insertErr);
         await supabase.storage.from('gpx-routes').remove([filePath]);
-        throw insertErr;
+        throw new Error(`Database insert failed: ${insertErr.message}`);
       }
+      
+      console.log('[v1.2.2] Upload Successful');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
