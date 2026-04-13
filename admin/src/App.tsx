@@ -41,9 +41,9 @@ function AppContent() {
       
       if (error) {
         console.error('[Vechelon] Tenant config fetch failed:', error);
-        return null;
+        return {};
       }
-      return data;
+      return data || {};
     },
   });
 
@@ -52,7 +52,7 @@ function AppContent() {
   }
 
   // Fallback to Velo Modern defaults
-  useBranding(tenant ? {
+  useBranding(tenant && tenant.primary_color ? {
     primaryColor: tenant.primary_color,
     accentColor: tenant.accent_color,
     logoUrl: tenant.logo_url || undefined,

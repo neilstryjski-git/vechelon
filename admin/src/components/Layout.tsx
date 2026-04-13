@@ -23,7 +23,7 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
     { to: '/settings', label: 'Settings' },
   ];
 
-  const tenantLogo = tenant?.logo_url || '/portal/racer-sportif-logo.png';
+  const tenantLogo = tenant?.logo_url || './racer-sportif-logo.png';
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body">
