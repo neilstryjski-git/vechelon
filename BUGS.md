@@ -14,4 +14,5 @@
 | **T1** (Tenant Resolution) | Implemented Global Tenant Override in `useAppStore` to force Racer Sportif tenant ID, stabilizing production for the prototype. | 2026-04-12 |
 | **U1** (Logo Positioning) | Restored Racer Sportif logo to far-left and unified branding area with dynamic Supabase assets. | 2026-04-12 |
 | **U2** (Upload Robustness) | Added 30s timeout and Web Crypto safety checks to prevent indefinite hangs during GPX uploads. | 2026-04-12 |
+| **D3** (Build Pipeline) | Fixed TypeScript build error (unused variable) and implemented `npm workspaces` to stabilize Vercel deployments. | 2026-04-12 |
 
