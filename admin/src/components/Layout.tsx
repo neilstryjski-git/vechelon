@@ -23,7 +23,7 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
     { to: '/settings', label: 'Settings' },
   ];
 
-  const tenantLogo = tenant?.logo_url || './racer-sportif-logo.png';
+  const tenantLogo = tenant?.logo_url || '/portal/racer-sportif-logo.png';
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body">
@@ -74,7 +74,7 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
             {/* Platform Branding */}
             <div className="flex items-center gap-2">
               <img
-                src="./vechelon-halfchainring.svg"
+                src="/portal/vechelon-halfchainring.svg"
                 alt="Vechelon"
                 className="h-5 w-auto object-contain"
               />
