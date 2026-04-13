@@ -75,9 +75,8 @@ function useUploadRoute() {
         .limit(1)
         .maybeSingle();
 
-      if (tenantErr || !tenantRow) throw new Error('Could not resolve tenant for upload');
-
-      const tenantId = tenantRow.tenant_id;
+      // PROTOTYPE BYPASS: If no tenant found, use the mock Racer Sportif tenant
+      const tenantId = tenantRow?.tenant_id || '00000000-0000-0000-0000-000000000001';
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 
