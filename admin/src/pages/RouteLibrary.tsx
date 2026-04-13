@@ -83,7 +83,7 @@ function useUploadRoute() {
       const { error: uploadErr } = await supabase.storage
         .from('gpx-routes')
         .upload(filePath, file, { contentType: 'application/gpx+xml', upsert: false });
-      if (uploadErr) throw uploadErr;
+      if (uploadErr) throw new Error(`[v1.2.1] Storage upload failed: ${uploadErr.message}`);
 
       const { error: insertErr } = await supabase
         .from('route_library')
