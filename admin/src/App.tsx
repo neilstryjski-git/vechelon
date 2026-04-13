@@ -25,7 +25,7 @@ const queryClient = new QueryClient({
  */
 function AdaptiveLayout({ tenant }: { tenant: any }) {
   // Restore Admin Layout as default for development/testing
-  return <Layout tenant={tenant} />;
+  return <Layout tenant={tenant || {}} />;
 }
 
 function AppContent() {

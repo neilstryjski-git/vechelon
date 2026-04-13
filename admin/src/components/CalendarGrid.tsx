@@ -24,7 +24,7 @@ const MOCK_RIDES: MockRide[] = [
     name: 'North Ridge Sprint',   
     riders: 12, 
     status: 'active',
-    thumbnail_url: 'https://maps.googleapis.com/maps/api/staticmap?size=200x100&path=color:0x000000ff|weight:2|enc:a~l~Fjk~uOnTxMA&style=feature:all|element:all|saturation:-100|lightness:50&key=mock'
+    thumbnail_url: `https://maps.googleapis.com/maps/api/staticmap?size=200x100&path=color:0x000000ff|weight:2|enc:a~l~Fjk~uOnTxMA&style=feature:all|element:all|saturation:-100|lightness:50&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
   },
   { day: 4,  time: '05:45', name: 'Valley Recovery',      riders: 8,  status: 'active' },
   { day: 4,  time: '18:00', name: 'Emergency Protocol',   riders: 0,  status: 'alert'  },
