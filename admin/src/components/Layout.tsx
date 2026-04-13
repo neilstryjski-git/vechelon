@@ -5,9 +5,11 @@ import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  isActive
-    ? 'text-on-background border-b-2 border-on-background pb-1 transition-colors duration-200'
-    : 'text-on-surface-variant hover:text-on-background transition-colors duration-200';
+  `pb-1 border-b-2 transition-colors duration-200 ${
+    isActive
+      ? 'text-on-background border-on-background'
+      : 'text-on-surface-variant hover:text-on-background border-transparent'
+  }`;
 
 const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
   useOfflineStatus();
