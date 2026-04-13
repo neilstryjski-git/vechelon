@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist_production",
+  "outputDirectory": "public",
   "cleanUrls": true,
   "redirects": [
     {
