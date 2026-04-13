@@ -446,7 +446,7 @@ const RouteLibrary: React.FC = () => {
           Route Management
         </span>
         <h1 className="font-headline text-5xl font-extrabold tracking-tight text-on-background mb-4">
-          Route Library <span className="text-xs font-mono text-on-surface-variant/30 font-normal">v1.2.3</span>
+          Route Library
         </h1>
         <p className="text-on-surface-variant text-lg leading-relaxed max-w-2xl">
           Curate the club's official route collection. Upload GPX files to extract

@@ -59,8 +59,20 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
 
           {/* Platform & Tenant Branding (Left) */}
           <div className="flex items-center gap-4">
-            {/* Platform Branding */}
+            {/* Tenant Branding */}
             <div className="flex items-center gap-2 pr-4 border-r border-outline-variant/20">
+              <img
+                src={tenantLogo}
+                alt="Club Logo"
+                className="h-6 w-auto object-contain opacity-90"
+              />
+              <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant font-bold hidden sm:block">
+                {tenant?.name || 'Racer Sportif'}
+              </span>
+            </div>
+
+            {/* Platform Branding */}
+            <div className="flex items-center gap-2">
               <img
                 src="./vechelon-halfchainring.svg"
                 alt="Vechelon"
@@ -75,18 +87,6 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
                 }`}
               >
                 {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
-              </span>
-            </div>
-
-            {/* Tenant Branding */}
-            <div className="flex items-center gap-2">
-              <img
-                src={tenantLogo}
-                alt="Club Logo"
-                className="h-6 w-auto object-contain opacity-90"
-              />
-              <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant font-bold hidden sm:block">
-                {tenant?.name || 'Racer Sportif'}
               </span>
             </div>
           </div>
