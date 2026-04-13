@@ -3,6 +3,13 @@
   "outputDirectory": "public",
   "cleanUrls": true,
   "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/admin/:path*",
+      "destination": "/portal/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "handle": "filesystem"
