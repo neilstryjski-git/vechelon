@@ -6,6 +6,6 @@
     "admin"
   ],
   "scripts": {
-    "build": "cd admin && npm run build && cd .. && rm -rf public && mkdir -p public/portal && cp -r admin/dist/* public/portal/ && cp index.html public/ && cp prototype.html public/ && cp echelon-logo-v10.html public/ && cp admin/public/* public/portal/ || true"
+    "build": "npm run build --prefix admin && rm -rf dist_production && mkdir -p dist_production/portal && cp -r admin/dist/. dist_production/portal/ && cp index.html prototype.html echelon-logo-v10.html dist_production/ && cp -r admin/public/. dist_production/portal/ || true"
   }
 }
