@@ -194,7 +194,7 @@ export const useAppStore = create<AppState>()(
         })),
     }),
     {
-      name: 'vechelon-admin-storage',
+      name: 'vechelon-admin-storage-v2',
       partialize: (state) => ({ 
         isSidebarOpen: state.isSidebarOpen,
       }),
