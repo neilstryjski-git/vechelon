@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ECHELON — Club Command</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #050A12;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: 'Barlow Condensed', sans-serif;
+    padding: 48px 24px; gap: 32px;
+  }
+  .page-label {
+    font-size: 8px; font-weight: 700; letter-spacing: .42em;
+    text-transform: uppercase; color: #0D1E30;
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+  .cards-row {
+    display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
+  }
+  .card {
+    border-radius: 24px;
+    padding: 0 64px 40px;
+    display: flex; flex-direction: column;
+    align-items: center; overflow: hidden;
+  }
+  .card-dark {
+    background: #07111E;
+    border: 1.5px solid #0D1F33;
+  }
+  .card-light {
+    background: #F0F4F8;
+    border: 1.5px solid #D8E2EC;
+  }
+  .card-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 8px; font-weight: 700; letter-spacing: .32em;
+    text-transform: uppercase; margin-bottom: 0; margin-top: 16px;
+  }
+  .card-dark .card-label { color: #1A3050; }
+  .card-light .card-label { color: #94A3B8; }
+  .card-dark .bold-letter { color: white; }
+  .card-light .bold-letter { color: #0F172A; }
+  .card-dark .tagline { color: #4A6A8A; }
+  .card-light .tagline { color: #94A3B8; }
+  /* Light card Option I — swapped */
+  .light-velo { font-weight: 800; transition: color .2s; }
+  .light-che  { font-weight: 800; color: #0F172A; }
+  /* Light card Option II — outlined */
+  .outline-velo {
+    font-weight: 800;
+    color: white;
+    -webkit-text-stroke: 1.5px #0F172A;
+    transition: -webkit-text-stroke-color .2s;
+  }
+  .wordmark {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 54px;
+    text-transform: uppercase;
+    margin-top: 10px;
+    text-align: center;
+    width: 100%;
+    letter-spacing: 0.12em;
+    line-height: 1;
+  }
+  .bold-letter {
+    font-weight: 800;
+    color: white;
+  }
+  .light-letters {
+    font-weight: 800;
+    transition: color .2s;
+  }
+  .tagline {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.46em;
+    text-transform: uppercase;
+    color: #4A6A8A;
+    margin-top: 11px;
+    text-align: center;
+    width: 100%;
+  }
+  .swatch-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .swatch-cap {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 8px; font-weight: 700; letter-spacing: .38em;
+    text-transform: uppercase; color: #0D1E30;
+  }
+  .sw-row { display: flex; gap: 8px; align-items: center; }
+  .sw {
+    width: 28px; height: 28px; border-radius: 7px;
+    border: 2.5px solid transparent;
+    cursor: pointer; outline: none; transition: all .15s;
+  }
+  .sw.on { border-color: #fff; transform: scale(1.22); }
+  input[type=color] {
+    width: 28px; height: 28px; border-radius: 7px;
+    border: 2px solid #1A2740; cursor: pointer;
+    background: #0D1526; padding: 2px;
+  }
+</style>
+</head>
+<body>
+
+<span class="page-label">ECHELON · Visual Identity</span>
+
+<div class="cards-row">
+
+<!-- DARK CARD -->
+<div class="card card-dark">
+  <span class="card-label">Dark</span>
+  <svg viewBox="0 -140 340 127" width="320" height="120" style="display:block;">
+    <defs>
+      <filter id="glow-d" x="-15%" y="-15%" width="130%" height="130%">
+        <feGaussianBlur stdDeviation="4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g filter="url(#glow-d)">
+      <path class="ring" fill-rule="evenodd"/>
+    </g>
+  </svg>
+  <div class="wordmark"><span class="bold-letter">VE</span><span class="light-letters">che</span><span class="bold-letter">LO</span><span class="light-letters">n</span></div>
+  <span class="tagline">Club Command</span>
+</div>
+
+<!-- LIGHT CARD I — Color swapped: VE LO in club color, che n dark -->
+<div class="card card-light">
+  <span class="card-label">Light</span>
+  <svg viewBox="0 -140 340 127" width="320" height="120" style="display:block;">
+    <defs>
+      <filter id="glow-l" x="-15%" y="-15%" width="130%" height="130%">
+        <feGaussianBlur stdDeviation="2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g filter="url(#glow-l)">
+      <path class="ring" fill-rule="evenodd"/>
+    </g>
+  </svg>
+  <div class="wordmark">
+    <span class="light-velo">VE</span><span class="light-che">che</span><span class="light-velo">LO</span><span class="light-che">n</span>
+  </div>
+  <span class="tagline">Club Command</span>
+</div>
+
+
+</div>
+
+<div class="swatch-wrap">
+  <span class="swatch-cap">Club Color</span>
+  <div class="sw-row" id="swatches"></div>
+</div>
+
+<script>
+// ── Geometry ─────────────────────────────────────────────────────────────────
+const toR = d => d * Math.PI / 180;
+const pt  = (cx, cy, r, deg) => [cx + r * Math.cos(toR(deg)), cy + r * Math.sin(toR(deg))];
+const f   = n => parseFloat(n.toFixed(3));
+
+// CCW circle path → evenodd punch-through
+function hole(cx, cy, r) {
+  return `M${f(cx+r)},${f(cy)} A${r},${r},0,1,0,${f(cx-r)},${f(cy)} A${r},${r},0,1,0,${f(cx+r)},${f(cy)}Z`;
+}
+
+// 40T narrow-wide chainring · 5-bolt BCD · no lightening holes
+function buildChainring(cx, cy) {
+  const N=40, rT=138, rV=114, rI=51, bR=85, bRad=13;
+  const thW=3.8, thN=2.2;
+
+  const [sx,sy] = pt(cx,cy,rV,-90-thW);
+  let d = `M${f(sx)},${f(sy)}`;
+
+  for(let i=0;i<N;i++){
+    const A = -90 + i*(360/N);
+    const th = (i%2===0) ? thW : thN;
+    const vE=A-th, tE=A+th;
+    const[a,b]=pt(cx,cy,rV,vE); d+=` A${rV},${rV},0,0,1,${f(a)},${f(b)}`;
+    const[c,e]=pt(cx,cy,rT,vE); d+=` L${f(c)},${f(e)}`;
+    const[g,h]=pt(cx,cy,rT,tE); d+=` A${rT},${rT},0,0,1,${f(g)},${f(h)}`;
+    const[j,k]=pt(cx,cy,rV,tE); d+=` L${f(j)},${f(k)}`;
+  }
+  d += "Z";
+  d += " " + hole(cx, cy, rI);
+  for(let b=0;b<5;b++){
+    const[bx,by]=pt(cx,cy,bR,-90+b*72);
+    d += " " + hole(bx,by,bRad);
+  }
+  return d;
+}
+
+const gearPath = buildChainring(170, 0);
+document.querySelectorAll('.ring').forEach(el => el.setAttribute('d', gearPath));
+
+// ── Club color system ─────────────────────────────────────────────────────────
+let col = '#3B82F6';
+
+const presets = [
+  {hex:'#3B82F6', name:'Cobalt'},
+  {hex:'#EF4444', name:'Crimson'},
+  {hex:'#10B981', name:'Emerald'},
+  {hex:'#F59E0B', name:'Amber'},
+  {hex:'#8B5CF6', name:'Violet'},
+  {hex:'#F97316', name:'Fluo'},
+];
+
+const sr = document.getElementById('swatches');
+presets.forEach(({hex,name}) => {
+  const b = document.createElement('button');
+  b.className = 'sw'; b.style.background = hex;
+  b.dataset.h = hex; b.title = name;
+  b.onclick = () => paint(hex);
+  sr.appendChild(b);
+});
+const pk = document.createElement('input');
+pk.type = 'color'; pk.value = col;
+pk.oninput = e => paint(e.target.value);
+sr.appendChild(pk);
+
+function paint(c) {
+  col = c; pk.value = c;
+  document.querySelectorAll('.ring').forEach(el => el.setAttribute('fill', c));
+  // Dark card: che n take club color
+  document.querySelectorAll('.light-letters').forEach(el => el.style.color = c);
+  // Light Option I: VE LO take club color
+  document.querySelectorAll('.light-velo').forEach(el => el.style.color = c);
+  // Light Option II: outlined stroke takes club color
+  document.querySelectorAll('.outline-velo').forEach(el => el.style.webkitTextStrokeColor = c);
+  document.querySelectorAll('.sw').forEach(el => el.classList.toggle('on', el.dataset.h === c));
+}
+paint(col);
+</script>
+</body>
+</html>

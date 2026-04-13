@@ -19,6 +19,11 @@ function createSafeProxy(): any {
   // The recursive handler
   const handler: ProxyHandler<any> = {
     get(target, prop) {
+      // Handle Thenable/Promise behavior to prevent hangs during 'await'
+      if (prop === 'then') {
+        return (onFulfilled: any) => Promise.resolve({ data: null, error: null, count: 0 }).then(onFulfilled);
+      }
+
       // Special case for methods that return promises
       if (['maybeSingle', 'single', 'getSession', 'getUser', 'invoke'].includes(prop as string)) {
         return () => Promise.resolve({ data: null, error: null })

@@ -16,4 +16,6 @@
 | **U2** (Upload Robustness) | Added 30s timeout and Web Crypto safety checks to prevent indefinite hangs during GPX uploads. | 2026-04-12 |
 | **D3** (Build Pipeline) | Fixed TypeScript build error (unused variable) and implemented `npm workspaces` to stabilize Vercel deployments. | 2026-04-12 |
 | **D4** (Vercel Deployment) | Switched output directory to `dist_production` to resolve folder collision/missing folder errors in Vercel. | 2026-04-12 |
+| **P1** (Proxy Hang) | Fixed `createSafeProxy` in `supabase.ts` to correctly handle `then` property, preventing indefinite hangs when environment variables are missing. | 2026-04-13 |
+| **P2** (Prod Build Sync) | Rebuilt admin portal with correct environment variables and synchronized `public/` and `dist_production/` to ensure working deployment. | 2026-04-13 |
 
