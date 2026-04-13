@@ -103,14 +103,17 @@ const CalendarGrid: React.FC = () => {
     <div className="space-y-8">
 
       {/* Editorial Header */}
-      <section className="flex flex-col md:flex-row justify-between items-end gap-6">
+      <section className="flex flex-col md:flex-row justify-between items-end gap-8 mb-4">
         <div className="max-w-2xl">
-          <h1 className="text-4xl font-headline font-extrabold tracking-tight text-on-background mb-2">
+          <span className="font-label text-xs uppercase tracking-widest text-primary mb-4 block">
+            Central Dispatch
+          </span>
+          <h1 className="font-headline text-5xl font-extrabold tracking-tight text-on-background mb-4 italic">
             Ride Operations
           </h1>
-          <p className="text-on-surface-variant font-body leading-relaxed">
-            Centralized dispatch and logistics. Manage routes, group assignments, and safety
-            protocols from a unified view.
+          <p className="text-on-surface-variant text-lg leading-relaxed">
+            Centralized logistics and fleet management. Coordinate routes, group assignments, 
+            and safety protocols from a unified tactical view.
           </p>
         </div>
         <div className="flex items-center gap-4">
