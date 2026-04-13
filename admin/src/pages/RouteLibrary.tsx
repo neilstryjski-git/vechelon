@@ -65,8 +65,8 @@ function useUploadRoute() {
 
       const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
 
-      let { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id || '00000000-0000-0000-0000-00000000000a';
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
 
       const { data: tenantRow, error: tenantErr } = await supabase
         .from('account_tenants')
