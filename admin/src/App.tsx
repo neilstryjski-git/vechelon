@@ -30,7 +30,7 @@ function AdaptiveLayout() {
 
 function AppContent() {
   // Dynamic branding fetch from Supabase
-  const { data: tenant } = useQuery({
+  const { data: tenant, error: tenantError } = useQuery({
     queryKey: ['tenant-config'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -39,10 +39,17 @@ function AppContent() {
         .limit(1)
         .maybeSingle();
       
-      if (error) throw error;
+      if (error) {
+        console.error('[Vechelon] Tenant config fetch failed:', error);
+        return null;
+      }
       return data;
     },
   });
+
+  if (tenantError) {
+    console.warn('[Vechelon] Using fallback branding due to query error.');
+  }
 
   // Fallback to Velo Modern defaults
   useBranding(tenant ? {
