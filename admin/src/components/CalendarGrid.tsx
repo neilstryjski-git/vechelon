@@ -14,10 +14,18 @@ interface MockRide {
   name: string;
   riders: number;
   status: RideStatus;
+  thumbnail_url?: string;
 }
 
 const MOCK_RIDES: MockRide[] = [
-  { day: 1,  time: '06:30', name: 'North Ridge Sprint',   riders: 12, status: 'active' },
+  { 
+    day: 1,  
+    time: '06:30', 
+    name: 'North Ridge Sprint',   
+    riders: 12, 
+    status: 'active',
+    thumbnail_url: 'https://maps.googleapis.com/maps/api/staticmap?size=200x100&path=color:0x000000ff|weight:2|enc:a~l~Fjk~uOnTxMA&style=feature:all|element:all|saturation:-100|lightness:50&key=mock'
+  },
   { day: 4,  time: '05:45', name: 'Valley Recovery',      riders: 8,  status: 'active' },
   { day: 4,  time: '18:00', name: 'Emergency Protocol',   riders: 0,  status: 'alert'  },
   { day: 8,  time: '07:00', name: 'Summit Challenge',     riders: 24, status: 'active' },
@@ -197,12 +205,17 @@ const CalendarGrid: React.FC = () => {
                   {rides.map((ride, i) => (
                     <div
                       key={i}
-                      className={`p-2.5 rounded shadow-ambient hover:-translate-y-0.5 transition-transform cursor-pointer border border-outline-variant/10 ${
+                      className={`p-2.5 rounded shadow-ambient hover:-translate-y-0.5 transition-transform cursor-pointer border border-outline-variant/10 overflow-hidden ${
                         ride.status === 'alert'
                           ? 'bg-surface-container-high'
                           : 'bg-surface-container-lowest'
                       }`}
                     >
+                      {ride.thumbnail_url && (
+                        <div className="h-12 w-full mb-2 bg-surface-container-high -mt-2.5 -mx-2.5 w-[calc(100%+20px)]">
+                          <img src={ride.thumbnail_url} className="w-full h-full object-cover" alt="" />
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 mb-1">
                         <StatusDot status={ride.status} />
                         <span className="font-label text-[10px] text-on-surface-variant">

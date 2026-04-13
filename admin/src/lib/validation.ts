@@ -22,6 +22,7 @@ export const parseGPXCoords = (gpxString: string) => {
       name:           gpx.metadata?.name || track.name || null,
       start:          { lat: points[0].lat, lon: points[0].lon },
       end:            { lat: points[points.length - 1].lat, lon: points[points.length - 1].lon },
+      points:         points.map(p => ({ lat: p.lat, lon: p.lon })),
       pointCount:     points.length,
       distance_km:    track.distance.total / 1000,
       elevation_gain: Math.round(track.elevation.pos ?? 0),

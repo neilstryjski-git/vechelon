@@ -2,40 +2,8 @@ import React, { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
-
-// ---------------------------------------------------------------------------
-// BDD Scenarios (living documentation)
-// ---------------------------------------------------------------------------
-//
-// Feature: Route Library Curation
-//
-//   Background:
-//     Given I am authenticated as a tenant admin
-//
-//   Scenario: Uploading a valid GPX file
-//     When I select a .gpx file and click Upload
-//     Then the file is stored in the gpx-routes bucket at {tenantId}/{routeId}.gpx
-//     And a route_library row is created with name, distance_km, elevation_gain_m
-//     And the new route appears at the top of the list
-//
-//   Scenario: Rejecting a non-GPX file
-//     When I select a .pdf file
-//     Then I see "Only .gpx files are accepted"
-//     And no upload is attempted
-//
-//   Scenario: Rejecting a malformed GPX file
-//     When I upload a GPX with no track points
-//     Then I see "GPX file contains no track data"
-//     And no route_library row is created
-//
-//   Scenario: Viewing the route list
-//     Given 3 routes exist in route_library
-//     When I load the Route Library
-//     Then I see 3 route cards with name, distance, and elevation
-//
-//   Scenario: Loading state
-//     When the route list is fetching
-//     Then I see skeleton placeholder cards
+import { getStaticMapUrl } from '../lib/maps';
+import Modal from '../components/Modal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,7 +15,21 @@ interface RouteRow {
   file_path:       string;
   distance_km:     number | null;
   elevation_gain_m: number | null;
+  external_url:    string | null;
+  thumbnail_url:   string | null;
+  file_hash:       string | null;
   created_at:      string;
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+async function calculateHash(text: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +42,7 @@ function useRoutes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('route_library')
-        .select('id, name, file_path, distance_km, elevation_gain_m, created_at')
+        .select('id, name, file_path, distance_km, elevation_gain_m, external_url, thumbnail_url, file_hash, created_at')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -72,21 +54,18 @@ function useUploadRoute() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ file, name }: { file: File; name: string }) => {
-      // 1. Parse GPX
+    mutationFn: async ({ file, name, externalUrl, hash }: { file: File; name: string; externalUrl: string; hash: string }) => {
       const text    = await file.text();
       const parsed  = parseGPXCoords(text);
       if (!parsed) throw new Error('GPX file contains no track data');
 
-      // DERIVE NAME: Use user entry, OR GPX internal name, OR filename (cleaned)
       const finalName = name.trim() || 
                         parsed.name || 
                         file.name.replace(/\.gpx$/i, '').replace(/[_-]/g, ' ');
 
-      // 2. Get tenant context (Mock bypass for prototyping)
+      const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
+
       let { data: { user } } = await supabase.auth.getUser();
-      
-      // PROTOTYPE BYPASS: If not logged in, use the mock admin from seed.sql
       const userId = user?.id || '00000000-0000-0000-0000-00000000000a';
 
       const { data: tenantRow, error: tenantErr } = await supabase
@@ -102,13 +81,11 @@ function useUploadRoute() {
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 
-      // 3. Upload to Storage
       const { error: uploadErr } = await supabase.storage
         .from('gpx-routes')
         .upload(filePath, file, { contentType: 'application/gpx+xml', upsert: false });
       if (uploadErr) throw uploadErr;
 
-      // 4. Insert route_library row
       const { error: insertErr } = await supabase
         .from('route_library')
         .insert({
@@ -118,14 +95,38 @@ function useUploadRoute() {
           file_path:        filePath,
           distance_km:      parsed.distance_km,
           elevation_gain_m: parsed.elevation_gain,
+          external_url:     externalUrl.trim() || null,
+          thumbnail_url:    thumbnailUrl,
+          file_hash:        hash,
           created_by:       userId,
         });
 
       if (insertErr) {
-        // Roll back storage upload if DB insert fails
         await supabase.storage.from('gpx-routes').remove([filePath]);
         throw insertErr;
       }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route-library'] });
+    },
+  });
+}
+
+function useDeleteRoute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, filePath }: { id: string; filePath: string }) => {
+      const { error: dbErr } = await supabase
+        .from('route_library')
+        .delete()
+        .eq('id', id);
+      if (dbErr) throw dbErr;
+
+      const { error: storageErr } = await supabase.storage
+        .from('gpx-routes')
+        .remove([filePath]);
+      if (storageErr) console.warn('Storage deletion failed:', storageErr);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
@@ -149,38 +150,85 @@ function SkeletonCard() {
   );
 }
 
-function RouteCard({ route }: { route: RouteRow }) {
+function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRow) => void }) {
+  const isAdmin = true; // DEV BYPASS
   const date = new Date(route.created_at).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 
   return (
-    <div className="bg-surface-container-lowest p-6 rounded-xl shadow-ambient hover:bg-surface-container-low transition-colors">
-      <div className="flex justify-between items-start mb-4">
-        <h4 className="font-headline font-bold text-on-background">{route.name}</h4>
-        <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
-          {date}
-        </span>
-      </div>
-      <div className="flex gap-6">
-        {route.distance_km != null && (
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-on-surface-variant text-base">
-              straighten
-            </span>
-            <span className="font-label text-xs text-on-surface-variant">
-              {route.distance_km.toFixed(1)} km
-            </span>
-          </div>
-        )}
-        {route.elevation_gain_m != null && (
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-on-surface-variant text-base">
-              landscape
-            </span>
-            <span className="font-label text-xs text-on-surface-variant">
-              {route.elevation_gain_m} m gain
-            </span>
+    <div className="bg-surface-container-lowest overflow-hidden rounded-xl shadow-ambient hover:bg-surface-container-low transition-colors flex flex-col group relative">
+      
+      {/* Delete button (Admin Only) */}
+      {isAdmin && (
+        <button 
+          onClick={() => onDelete(route)}
+          className="absolute top-2 right-2 z-10 p-2 bg-error/20 hover:bg-error text-error hover:text-on-error rounded-full transition-all duration-300 backdrop-blur-md border border-error/20"
+          title="Delete Route"
+        >
+          <span className="material-symbols-outlined text-sm">delete</span>
+        </button>
+      )}
+
+      {/* Thumbnail */}
+      {route.thumbnail_url ? (
+        <div className="h-40 w-full bg-surface-container-high overflow-hidden">
+          <img 
+            src={route.thumbnail_url} 
+            alt={route.name} 
+            className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-all duration-500"
+          />
+        </div>
+      ) : (
+        <div className="h-40 w-full bg-surface-container-high flex items-center justify-center">
+          <span className="material-symbols-outlined text-on-surface-variant/30 text-4xl">
+            map
+          </span>
+        </div>
+      )}
+
+      <div className="p-6">
+        <div className="flex justify-between items-start mb-4">
+          <h4 className="font-headline font-bold text-on-background line-clamp-1">{route.name}</h4>
+          <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant shrink-0 ml-4">
+            {date}
+          </span>
+        </div>
+        <div className="flex gap-6 mb-6">
+          {route.distance_km != null && (
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-surface-variant text-base">
+                straighten
+              </span>
+              <span className="font-label text-xs text-on-surface-variant">
+                {route.distance_km.toFixed(1)} km
+              </span>
+            </div>
+          )}
+          {route.elevation_gain_m != null && (
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-on-surface-variant text-base">
+                landscape
+              </span>
+              <span className="font-label text-xs text-on-surface-variant">
+                {route.elevation_gain_m} m gain
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        {route.external_url && (
+          <div className="pt-4 border-t border-outline-variant/30">
+            <a 
+              href={route.external_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">open_in_new</span>
+              View on Garmin / Strava
+            </a>
           </div>
         )}
       </div>
@@ -188,14 +236,11 @@ function RouteCard({ route }: { route: RouteRow }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Upload form
-// ---------------------------------------------------------------------------
-
-function UploadForm({ onUpload }: { onUpload: (file: File, name: string) => void }) {
+function UploadForm({ onUpload }: { onUpload: (file: File, name: string, externalUrl: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [name, setName]       = useState('');
-  const [fileErr, setFileErr] = useState<string | null>(null);
+  const [name, setName]               = useState('');
+  const [externalUrl, setExternalUrl] = useState('');
+  const [fileErr, setFileErr]         = useState<string | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileErr(null);
@@ -221,80 +266,172 @@ function UploadForm({ onUpload }: { onUpload: (file: File, name: string) => void
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
-    if (!file) return; // Only require the file; name is now optional
-    onUpload(file, name.trim());
+    if (!file) return; 
+    onUpload(file, name.trim(), externalUrl.trim());
     setName('');
+    setExternalUrl('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-surface-container-low p-6 rounded-xl flex flex-col md:flex-row gap-4 items-end"
+      className="bg-surface-container-low p-6 rounded-xl space-y-6"
     >
-      <div className="flex-1">
-        <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-          Route Name
-        </label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Valley Loop"
-          className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-md px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+            Route Name
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Valley Loop"
+            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-md px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors"
+          />
+        </div>
+        <div>
+          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+            External Activity URL
+          </label>
+          <input
+            type="url"
+            value={externalUrl}
+            onChange={(e) => setExternalUrl(e.target.value)}
+            placeholder="https://connect.garmin.com/..."
+            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-md px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors"
+          />
+        </div>
+        <div>
+          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+            .GPX file
+          </label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".gpx"
+            onChange={handleFile}
+            required
+            className="w-full font-label text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-label file:text-xs file:bg-surface-container-high file:text-on-surface-variant hover:file:bg-surface-container-highest cursor-pointer"
+          />
+          {fileErr && (
+            <p className="mt-1 font-label text-[10px] text-error">{fileErr}</p>
+          )}
+        </div>
       </div>
-      <div className="flex-1">
-        <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-          .GPX file
-        </label>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".gpx"
-          onChange={handleFile}
-          required
-          className="w-full font-label text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-label file:text-xs file:bg-surface-container-high file:text-on-surface-variant hover:file:bg-surface-container-highest cursor-pointer"
-        />
-        {fileErr && (
-          <p className="mt-1 font-label text-[10px] text-error">{fileErr}</p>
-        )}
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          className="signature-gradient text-on-primary px-8 py-2.5 rounded-md font-label text-xs font-medium hover:opacity-90 transition-all active:scale-95 shrink-0"
+        >
+          Upload Route
+        </button>
       </div>
-      <button
-        type="submit"
-        className="signature-gradient text-on-primary px-6 py-2.5 rounded-md font-label text-xs font-medium hover:opacity-90 transition-all active:scale-95 shrink-0"
-      >
-        Upload Route
-      </button>
     </form>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
 const RouteLibrary: React.FC = () => {
   const { data: routes = [], isLoading }               = useRoutes();
-  const { mutate: upload, isPending } = useUploadRoute();
+  const { mutate: upload, isPending }                  = useUploadRoute();
+  const { mutate: deleteRoute }                        = useDeleteRoute();
+  const isAdmin = true; // DEV BYPASS
 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [search, setSearch]           = useState('');
 
-  const handleUpload = (file: File, name: string) => {
+  // Modal State
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    type?: 'danger' | 'info';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
+
+  const handleUpload = async (file: File, name: string, externalUrl: string) => {
     setUploadError(null);
     setUploadSuccess(false);
-    upload({ file, name }, {
-      onSuccess: () => {
-        setUploadSuccess(true);
-        setTimeout(() => setUploadSuccess(false), 3000);
-      },
-      onError: (err) => setUploadError((err as Error).message),
+
+    const text = await file.text();
+    const hash = await calculateHash(text);
+
+    // Check for duplicate
+    const existingRoute = routes.find(r => r.file_hash === hash);
+
+    const performUpload = () => {
+      upload({ file, name, externalUrl, hash }, {
+        onSuccess: () => {
+          setUploadSuccess(true);
+          setTimeout(() => setUploadSuccess(false), 3000);
+          closeModal();
+        },
+        onError: (err) => {
+          setUploadError((err as Error).message);
+          closeModal();
+        },
+      });
+    };
+
+    if (existingRoute) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Duplicate Route Detected',
+        message: `This exact GPX file already exists in your library as "${existingRoute.name}". Are you sure you want to upload it again?`,
+        confirmLabel: 'Upload Anyway',
+        type: 'info',
+        onConfirm: performUpload
+      });
+    } else {
+      performUpload();
+    }
+  };
+
+  const handleDelete = (route: RouteRow) => {
+    setModalConfig({
+      isOpen: true,
+      title: 'Delete Route',
+      message: `Are you sure you want to permanently delete "${route.name}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      type: 'danger',
+      onConfirm: () => {
+        deleteRoute({ id: route.id, filePath: route.file_path }, {
+          onSuccess: closeModal,
+          onError: (err) => {
+            alert(`Delete failed: ${(err as Error).message}`);
+            closeModal();
+          },
+        });
+      }
     });
   };
 
+  const filteredRoutes = routes.filter(r => 
+    r.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="space-y-10">
+      
+      <Modal 
+        isOpen={modalConfig.isOpen}
+        onClose={closeModal}
+        onConfirm={modalConfig.onConfirm}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        confirmLabel={modalConfig.confirmLabel}
+        type={modalConfig.type}
+      />
 
       {/* Editorial Header */}
       <section>
@@ -310,36 +447,51 @@ const RouteLibrary: React.FC = () => {
         </p>
       </section>
 
-      {/* Upload */}
-      <div>
-        <h2 className="font-headline font-bold text-on-background mb-4">Add New Route</h2>
-        <UploadForm onUpload={handleUpload} />
-        {isPending && (
-          <p className="mt-3 font-label text-xs text-on-surface-variant animate-pulse">
-            Parsing and uploading route…
-          </p>
-        )}
-        {uploadSuccess && (
-          <p className="mt-3 font-label text-xs text-brand-primary">
-            ✓ Route uploaded successfully.
-          </p>
-        )}
-        {uploadError && (
-          <p className="mt-3 font-label text-xs text-error">{uploadError}</p>
-        )}
-      </div>
+      {/* Upload (Admin Only) */}
+      {isAdmin && (
+        <div>
+          <h2 className="font-headline font-bold text-on-background mb-4">Add New Route</h2>
+          <UploadForm onUpload={handleUpload} />
+          {isPending && (
+            <p className="mt-3 font-label text-xs text-on-surface-variant animate-pulse">
+              Parsing and uploading route…
+            </p>
+          )}
+          {uploadSuccess && (
+            <p className="mt-3 font-label text-xs text-brand-primary">
+              ✓ Route uploaded successfully.
+            </p>
+          )}
+          {uploadError && (
+            <p className="mt-3 font-label text-xs text-error">{uploadError}</p>
+          )}
+        </div>
+      )}
 
       {/* Route list */}
       <div>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-headline font-bold text-on-background">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-surface-container-low pb-6">
+          <h2 className="font-headline font-bold text-2xl text-on-background">
             Club Routes
             {!isLoading && (
               <span className="ml-3 font-label text-[10px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full align-middle">
-                {routes.length}
+                {filteredRoutes.length}
               </span>
             )}
           </h2>
+
+          <div className="relative w-full md:w-72">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-xl">
+              search
+            </span>
+            <input 
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter routes by name..."
+              className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-10 pr-4 py-2 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 transition-all"
+            />
+          </div>
         </div>
 
         {isLoading && (
@@ -348,17 +500,22 @@ const RouteLibrary: React.FC = () => {
           </div>
         )}
 
-        {!isLoading && routes.length === 0 && (
-          <div className="py-20 text-center">
+        {!isLoading && filteredRoutes.length === 0 && (
+          <div className="py-20 text-center bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/30">
+            <span className="material-symbols-outlined text-on-surface-variant/20 text-5xl mb-4">
+              {search ? 'search_off' : 'route'}
+            </span>
             <p className="font-label text-sm text-on-surface-variant">
-              — No routes yet. Upload the first one above. —
+              {search 
+                ? `No routes matching "${search}"`
+                : '— No routes yet. Upload the first one above. —'}
             </p>
           </div>
         )}
 
-        {!isLoading && routes.length > 0 && (
+        {!isLoading && filteredRoutes.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {routes.map((r) => <RouteCard key={r.id} route={r} />)}
+            {filteredRoutes.map((r) => <RouteCard key={r.id} route={r} onDelete={handleDelete} />)}
           </div>
         )}
       </div>

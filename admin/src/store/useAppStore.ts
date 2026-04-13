@@ -24,6 +24,7 @@ interface AppState {
   isOnline: boolean;
   isPriorityMode: boolean;
   userTier: UserTier;
+  isAdmin: boolean;
   membershipStatus: string | null;
   activeBeacons: string[]; // participantIds
   cachedParticipants: Record<string, Participant[]>; // rideId -> participants
@@ -32,7 +33,7 @@ interface AppState {
   setTenantId: (id: string | null) => void;
   toggleSidebar: () => void;
   setOnlineStatus: (status: boolean) => void;
-  setTier: (tier: UserTier, status?: string | null) => void;
+  setTier: (tier: UserTier, status?: string | null, role?: string | null) => void;
   updateCachedParticipants: (rideId: string, participants: Participant[]) => void;
   processLocationUpdate: (rideId: string, update: Partial<Participant> & { id: string }) => void;
   runHeartbeat: (rideId: string) => void;
@@ -55,6 +56,7 @@ export const useAppStore = create<AppState>()(
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       isPriorityMode: false,
       userTier: 'guest',
+      isAdmin: false,
       membershipStatus: null,
       activeBeacons: [],
       cachedParticipants: {},
@@ -62,7 +64,11 @@ export const useAppStore = create<AppState>()(
       setTenantId: (id) => set({ currentTenantId: id }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setOnlineStatus: (status) => set({ isOnline: status }),
-      setTier: (tier, status = null) => set({ userTier: tier, membershipStatus: status }),
+      setTier: (tier, status = null, role = null) => set({ 
+        userTier: tier, 
+        membershipStatus: status,
+        isAdmin: role === 'admin'
+      }),
       
       /**
        * Handle incoming real-time location pings.

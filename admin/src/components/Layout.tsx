@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import MobileMenu from './MobileMenu';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive
@@ -12,9 +13,25 @@ const Layout: React.FC = () => {
   useOfflineStatus();
   const isOnline  = useAppStore((state) => state.isOnline);
   const isPriorityMode = useAppStore((state) => state.isPriorityMode);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const adminLinks = [
+    { to: '/', label: 'Dashboard', end: true },
+    { to: '/calendar', label: 'Calendar' },
+    { to: '/routes', label: 'Route Library' },
+    { to: '/members', label: 'Member Directory' },
+    { to: '/settings', label: 'Settings' },
+  ];
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body">
+
+      <MobileMenu 
+        isOpen={isMenuOpen} 
+        onClose={() => setIsMenuOpen(false)} 
+        links={adminLinks}
+        title="ADMIN CENTRE"
+      />
 
       {/* Priority Mode Banner */}
       {isPriorityMode && (
@@ -73,12 +90,20 @@ const Layout: React.FC = () => {
           <div className="flex items-center gap-1">
             <NavLink
               to="/settings"
-              className="p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95"
+              className="hidden sm:flex p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95"
             >
               <span className="material-symbols-outlined text-on-surface-variant">settings</span>
             </NavLink>
-            <button className="p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95">
+            <button className="hidden sm:flex p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95">
               <span className="material-symbols-outlined text-on-surface-variant">account_circle</span>
+            </button>
+
+            {/* Mobile Menu Trigger */}
+            <button 
+              onClick={() => setIsMenuOpen(true)}
+              className="flex md:hidden p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95 ml-2"
+            >
+              <span className="material-symbols-outlined text-on-background">menu</span>
             </button>
           </div>
 

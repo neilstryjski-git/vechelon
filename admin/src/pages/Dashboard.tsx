@@ -13,7 +13,7 @@ function useActiveRides() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name')
+        .select('id, name, thumbnail_url, external_url')
         .eq('status', 'active')
         .limit(5);
       if (error) throw error;
@@ -135,21 +135,48 @@ const Dashboard: React.FC = () => {
           <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
             Tactical Session Control
           </h3>
-          <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-ambient border border-surface-container-low/50 min-h-[200px] flex flex-col justify-center">
+          <div className="space-y-4">
             {activeRidesList && activeRidesList.length > 0 ? (
-              <div className="space-y-6">
-                {activeRidesList.map((ride: any) => (
-                  <div key={ride.id} className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="font-headline font-bold text-lg">{ride.title}</span>
-                      <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest">Active</span>
+              activeRidesList.map((ride: any) => (
+                <div key={ride.id} className="bg-surface-container-lowest overflow-hidden rounded-2xl shadow-ambient border border-surface-container-low/50 flex flex-col md:flex-row">
+                  {/* Thumbnail */}
+                  <div className="w-full md:w-48 h-32 bg-surface-container-high shrink-0">
+                    {ride.thumbnail_url ? (
+                      <img 
+                        src={ride.thumbnail_url} 
+                        alt={ride.name} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <span className="material-symbols-outlined text-on-surface-variant/30">map</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-6 flex-1 flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-headline font-bold text-lg text-on-background line-clamp-1">{ride.name}</h4>
+                        {ride.external_url && (
+                          <a 
+                            href={ride.external_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-primary mt-1"
+                          >
+                            Activity Link <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                          </a>
+                        )}
+                      </div>
+                      <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Active</span>
                     </div>
                     <EndRideButton rideId={ride.id} />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             ) : (
-              <div className="text-center space-y-4">
+              <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-ambient border border-surface-container-low/50 min-h-[200px] flex flex-col justify-center text-center space-y-4">
                 <p className="font-body text-sm text-on-surface-variant opacity-60 italic">
                   No active tactical sessions detected.
                 </p>

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { useTierDetection } from '../hooks/useTierDetection';
+import MobileMenu from './MobileMenu';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) => 
   `font-label text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
@@ -21,10 +22,25 @@ const RiderLayout: React.FC = () => {
   
   const isOnline = useAppStore((state) => state.isOnline);
   const userTier = useAppStore((state) => state.userTier);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const riderLinks = [
+    { to: '/', label: 'Home', end: true },
+    ...(userTier !== 'guest' ? [{ to: '/calendar', label: 'Calendar' }] : []),
+    ...(userTier === 'affiliated' ? [{ to: '/routes', label: 'Routes' }] : []),
+    { to: '/profile', label: 'Profile' },
+  ];
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body selection:bg-brand-primary/20">
       
+      <MobileMenu 
+        isOpen={isMenuOpen} 
+        onClose={() => setIsMenuOpen(false)} 
+        links={riderLinks}
+        title="RIDER PORTAL"
+      />
+
       {/* HUD / Navigation Header */}
       <header className="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-surface-container-low transition-colors duration-500">
         <nav className="flex justify-between items-center w-full px-6 py-4 max-w-screen-2xl mx-auto">
@@ -38,16 +54,14 @@ const RiderLayout: React.FC = () => {
             </span>
           </div>
 
-          {/* Tiered Navigation Links */}
-          <div className="flex gap-8 items-center">
+          {/* Tiered Navigation Links (Desktop) */}
+          <div className="hidden md:flex gap-8 items-center">
             <NavLink to="/" end className={navLinkClass}>Home</NavLink>
             
-            {/* Tier 3 (Affiliated) or Tier 2 (Conditional) access */}
             {userTier !== 'guest' && (
               <NavLink to="/calendar" className={navLinkClass}>Calendar</NavLink>
             )}
             
-            {/* Tier 3 (Affiliated) only */}
             {userTier === 'affiliated' && (
               <NavLink to="/routes" className={navLinkClass}>Routes</NavLink>
             )}
@@ -58,14 +72,22 @@ const RiderLayout: React.FC = () => {
           {/* System HUD */}
           <div className="flex items-center gap-4">
             {!isOnline && (
-              <span className="font-label text-[9px] text-error animate-pulse flex items-center gap-1.5">
+              <span className="font-label text-[9px] text-error animate-pulse flex items-center gap-1.5 hidden sm:flex">
                 <span className="w-1.5 h-1.5 bg-error rounded-full" />
                 OFFLINE
               </span>
             )}
-            <button className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95">
+            <button className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95 hidden sm:block">
               {/* User avatar placeholder */}
               <div className="w-full h-full bg-surface-container-highest" />
+            </button>
+
+            {/* Mobile Menu Trigger */}
+            <button 
+              onClick={() => setIsMenuOpen(true)}
+              className="flex md:hidden p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200 active:scale-95"
+            >
+              <span className="material-symbols-outlined text-on-background">menu</span>
             </button>
           </div>
 

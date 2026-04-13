@@ -19,27 +19,27 @@ export const useTierDetection = () => {
         return;
       }
 
-      // Fetch status from junction table
+      // Fetch status and role from junction table
       const { data, error } = await supabase
         .from('account_tenants')
-        .select('status')
+        .select('status, role')
         .eq('account_id', session.user.id)
         .eq('tenant_id', currentTenantId)
         .maybeSingle();
 
       if (error || !data) {
-        setTier('guest', null);
+        setTier('guest', null, null);
         return;
       }
 
       // Map DB status to Tier
-      const status = data.status;
+      const { status, role } = data;
       let tier: UserTier = 'guest';
       
       if (status === 'affiliated') tier = 'affiliated';
       else if (status === 'initiated') tier = 'initiated';
 
-      setTier(tier, status);
+      setTier(tier, status, role);
     };
 
     syncTier();

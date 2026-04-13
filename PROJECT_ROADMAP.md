@@ -5,6 +5,8 @@
 - [x] \"Coming Soon\" hero section
 - [x] \"Below the Fold\" situational value grid (Task W2)
 - [x] Admin Desktop \"Velo Modern\" Design System (Task W16)
+- [x] Map thumbnails & external activity integration (Task G11)
+- [x] Admin route management / deletion (Task W53)
 - [ ] Responsive navigation menu
 - [ ] Email signup/waitlist integration
 
