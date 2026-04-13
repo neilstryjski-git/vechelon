@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import PageHeader from '../components/PageHeader';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -206,20 +207,12 @@ const Members: React.FC = () => {
   return (
     <div className="space-y-12">
 
-      {/* Editorial Header */}
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-4">
-        <div className="max-w-2xl">
-          <span className="font-label text-xs uppercase tracking-widest text-primary mb-4 block">
-            Central Command
-          </span>
-          <h1 className="font-headline text-5xl font-extrabold tracking-tight text-on-background mb-4">
-            Member Directory
-          </h1>
-          <p className="text-on-surface-variant text-lg leading-relaxed">
-            Manage the collective strength of Vechelon. Control access levels, validate new
-            entrants, and maintain the integrity of the rider network.
-          </p>
-        </div>
+      <PageHeader 
+        label="Central Command"
+        title="Member Directory"
+        italicTitle={false}
+        description="Manage the collective strength of Vechelon. Control access levels, validate new entrants, and maintain the integrity of the rider network."
+      >
         <div className="bg-surface-container-low p-4 rounded-xl flex items-center gap-4">
           <div className="flex flex-col">
             <span className="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">
@@ -232,7 +225,7 @@ const Members: React.FC = () => {
             <span className="inline-block h-4 w-4 transform rounded-full bg-on-primary transition translate-x-6" />
           </button>
         </div>
-      </section>
+      </PageHeader>
 
       {/* Tab Navigation */}
       <div className="flex flex-wrap gap-8 border-b border-outline-variant/15">

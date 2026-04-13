@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
 import { getStaticMapUrl } from '../lib/maps';
 import Modal from '../components/Modal';
+import PageHeader from '../components/PageHeader';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -454,19 +455,12 @@ const RouteLibrary: React.FC = () => {
         type={modalConfig.type}
       />
 
-      {/* Editorial Header */}
-      <section>
-        <span className="font-label text-xs uppercase tracking-widest text-primary mb-4 block">
-          Route Management
-        </span>
-        <h1 className="font-headline text-5xl font-extrabold tracking-tight text-on-background mb-4">
-          Route Library
-        </h1>
-        <p className="text-on-surface-variant text-lg leading-relaxed max-w-2xl">
-          Curate the club's official route collection. Upload GPX files to extract
-          coordinates, distance, and elevation automatically.
-        </p>
-      </section>
+      <PageHeader 
+        label="Route Management"
+        title="Route Library"
+        italicTitle={false}
+        description="Curate the club's official route collection. Upload GPX files to extract coordinates, distance, and elevation automatically."
+      />
 
       {/* Upload (Admin Only) */}
       {isAdmin && (

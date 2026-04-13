@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import EndRideButton from '../components/EndRideButton';
+import PageHeader from '../components/PageHeader';
 
 // ---------------------------------------------------------------------------
 // Stat queries
@@ -101,24 +102,18 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-10">
 
-      {/* Editorial Header */}
-      <header className="flex justify-between items-end">
-        <div>
-          <span className="font-label text-[10px] uppercase tracking-[0.3em] text-brand-primary mb-2 block font-bold">
-            Operations Overview
-          </span>
-          <h2 className="font-headline text-5xl font-extrabold tracking-tighter text-on-background italic">
-            Command Centre
-          </h2>
-        </div>
+      <PageHeader 
+        label="Operations Overview"
+        title="Command Centre"
+      >
         <div className="text-right hidden md:block">
-          <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block opacity-50">System Status</span>
+          <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block opacity-50 mb-1">System Status</span>
           <span className="font-label text-[10px] uppercase tracking-widest text-brand-primary flex items-center gap-2">
             <span className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-pulse" />
             Live Deployment
           </span>
         </div>
-      </header>
+      </PageHeader>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

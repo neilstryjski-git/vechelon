@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PageHeader from './PageHeader';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_NAMES = [
@@ -102,47 +103,36 @@ const CalendarGrid: React.FC = () => {
   return (
     <div className="space-y-8">
 
-      {/* Editorial Header */}
-      <section className="flex flex-col md:flex-row justify-between items-end gap-8 mb-4">
-        <div className="max-w-2xl">
-          <span className="font-label text-xs uppercase tracking-widest text-primary mb-4 block">
-            Central Dispatch
+      <PageHeader 
+        label="Central Dispatch"
+        title="Ride Operations"
+        description="Centralized logistics and fleet management. Coordinate routes, group assignments, and safety protocols from a unified tactical view."
+      >
+        {/* Month navigation */}
+        <div className="flex items-center gap-3 bg-surface-container-low px-4 py-2 rounded-xl">
+          <button
+            onClick={prevMonth}
+            className="p-1 rounded-full hover:bg-surface-container transition-colors active:scale-95"
+            aria-label="Previous month"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_left</span>
+          </button>
+          <span className="font-label text-sm font-medium text-on-background min-w-[140px] text-center">
+            {MONTH_NAMES[month]} {year}
           </span>
-          <h1 className="font-headline text-5xl font-extrabold tracking-tight text-on-background mb-4 italic">
-            Ride Operations
-          </h1>
-          <p className="text-on-surface-variant text-lg leading-relaxed">
-            Centralized logistics and fleet management. Coordinate routes, group assignments, 
-            and safety protocols from a unified tactical view.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Month navigation */}
-          <div className="flex items-center gap-3 bg-surface-container-low px-4 py-2 rounded-xl">
-            <button
-              onClick={prevMonth}
-              className="p-1 rounded-full hover:bg-surface-container transition-colors active:scale-95"
-              aria-label="Previous month"
-            >
-              <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_left</span>
-            </button>
-            <span className="font-label text-sm font-medium text-on-background min-w-[140px] text-center">
-              {MONTH_NAMES[month]} {year}
-            </span>
-            <button
-              onClick={nextMonth}
-              className="p-1 rounded-full hover:bg-surface-container transition-colors active:scale-95"
-              aria-label="Next month"
-            >
-              <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_right</span>
-            </button>
-          </div>
-          <button className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95">
-            <span className="material-symbols-outlined text-lg">add_circle</span>
-            Create New Ride
+          <button
+            onClick={nextMonth}
+            className="p-1 rounded-full hover:bg-surface-container transition-colors active:scale-95"
+            aria-label="Next month"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_right</span>
           </button>
         </div>
-      </section>
+        <button className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95">
+          <span className="material-symbols-outlined text-lg">add_circle</span>
+          Create New Ride
+        </button>
+      </PageHeader>
 
       {/* Calendar Grid */}
       <div className="bg-surface-container-lowest rounded-xl shadow-ambient overflow-hidden">
