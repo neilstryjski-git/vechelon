@@ -103,6 +103,10 @@
 /* =======================================================================
  * BASE
  * ======================================================================= */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--font-body);
   background-color: var(--color-surface);
