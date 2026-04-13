@@ -9,7 +9,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     ? 'text-on-background border-b-2 border-on-background pb-1 transition-colors duration-200'
     : 'text-on-surface-variant hover:text-on-background transition-colors duration-200';
 
-const Layout: React.FC = () => {
+const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
   useOfflineStatus();
   const isOnline  = useAppStore((state) => state.isOnline);
   const isPriorityMode = useAppStore((state) => state.isPriorityMode);
@@ -22,6 +22,8 @@ const Layout: React.FC = () => {
     { to: '/members', label: 'Member Directory' },
     { to: '/settings', label: 'Settings' },
   ];
+
+  const tenantLogo = tenant?.logo_url || '/portal/racer-sportif-logo.png';
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body">
@@ -55,27 +57,38 @@ const Layout: React.FC = () => {
       >
         <nav className="flex justify-between items-center w-full px-6 py-4 max-w-screen-2xl mx-auto">
 
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <img
-              src="/portal/racer-sportif-logo.png"
-              alt="Racer Sportif"
-              className="h-6 w-auto object-contain"
-            />
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-label tracking-normal transition-colors ${
-                isPriorityMode
-                  ? 'bg-error text-on-error'
-                  : 'bg-on-surface text-surface-container-lowest'
-              }`}
-            >
-              {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
-            </span>
-            <img
-              src="/portal/vechelon-halfchainring.svg"
-              alt="Vechelon"
-              className="h-5 w-auto object-contain"
-            />
+          {/* Platform & Tenant Branding (Left) */}
+          <div className="flex items-center gap-4">
+            {/* Platform Branding */}
+            <div className="flex items-center gap-2 pr-4 border-r border-outline-variant/20">
+              <img
+                src="./vechelon-halfchainring.svg"
+                alt="Vechelon"
+                className="h-5 w-auto object-contain"
+              />
+              <span className="font-headline text-lg font-extrabold tracking-tighter italic uppercase">VECHELON</span>
+              <span
+                className={`text-[8px] px-1.5 py-0.5 rounded font-label tracking-widest transition-colors ${
+                  isPriorityMode
+                    ? 'bg-error text-on-error'
+                    : 'bg-on-surface text-surface-container-lowest'
+                }`}
+              >
+                {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
+              </span>
+            </div>
+
+            {/* Tenant Branding */}
+            <div className="flex items-center gap-2">
+              <img
+                src={tenantLogo}
+                alt="Club Logo"
+                className="h-6 w-auto object-contain opacity-90"
+              />
+              <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant font-bold hidden sm:block">
+                {tenant?.name || 'Racer Sportif'}
+              </span>
+            </div>
           </div>
 
           {/* Primary Navigation */}

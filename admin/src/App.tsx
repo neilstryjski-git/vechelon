@@ -23,9 +23,9 @@ const queryClient = new QueryClient({
  * Returns the Admin Sidebar layout or Rider Top-Nav layout based on status.
  * Fulfills the "Responsive Entry Point" requirement.
  */
-function AdaptiveLayout() {
+function AdaptiveLayout({ tenant }: { tenant: any }) {
   // Restore Admin Layout as default for development/testing
-  return <Layout />;
+  return <Layout tenant={tenant} />;
 }
 
 function AppContent() {
@@ -65,7 +65,7 @@ function AppContent() {
     <Router basename="/portal">
       <Routes>
         {/* ONE UNIFIED ENTRY POINT */}
-        <Route path="/" element={<AdaptiveLayout />}>
+        <Route path="/" element={<AdaptiveLayout tenant={tenant} />}>
           <Route index      element={<Dashboard />}    />
           <Route path="calendar" element={<CalendarGrid />} />
           <Route path="routes"   element={<RouteLibraryPage />} />
