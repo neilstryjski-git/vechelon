@@ -92,7 +92,7 @@ function useUploadRoute() {
         setTimeout(() => reject(new Error('Storage upload timed out after 30s')), 30000)
       );
 
-      const { data: uploadData, error: uploadErr } = await Promise.race([
+      const { error: uploadErr } = await Promise.race([
         uploadPromise,
         timeoutPromise
       ]) as any;

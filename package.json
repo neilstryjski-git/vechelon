@@ -2,6 +2,9 @@
   "name": "vechelon-root",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "admin"
+  ],
   "scripts": {
     "build": "cd admin && npm run build && cd .. && rm -rf public && mkdir -p public/portal && cp -r admin/dist/* public/portal/ && cp index.html public/ && cp prototype.html public/ && cp echelon-logo-v10.html public/ && cp admin/public/* public/portal/ || true"
   }
