@@ -3,12 +3,18 @@ import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-quer
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import RiderLayout from './components/RiderLayout';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import RouteLibraryPage from './pages/RouteLibrary';
 import RideBuilder from './pages/RideBuilder';
 import CalendarGrid from './components/CalendarGrid';
+import AuthPage from './pages/rider/AuthPage';
+import RiderHome from './pages/rider/RiderHome';
+import Profile from './pages/rider/Profile';
 import { useBranding } from './hooks/useBranding';
+import { useTierDetection } from './hooks/useTierDetection';
+import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
 
 // Simple Error Boundary for UX stability
@@ -61,15 +67,30 @@ const queryClient = new QueryClient({
 
 /**
  * Adaptive UI Switcher.
- * Returns the Admin Sidebar layout or Rider Top-Nav layout based on status.
- * Fulfills the "Responsive Entry Point" requirement.
+ * Admins get the full admin Layout; riders get the tiered RiderLayout.
+ * Dev bypass: unauthenticated sessions default to admin view.
  */
 function AdaptiveLayout({ tenant }: { tenant: any }) {
-  // Restore Admin Layout as default for development/testing
-  return <Layout tenant={tenant || {}} />;
+  const isAdmin = useAppStore((s) => s.isAdmin);
+  const userTier = useAppStore((s) => s.userTier);
+  // Unauthenticated (guest + not admin) → default to admin layout for dev
+  const showAdminLayout = isAdmin || userTier === 'guest';
+
+  if (showAdminLayout) return <Layout tenant={tenant || {}} />;
+  return <RiderLayout />;
+}
+
+/** Index route — Dashboard for admins, RiderHome for riders. */
+function SmartHome() {
+  const isAdmin = useAppStore((s) => s.isAdmin);
+  const userTier = useAppStore((s) => s.userTier);
+  if (isAdmin || userTier === 'guest') return <Dashboard />;
+  return <RiderHome />;
 }
 
 function AppContent() {
+  useTierDetection();
+
   // Dynamic branding fetch from Supabase with a 5s timeout for offline resilience
   const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant-config'],
@@ -123,18 +144,19 @@ function AppContent() {
   return (
     <Router basename="/portal">
       <Routes>
-        {/* Redirect from root to dashboard if needed */}
+        {/* Auth page — no layout wrapper */}
+        <Route path="/auth" element={<AuthPage />} />
+
+        {/* Adaptive layout — admin vs rider */}
         <Route path="/" element={<AdaptiveLayout tenant={tenant} />}>
-          <Route index      element={<Dashboard />}    />
-          <Route path="dashboard" element={<Dashboard />}    />
-          <Route path="calendar" element={<CalendarGrid />} />
-          <Route path="routes"   element={<RouteLibraryPage />} />
-          <Route path="builder/:rideId" element={<RideBuilder />} />
-          <Route path="members"  element={<Members />}      />
-          <Route path="profile"  element={<Dashboard />} /> {/* Placeholder */}
-          
-          {/* Catch-all redirects back to the adaptive home */}
-          <Route path="*"       element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
+          <Route index               element={<SmartHome />}        />
+          <Route path="dashboard"    element={<Dashboard />}       />
+          <Route path="calendar"     element={<CalendarGrid />}    />
+          <Route path="routes"       element={<RouteLibraryPage />} />
+          <Route path="builder/:rideId" element={<RideBuilder />}  />
+          <Route path="members"      element={<Members />}         />
+          <Route path="profile"      element={<Profile />}         />
+          <Route path="*"            element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
         </Route>
       </Routes>
     </Router>

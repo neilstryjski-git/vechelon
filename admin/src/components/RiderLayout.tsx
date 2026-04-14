@@ -33,13 +33,23 @@ const RiderLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-surface text-on-surface font-body selection:bg-brand-primary/20">
-      
-      <MobileMenu 
-        isOpen={isMenuOpen} 
-        onClose={() => setIsMenuOpen(false)} 
+
+      <MobileMenu
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
         links={riderLinks}
         title="RIDER PORTAL"
       />
+
+      {/* Pending Affiliation Banner — Tier 2 (initiated) only */}
+      {userTier === 'initiated' && (
+        <div className="bg-surface-container-high border-b border-outline-variant/20 px-6 py-3 flex items-center justify-center gap-3">
+          <span className="material-symbols-outlined text-on-surface-variant text-base">pending</span>
+          <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
+            Your membership application is under review — an admin will approve you shortly.
+          </p>
+        </div>
+      )}
 
       {/* HUD / Navigation Header */}
       <header className="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-surface-container-low transition-colors duration-500">
