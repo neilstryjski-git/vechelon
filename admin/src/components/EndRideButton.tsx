@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { useToast } from '../store/useToast';
 
 interface EndRideButtonProps {
   rideId: string;
@@ -14,6 +15,7 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
   const [isEnding, setIsEnding] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const endRide = useAppStore((state) => state.endRide);
+  const { addToast } = useToast();
 
   const handleEndRide = async () => {
     if (!window.confirm('Are you sure you want to end this tactical session?')) return;
@@ -22,9 +24,10 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
     try {
       const data = await endRide(rideId);
       setSummary(data.summary);
+      addToast('Ride finalized and summary generated.', 'success');
     } catch (error) {
       console.error('Failed to end ride', error);
-      alert('Error finalizing ride metadata.');
+      addToast('Error finalizing ride metadata.', 'error');
     } finally {
       setIsEnding(false);
     }
@@ -33,7 +36,7 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
   const copyToClipboard = () => {
     if (summary) {
       navigator.clipboard.writeText(summary);
-      alert('Post-tour summary copied to clipboard.');
+      addToast('Summary copied to clipboard.', 'success');
     }
   };
 

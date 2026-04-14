@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
 import { getStaticMapUrl } from '../lib/maps';
+import { useToast } from '../store/useToast';
 import Modal from '../components/Modal';
 import PageHeader from '../components/PageHeader';
 
@@ -57,12 +58,11 @@ function useRoutes() {
 
 function useUploadRoute() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   return useMutation({
     mutationFn: async ({ file, name, externalUrl, hash }: { file: File; name: string; externalUrl: string; hash: string }) => {
-      console.log('[v1.2.6] Starting upload mutation...');
       const text    = await file.text();
-      console.log('[v1.2.6] GPX text read, parsing...');
       const parsed  = parseGPXCoords(text);
       if (!parsed) throw new Error('GPX file contains no track data');
 
@@ -72,19 +72,13 @@ function useUploadRoute() {
 
       const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
 
-      console.log('[v1.2.6] Fetching auth user...');
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
-      console.log('[v1.2.6] Auth check complete, userId:', userId);
 
-      // FORCE: Always use Racer Sportif tenant for prototype stability
       const tenantId = '00000000-0000-0000-0000-000000000001';
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 
-      console.log(`[v1.2.6] Attempting storage upload: ${filePath}`);
-
-      // Add a 30-second timeout to the storage upload
       const uploadPromise = supabase.storage
         .from('gpx-routes')
         .upload(filePath, file, { contentType: 'application/gpx+xml', upsert: false });
@@ -98,12 +92,7 @@ function useUploadRoute() {
         timeoutPromise
       ]) as any;
       
-      if (uploadErr) {
-        console.error('[v1.2.6] Storage Error:', uploadErr);
-        throw new Error(`Storage upload failed: ${uploadErr.message}`);
-      }
-
-      console.log('[v1.2.6] Storage upload successful, inserting to DB...');
+      if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
       const { error: insertErr } = await supabase
         .from('route_library')
@@ -121,21 +110,23 @@ function useUploadRoute() {
         });
 
       if (insertErr) {
-        console.error('[v1.2.6] Database Error:', insertErr);
         await supabase.storage.from('gpx-routes').remove([filePath]);
         throw new Error(`Database insert failed: ${insertErr.message}`);
       }
-      
-      console.log('[v1.2.6] Upload fully successful');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
+      addToast('Route uploaded successfully.', 'success');
     },
+    onError: (err) => {
+      addToast(`Upload failed: ${(err as Error).message}`, 'error');
+    }
   });
 }
 
 function useDeleteRoute() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   return useMutation({
     mutationFn: async ({ id, filePath }: { id: string; filePath: string }) => {
@@ -152,7 +143,11 @@ function useDeleteRoute() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
+      addToast('Route deleted.', 'info');
     },
+    onError: (err) => {
+      addToast(`Delete failed: ${(err as Error).message}`, 'error');
+    }
   });
 }
 
@@ -360,8 +355,6 @@ const RouteLibrary: React.FC = () => {
   const { mutate: deleteRoute }                        = useDeleteRoute();
   const isAdmin = true; // DEV BYPASS
 
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [search, setSearch]           = useState('');
 
   // Modal State
@@ -382,9 +375,6 @@ const RouteLibrary: React.FC = () => {
   const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
 
   const handleUpload = async (file: File, name: string, externalUrl: string) => {
-    setUploadError(null);
-    setUploadSuccess(false);
-
     const text = await file.text();
     const hash = await calculateHash(text);
 
@@ -394,12 +384,9 @@ const RouteLibrary: React.FC = () => {
     const performUpload = () => {
       upload({ file, name, externalUrl, hash }, {
         onSuccess: () => {
-          setUploadSuccess(true);
-          setTimeout(() => setUploadSuccess(false), 3000);
           closeModal();
         },
-        onError: (err) => {
-          setUploadError((err as Error).message);
+        onError: () => {
           closeModal();
         },
       });
@@ -429,8 +416,7 @@ const RouteLibrary: React.FC = () => {
       onConfirm: () => {
         deleteRoute({ id: route.id, filePath: route.file_path }, {
           onSuccess: closeModal,
-          onError: (err) => {
-            alert(`Delete failed: ${(err as Error).message}`);
+          onError: () => {
             closeModal();
           },
         });
@@ -471,14 +457,6 @@ const RouteLibrary: React.FC = () => {
             <p className="mt-3 font-label text-xs text-on-surface-variant animate-pulse">
               Parsing and uploading route…
             </p>
-          )}
-          {uploadSuccess && (
-            <p className="mt-3 font-label text-xs text-brand-primary">
-              ✓ Route uploaded successfully.
-            </p>
-          )}
-          {uploadError && (
-            <p className="mt-3 font-label text-xs text-error">{uploadError}</p>
           )}
         </div>
       )}

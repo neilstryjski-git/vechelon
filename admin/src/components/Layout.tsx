@@ -3,6 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
+import RideDetailSideSheet from './RideDetailSideSheet';
+import ToastContainer from './ToastContainer';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `pb-1 border-b-2 transition-colors duration-200 ${
@@ -68,9 +70,6 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
                 alt="Club Logo"
                 className="h-6 w-auto object-contain opacity-90"
               />
-              <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant font-bold hidden sm:block">
-                {tenant?.name || 'Racer Sportif'}
-              </span>
             </div>
 
             {/* Platform Branding */}
@@ -129,6 +128,9 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
       <main className="max-w-screen-2xl mx-auto px-6 py-8">
         <Outlet />
       </main>
+
+      <RideDetailSideSheet />
+      <ToastContainer />
 
     </div>
   );

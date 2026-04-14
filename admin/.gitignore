@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# Dev artifacts
+dev_output.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

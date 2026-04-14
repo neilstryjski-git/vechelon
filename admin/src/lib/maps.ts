@@ -1,3 +1,6 @@
+import { supabase } from './supabase';
+import { parseGPXCoords } from './validation';
+
 /**
  * Encodes a series of coordinates into a Google Maps encoded polyline string.
  * Based on the algorithm: https://developers.google.com/maps/documentation/utilities/polylinealgorithm
@@ -51,4 +54,45 @@ export const getStaticMapUrl = (points: { lat: number; lon: number }[], options:
   const encodedPath = encodePolyline(points);
   
   return `https://maps.googleapis.com/maps/api/staticmap?size=${width}x${height}&path=color:${color}|weight:${weight}|enc:${encodedPath}&key=${apiKey}`;
+};
+
+/**
+ * Downloads a GPX file from Supabase storage and parses it into coordinates.
+ */
+export const fetchGpxPoints = async (filePath: string) => {
+  const { data, error } = await supabase.storage
+    .from('gpx-routes')
+    .download(filePath);
+
+  if (error) throw error;
+  if (!data) return [];
+  
+  const text = await data.text();
+  const parsed = parseGPXCoords(text);
+  
+  if (!parsed || !parsed.points) return [];
+  
+  // Convert {lat, lon} to {lat, lng} for Google Maps
+  return parsed.points.map(p => ({ lat: p.lat, lng: p.lon }));
+};
+
+/**
+ * Parses a Supabase POINT string '(x,y)' into a {lat, lng} object.
+ * Note: Supabase POINT stores as (lon, lat) usually, following (x, y) convention.
+ */
+export const parsePoint = (pointStr: string | null) => {
+  if (!pointStr) return null;
+  const match = pointStr.match(/\((.*),(.*)\)/);
+  if (!match) return null;
+  return {
+    lng: parseFloat(match[1]),
+    lat: parseFloat(match[2]),
+  };
+};
+
+/**
+ * Formats a {lat, lng} object into a Supabase POINT string '(lon,lat)'.
+ */
+export const formatPoint = (coords: { lat: number; lng: number }) => {
+  return `(${coords.lng},${coords.lat})`;
 };

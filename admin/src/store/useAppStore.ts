@@ -28,9 +28,13 @@ interface AppState {
   membershipStatus: string | null;
   activeBeacons: string[]; // participantIds
   cachedParticipants: Record<string, Participant[]>; // rideId -> participants
+  selectedRideId: string | null;
+  selectedParticipantId: string | null;
   
   // Actions
   setTenantId: (id: string | null) => void;
+  setSelectedRideId: (id: string | null) => void;
+  setSelectedParticipantId: (id: string | null) => void;
   toggleSidebar: () => void;
   setOnlineStatus: (status: boolean) => void;
   setTier: (tier: UserTier, status?: string | null, role?: string | null) => void;
@@ -60,8 +64,12 @@ export const useAppStore = create<AppState>()(
       membershipStatus: null,
       activeBeacons: [],
       cachedParticipants: {},
+      selectedRideId: null,
+      selectedParticipantId: null,
 
       setTenantId: (id) => set({ currentTenantId: id }),
+      setSelectedRideId: (id) => set({ selectedRideId: id }),
+      setSelectedParticipantId: (id) => set({ selectedParticipantId: id }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setOnlineStatus: (status) => set({ isOnline: status }),
       setTier: (tier, status = null, role = null) => set({ 

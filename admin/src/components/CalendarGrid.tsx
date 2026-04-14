@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
+import { useAppStore } from '../store/useAppStore';
 import PageHeader from './PageHeader';
+import RideFormModal from './RideFormModal';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_NAMES = [
@@ -7,35 +12,45 @@ const MONTH_NAMES = [
   'July','August','September','October','November','December',
 ];
 
-type RideStatus = 'active' | 'alert' | 'idle';
+type RideStatus = 'active' | 'alert' | 'idle' | 'created' | 'saved';
 
-interface MockRide {
-  day: number;
-  time: string;
+interface CalendarRide {
+  id: string;
   name: string;
-  riders: number;
+  scheduled_start: string;
   status: RideStatus;
   thumbnail_url?: string;
+  riders: number; 
 }
 
-const MOCK_RIDES: MockRide[] = [
-  { 
-    day: 1,  
-    time: '06:30', 
-    name: 'North Ridge Sprint',   
-    riders: 12, 
-    status: 'active',
-    thumbnail_url: `https://maps.googleapis.com/maps/api/staticmap?size=200x100&path=color:0x000000ff|weight:2|enc:a~l~Fjk~uOnTxMA&style=feature:all|element:all|saturation:-100|lightness:50&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
-  },
-  { day: 4,  time: '05:45', name: 'Valley Recovery',      riders: 8,  status: 'active' },
-  { day: 4,  time: '18:00', name: 'Emergency Protocol',   riders: 0,  status: 'alert'  },
-  { day: 8,  time: '07:00', name: 'Summit Challenge',     riders: 24, status: 'active' },
-  { day: 12, time: '06:00', name: 'Criterium Prep',       riders: 18, status: 'active' },
-  { day: 15, time: '08:30', name: 'Recovery Spin',        riders: 6,  status: 'idle'   },
-  { day: 19, time: '06:30', name: 'Coastal Route',        riders: 15, status: 'active' },
-  { day: 22, time: '05:30', name: 'Pre-Dawn Recon',       riders: 4,  status: 'active' },
-  { day: 26, time: '07:15', name: 'Group Endurance',      riders: 20, status: 'active' },
-];
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+function useCalendarRides(year: number, month: number) {
+  const startOfMonth = new Date(year, month, 1).toISOString();
+  const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+
+  return useQuery<CalendarRide[]>({
+    queryKey: ['calendar-rides', year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('rides')
+        .select('id, name, scheduled_start, status, thumbnail_url, ride_participants(count)')
+        .gte('scheduled_start', startOfMonth)
+        .lte('scheduled_start', endOfMonth)
+        .order('scheduled_start', { ascending: true });
+
+      if (error) throw error;
+      
+      return (data || []).map((r: any) => ({
+        ...r,
+        status: r.status as RideStatus,
+        riders: (r.ride_participants as any)?.[0]?.count ?? 0
+      }));
+    },
+  });
+}
 
 /* Geometric status indicator per DESIGN.md section 5:
  * Active/Positive  → tertiary solid circle
@@ -48,7 +63,9 @@ function StatusDot({ status }: { status: RideStatus }) {
   if (status === 'alert') {
     return <span className="w-2 h-2 rounded-none bg-error shrink-0" aria-label="Alert" />;
   }
-  // idle — outlined triangle via CSS border trick
+  if (status === 'created') {
+    return <span className="w-2 h-2 rounded-full bg-primary/40 shrink-0" aria-label="Scheduled" />;
+  }
   return (
     <span
       className="shrink-0"
@@ -94,8 +111,17 @@ const CalendarGrid: React.FC = () => {
   const month = viewDate.getMonth();
   const cells = getCalendarCells(year, month);
 
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const { data: rides = [], isLoading } = useCalendarRides(year, month);
+
   const ridesForDay = (day: number) =>
-    MOCK_RIDES.filter((r) => r.day === day);
+    rides.filter((r) => {
+      const d = new Date(r.scheduled_start);
+      return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
+    });
 
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
@@ -128,7 +154,10 @@ const CalendarGrid: React.FC = () => {
             <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_right</span>
           </button>
         </div>
-        <button className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95">
+        <button
+          onClick={() => setIsCreateOpen(true)}
+          className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95"
+        >
           <span className="material-symbols-outlined text-lg">add_circle</span>
           Create New Ride
         </button>
@@ -156,8 +185,8 @@ const CalendarGrid: React.FC = () => {
         {/* Day cells */}
         <div className="grid grid-cols-7">
           {cells.map((cell, idx) => {
-            const rides     = cell.currentMonth ? ridesForDay(cell.day) : [];
-            const isToday   = cell.currentMonth
+            const ridesInCell = cell.currentMonth ? ridesForDay(cell.day) : [];
+            const isToday     = cell.currentMonth
               && cell.day === today.getDate()
               && year  === today.getFullYear()
               && month === today.getMonth();
@@ -184,9 +213,9 @@ const CalendarGrid: React.FC = () => {
                   >
                     {String(cell.day).padStart(2, '0')}
                   </span>
-                  {rides.length > 0 && (
+                  {ridesInCell.length > 0 && (
                     <div className="flex gap-1 items-center">
-                      {rides.map((r, i) => (
+                      {ridesInCell.map((r, i) => (
                         <StatusDot key={i} status={r.status} />
                       ))}
                     </div>
@@ -195,41 +224,49 @@ const CalendarGrid: React.FC = () => {
 
                 {/* Ride cards */}
                 <div className="space-y-1.5">
-                  {rides.map((ride, i) => (
-                    <div
-                      key={i}
-                      className={`p-2.5 rounded shadow-ambient hover:-translate-y-0.5 transition-transform cursor-pointer border border-outline-variant/10 overflow-hidden ${
-                        ride.status === 'alert'
-                          ? 'bg-surface-container-high'
-                          : 'bg-surface-container-lowest'
-                      }`}
-                    >
-                      {ride.thumbnail_url && (
-                        <div className="h-12 w-full mb-2 bg-surface-container-high -mt-2.5 -mx-2.5 w-[calc(100%+20px)]">
-                          <img src={ride.thumbnail_url} className="w-full h-full object-cover" alt="" />
+                  {isLoading && cell.currentMonth && (
+                    <div className="h-4 w-full rounded bg-surface-container-high animate-pulse" />
+                  )}
+                  {ridesInCell.map((ride, i) => {
+                    const time = new Date(ride.scheduled_start).toLocaleTimeString('en-GB', {
+                      hour: '2-digit', minute: '2-digit'
+                    });
+
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => setSelectedRideId(ride.id)}
+                        className={`p-2.5 rounded shadow-ambient hover:-translate-y-0.5 transition-transform cursor-pointer border border-outline-variant/10 overflow-hidden ${
+                          ride.status === 'alert'
+                            ? 'bg-surface-container-high'
+                            : 'bg-surface-container-lowest'
+                        }`}
+                      >
+                        {ride.thumbnail_url && (
+                          <div className="h-12 w-full mb-2 bg-surface-container-high -mt-2.5 -mx-2.5 w-[calc(100%+20px)]">
+                            <img src={ride.thumbnail_url} className="w-full h-full object-cover" alt="" />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <StatusDot status={ride.status} />
+                          <span className="font-label text-[10px] text-on-surface-variant">
+                            {time}
+                          </span>
                         </div>
-                      )}
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <StatusDot status={ride.status} />
-                        <span className="font-label text-[10px] text-on-surface-variant">
-                          {ride.time}
-                        </span>
-                      </div>
-                      <h4 className="text-[11px] font-headline font-bold leading-tight text-on-background">
-                        {ride.name}
-                      </h4>
-                      {ride.riders > 0 && (
+                        <h4 className="text-[11px] font-headline font-bold leading-tight text-on-background">
+                          {ride.name}
+                        </h4>
                         <div className="mt-1.5 flex items-center justify-between">
                           <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant opacity-70">
-                            {ride.riders} Riders
+                            {ride.riders > 0 ? `${ride.riders} Riders` : 'No Riders'}
                           </span>
                           <span className="material-symbols-outlined text-[10px] text-on-surface-variant opacity-40">
                             arrow_forward_ios
                           </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -237,6 +274,12 @@ const CalendarGrid: React.FC = () => {
         </div>
 
       </div>
+      <RideFormModal
+        mode="create"
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onCreated={(rideId) => navigate(`/builder/${rideId}`)}
+      />
     </div>
   );
 };

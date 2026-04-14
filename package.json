@@ -7,5 +7,8 @@
   ],
   "scripts": {
     "build": "npm run build --prefix admin && rm -rf public && mkdir -p public/portal && cp -r admin/dist/. public/portal/ && cp index.html prototype.html echelon-logo-v10.html public/ && cp -r admin/public/. public/portal/ || true"
+  },
+  "devDependencies": {
+    "supabase": "^2.89.1"
   }
 }

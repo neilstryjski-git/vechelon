@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { useAppStore } from '../store/useAppStore';
+import { fetchGpxPoints } from '../lib/maps';
+import InteractiveMap from '../components/InteractiveMap';
 import EndRideButton from '../components/EndRideButton';
 import PageHeader from '../components/PageHeader';
 
@@ -14,7 +17,7 @@ function useActiveRides() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, thumbnail_url, external_url')
+        .select('id, name, thumbnail_url, external_url, gpx_path')
         .eq('status', 'active')
         .limit(5);
       if (error) throw error;
@@ -94,10 +97,40 @@ function StatCard({ label, value, isLoading }: {
 // ---------------------------------------------------------------------------
 
 const Dashboard: React.FC = () => {
+  const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const selectedRideId    = useAppStore((state) => state.selectedRideId);
   const { data: activeRidesCount, isLoading: loadingCount } = useActiveRidesCount();
   const { data: upcomingRides,    isLoading: loadingUpcoming } = useUpcomingRidesCount();
   const { data: totalMembers,     isLoading: loadingMembers } = useTotalMembersCount();
   const { data: activeRidesList } = useActiveRides();
+
+  // Fetch gpx_path for the selected ride (may not be in the active list)
+  const { data: selectedRideData } = useQuery({
+    queryKey: ['ride-gpx-path', selectedRideId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('rides')
+        .select('gpx_path')
+        .eq('id', selectedRideId!)
+        .single();
+      return data;
+    },
+    enabled: !!selectedRideId,
+  });
+
+  const [mapPoints, setMapPoints] = useState<any[]>([]);
+
+  const gpxPath = selectedRideId
+    ? selectedRideData?.gpx_path
+    : activeRidesList?.[0]?.gpx_path;
+
+  useEffect(() => {
+    if (gpxPath) {
+      fetchGpxPoints(gpxPath).then(setMapPoints).catch(console.error);
+    } else {
+      setMapPoints([]);
+    }
+  }, [gpxPath]);
 
   return (
     <div className="space-y-10">
@@ -133,7 +166,11 @@ const Dashboard: React.FC = () => {
           <div className="space-y-4">
             {activeRidesList && activeRidesList.length > 0 ? (
               activeRidesList.map((ride: any) => (
-                <div key={ride.id} className="bg-surface-container-lowest overflow-hidden rounded-2xl shadow-ambient border border-surface-container-low/50 flex flex-col md:flex-row">
+                <div 
+                  key={ride.id} 
+                  onClick={() => setSelectedRideId(ride.id)}
+                  className="bg-surface-container-lowest overflow-hidden rounded-2xl shadow-ambient border border-surface-container-low/50 flex flex-col md:flex-row cursor-pointer hover:bg-surface-container-low transition-colors group"
+                >
                   {/* Thumbnail */}
                   <div className="w-full md:w-48 h-32 bg-surface-container-high shrink-0">
                     {ride.thumbnail_url ? (
@@ -183,17 +220,21 @@ const Dashboard: React.FC = () => {
           </div>
         </section>
 
-        {/* Recent Activity Placeholder */}
+        {/* Live Tactical Intelligence (Interactive Map) */}
         <section className="space-y-4">
           <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
-            Recent Intelligence
+            Live Tactical Intelligence
           </h3>
-          <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-full min-h-[200px]">
-            <div className="p-12 text-center my-auto opacity-40">
-              <p className="font-label text-sm text-on-surface-variant tracking-tight">
-                — No recent activity to display —
-              </p>
-            </div>
+          <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-[400px] relative">
+            {gpxPath ? (
+              <InteractiveMap points={mapPoints} />
+            ) : (
+              <div className="p-12 text-center my-auto opacity-40">
+                <p className="font-label text-sm text-on-surface-variant tracking-tight">
+                  — No active tactical sessions to map —
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
