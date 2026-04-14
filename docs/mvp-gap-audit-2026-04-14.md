@@ -134,7 +134,7 @@ The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a l
 
 **Three Amigos:**
 - **Business:** The Captain is at the start line with their phone. They open the portal, pull up the ride QR, and hold the screen out. Every rider scans in under 10 seconds. Same QR works pre-ride (RSVP) and on race day (live map). One URL, always correct.
-- **Dev:** Two parts: (1) a `/ride/:rideId` smart landing page in the portal — moderate effort. (2) The admin dashboard QR display needs to be reachable and readable on a mobile screen — the current desktop-only sidebar layout makes the QR card hard to use on a phone. A dedicated mobile-friendly QR view (full-screen QR code for a given ride) would be the right solution.
+- **Dev:** The landing page (`/ride/:rideId`) is the in-scope work — moderate effort. The Captain-side presenter view (full-screen QR on mobile) is Rail 3 / parking lot and out of scope here.
 - **QA:** Captain loads QR on phone — verify it renders full-screen legibly. Rider scans → lands on correct state. Authenticated member gets RSVP or map. Guest sees join prompt. Edge case: Captain's phone screen brightness, QR contrast.
 
 ---
