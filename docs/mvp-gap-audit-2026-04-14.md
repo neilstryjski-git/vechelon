@@ -113,31 +113,29 @@ The pillars describe a self-service registration model only, but a club with exi
 
 ---
 
-### Scenario I — QR Code → Pre-Ride RSVP
-> *A member sees the QR code displayed on the admin dashboard before race day. They scan it from their phone, are taken to the ride's portal page, and can RSVP.*
+### Scenario I — QR Code → Ride Landing (Screen Scan)
+> *The admin has the dashboard open at a café meetup or at the start line. A member scans the QR from the screen with their phone, is taken directly to that ride, and can RSVP or join the live map depending on whether the ride has started.*
 
 **Status: MISSING**
 
-This exposes a design ambiguity: **the QR currently has one URL but two intended uses**.
+The QR is a screen-to-phone interaction at a physical gathering — the high-frequency club moment. It is not a print use case. This makes it more valuable, not less.
 
-| Context | User | Expected Destination |
-|---------|------|---------------------|
-| Pre-ride (status: created) | Club member | Portal ride page with RSVP button |
-| Race day (status: active) | Guest/Member | Live tactical map (mobile join flow) |
+The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a live map context. There is no portal route `/ride/:rideId` that handles either state.
 
-The current QR points to `https://vechelon.app/join/{rideId}`, which assumes the live map context. There is no portal route `/ride/:rideId` that handles either case.
+**The QR has one URL but two legitimate uses:**
 
-**Recommended solution:** A single `/ride/:rideId` smart landing page in the portal that branches on ride status:
-- `created` → show ride details card + RSVP button (same as RiderHome next-ride card, but ride-specific)
-- `active` → redirect to the live tactical map URL
-- `saved` → show post-ride summary / attendance
+| Ride status | Expected behaviour |
+|-------------|-------------------|
+| `created` (pre-ride) | Show ride card + RSVP button |
+| `active` (race day) | Go straight to live tactical map |
+| `saved` (post-ride) | Show summary / attendance |
 
-The QR URL should be updated from the mobile join URL to `/portal/ride/{rideId}`.
+**Recommended solution:** A single `/ride/:rideId` smart landing page in the portal that branches on `rides.status`. The QR base URL config (`VITE_JOIN_BASE_URL`) moves from the mobile join domain to `/portal/ride/{rideId}`. This route also becomes the entry point for W64 (anonymous guest join on race day), giving it double value.
 
 **Three Amigos:**
-- **Business:** Closes the physical-to-digital loop. A QR at a café meetup or on a club group chat becomes a one-tap RSVP. High club value.
-- **Dev:** New `/ride/:rideId` route + one branching component. Moderate. Requires the QR base URL config (`VITE_JOIN_BASE_URL`) to be updated to point at the portal.
-- **QA:** Verify unauthenticated user hitting the route sees sign-in prompt. Verify member gets RSVP. Verify active ride redirects to tactical map. Verify completed ride shows summary. Edge case: what if the ride is cancelled?
+- **Business:** The admin opens the dashboard at the Saturday café stop. Every rider scans and RSVPs in under 10 seconds. Same QR works on race day to join the live map. One URL, always correct.
+- **Dev:** One new `/ride/:rideId` route + a branching component that reuses the existing ride card from RiderHome. The `VITE_JOIN_BASE_URL` env var is updated. Moderate effort.
+- **QA:** Unauthenticated user sees sign-in prompt (guest join path, W64). Authenticated member gets RSVP if ride not started, map redirect if active. Completed ride shows summary. Edge case: cancelled ride shows a graceful message.
 
 ---
 
