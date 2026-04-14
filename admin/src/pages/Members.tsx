@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageHeader from '../components/PageHeader';
+import { useToast } from '../store/useToast';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,6 +65,14 @@ interface MemberRow {
 //     Given there are no initiated members
 //     When I view the "Pending" tab
 //     Then I see "— No pending applications —"
+//
+//   Scenario: Admin invites a new member
+//     Given I am authenticated as a tenant admin
+//     When I click "Invite Member" and enter a valid email
+//     Then a magic link is sent to that email
+//     And when the recipient clicks the link, their account is created at 'initiated' status
+//     And they appear in the Pending tab awaiting affiliation
+//     If the email already has an account, they receive a sign-in link instead
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,7 +138,10 @@ const TABS: { key: ActiveTab; label: string }[] = [
 ];
 
 const Members: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('all');
+  const [activeTab, setActiveTab]       = useState<ActiveTab>('all');
+  const [showInvite, setShowInvite]     = useState(false);
+  const [inviteEmail, setInviteEmail]   = useState('');
+  const { addToast } = useToast();
   const queryClient = useQueryClient();
 
   // -------------------------------------------------------------------------
@@ -177,6 +189,35 @@ const Members: React.FC = () => {
   });
 
   // -------------------------------------------------------------------------
+  // Invite mutation
+  // -------------------------------------------------------------------------
+
+  const { mutate: sendInvite, isPending: isSending } = useMutation({
+    mutationFn: async (email: string) => {
+      const redirectTo = `${window.location.origin}/portal`;
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, email) => {
+      addToast(`Invitation sent to ${email}`, 'success');
+      setInviteEmail('');
+      setShowInvite(false);
+    },
+    onError: (e: any) => {
+      addToast(`Failed to send invite: ${e.message}`, 'error');
+    },
+  });
+
+  const handleInviteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    sendInvite(inviteEmail.trim());
+  };
+
+  // -------------------------------------------------------------------------
   // Derived lists
   // -------------------------------------------------------------------------
 
@@ -207,25 +248,62 @@ const Members: React.FC = () => {
   return (
     <div className="space-y-12">
 
-      <PageHeader 
+      <PageHeader
         label="Central Command"
         title="Member Directory"
         italicTitle={false}
         description="Manage the collective strength of Vechelon. Control access levels, validate new entrants, and maintain the integrity of the rider network."
       >
-        <div className="bg-surface-container-low p-4 rounded-xl flex items-center gap-4">
-          <div className="flex flex-col">
-            <span className="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">
-              System Policy
-            </span>
-            <span className="font-headline font-bold text-sm text-on-background">Strict Mode</span>
-          </div>
-          <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary-dim">
-            <span className="sr-only">Toggle Strict Mode</span>
-            <span className="inline-block h-4 w-4 transform rounded-full bg-on-primary transition translate-x-6" />
-          </button>
-        </div>
+        <button
+          onClick={() => setShowInvite((v) => !v)}
+          className="signature-gradient text-on-primary px-5 py-2.5 rounded-xl font-label text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
+        >
+          <span className="material-symbols-outlined text-base">person_add</span>
+          Invite Member
+        </button>
       </PageHeader>
+
+      {/* Invite panel */}
+      {showInvite && (
+        <form
+          onSubmit={handleInviteSubmit}
+          className="bg-surface-container-low rounded-xl p-6 flex items-end gap-4 border border-outline-variant/20"
+        >
+          <div className="flex-1">
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Rider Email Address
+            </label>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="rider@example.com"
+              required
+              autoFocus
+              className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+            />
+            <p className="font-label text-[10px] text-on-surface-variant/60 mt-2">
+              They'll receive a magic link. Their account will be created at Pending status — you'll approve it here.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => { setShowInvite(false); setInviteEmail(''); }}
+              className="px-4 py-3 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSending || !inviteEmail.trim()}
+              className="signature-gradient text-on-primary px-5 py-3 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {isSending ? 'Sending…' : 'Send Invite'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex flex-wrap gap-8 border-b border-outline-variant/15">
