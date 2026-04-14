@@ -8,8 +8,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 4-hour Hard Purge Logic
-    // Nullifies last_lat and last_long for ride_participants
+    // 4-hour Hard Purge Logic (Pillar II §5)
+    // Nullifies GPS coordinates AND phone number for ride_participants
     // Targets rides that ended more than 4 hours ago
     
     // 1. Find rides that ended > 4 hours ago and haven't been purged (status = 'saved')
@@ -32,12 +32,14 @@ serve(async (req) => {
       })
     }
 
-    // 2. Nullify location data for all participants in those rides
+    // 2. Nullify location data and phone for all participants in those rides
+    // Pillar II §5: phone must be deleted at Expiry + 4h alongside GPS breadcrumbs
     const { data: purgedParticipants, error: purgeError } = await supabase
       .from('ride_participants')
-      .update({ 
-        last_lat: null, 
+      .update({
+        last_lat: null,
         last_long: null,
+        phone: null,
         status: 'purged'
       })
       .in('ride_id', rideIds)
