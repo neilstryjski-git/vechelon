@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
-import { useTierDetection } from '../hooks/useTierDetection';
 import MobileMenu from './MobileMenu';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) => 
@@ -18,7 +17,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
  */
 const RiderLayout: React.FC = () => {
   useOfflineStatus();
-  useTierDetection();
   
   const isOnline = useAppStore((state) => state.isOnline);
   const userTier = useAppStore((state) => state.userTier);
@@ -41,13 +39,10 @@ const RiderLayout: React.FC = () => {
         title="RIDER PORTAL"
       />
 
-      {/* Pending Affiliation Banner — Tier 2 (initiated) only */}
+      {/* Pending Affiliation HUD — Tier 2 (initiated) only */}
       {userTier === 'initiated' && (
-        <div className="bg-surface-container-high border-b border-outline-variant/20 px-6 py-3 flex items-center justify-center gap-3">
-          <span className="material-symbols-outlined text-on-surface-variant text-base">pending</span>
-          <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
-            Your membership application is under review — an admin will approve you shortly.
-          </p>
+        <div className="bg-primary text-on-primary font-label text-[10px] uppercase tracking-[0.2em] text-center py-1.5 animate-pulse z-[60] relative">
+          Membership Pending — Awaiting Tactical Activation
         </div>
       )}
 

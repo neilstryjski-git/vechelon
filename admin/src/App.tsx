@@ -8,10 +8,10 @@ import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import RouteLibraryPage from './pages/RouteLibrary';
 import RideBuilder from './pages/RideBuilder';
-import CalendarGrid from './components/CalendarGrid';
 import AuthPage from './pages/rider/AuthPage';
 import RiderHome from './pages/rider/RiderHome';
 import Profile from './pages/rider/Profile';
+import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
 import { useTierDetection } from './hooks/useTierDetection';
 import { useAppStore } from './store/useAppStore';
@@ -65,32 +65,29 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Renders Dashboard for admins, RiderHome for everyone else. */
+function SmartHome() {
+  const isAdmin = useAppStore((s) => s.isAdmin);
+  return isAdmin ? <Dashboard /> : <RiderHome />;
+}
+
 /**
  * Adaptive UI Switcher.
- * Admins get the full admin Layout; riders get the tiered RiderLayout.
- * Dev bypass: unauthenticated sessions default to admin view.
+ * Returns the Admin Sidebar layout or Rider Top-Nav layout based on role.
+ * Fulfills the "Responsive Entry Point" requirement.
  */
 function AdaptiveLayout({ tenant }: { tenant: any }) {
+  useTierDetection();
   const isAdmin = useAppStore((s) => s.isAdmin);
-  const userTier = useAppStore((s) => s.userTier);
-  // Unauthenticated (guest + not admin) → default to admin layout for dev
-  const showAdminLayout = isAdmin || userTier === 'guest';
 
-  if (showAdminLayout) return <Layout tenant={tenant || {}} />;
+  if (isAdmin) {
+    return <Layout tenant={tenant || {}} />;
+  }
+
   return <RiderLayout />;
 }
 
-/** Index route — Dashboard for admins, RiderHome for riders. */
-function SmartHome() {
-  const isAdmin = useAppStore((s) => s.isAdmin);
-  const userTier = useAppStore((s) => s.userTier);
-  if (isAdmin || userTier === 'guest') return <Dashboard />;
-  return <RiderHome />;
-}
-
 function AppContent() {
-  useTierDetection();
-
   // Dynamic branding fetch from Supabase with a 5s timeout for offline resilience
   const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant-config'],
@@ -144,19 +141,21 @@ function AppContent() {
   return (
     <Router basename="/portal">
       <Routes>
-        {/* Auth page — no layout wrapper */}
         <Route path="/auth" element={<AuthPage />} />
-
-        {/* Adaptive layout — admin vs rider */}
+        
+        {/* ONE UNIFIED ENTRY POINT — AdaptiveLayout renders either admin Layout or RiderLayout */}
         <Route path="/" element={<AdaptiveLayout tenant={tenant} />}>
-          <Route index               element={<SmartHome />}        />
-          <Route path="dashboard"    element={<Dashboard />}       />
-          <Route path="calendar"     element={<CalendarGrid />}    />
-          <Route path="routes"       element={<RouteLibraryPage />} />
-          <Route path="builder/:rideId" element={<RideBuilder />}  />
-          <Route path="members"      element={<Members />}         />
-          <Route path="profile"      element={<Profile />}         />
-          <Route path="*"            element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
+          {/* Index: SmartHome switches based on role */}
+          <Route index           element={<SmartHome />}         />
+          <Route path="dashboard" element={<Dashboard />}        />
+          <Route path="calendar"  element={<CalendarGrid />}     />
+          <Route path="routes"    element={<RouteLibraryPage />} />
+          <Route path="builder/:rideId" element={<RideBuilder />} />
+          <Route path="members"   element={<Members />}          />
+          <Route path="profile"   element={<Profile />}          />
+
+          {/* Catch-all */}
+          <Route path="*" element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
         </Route>
       </Routes>
     </Router>
