@@ -61,35 +61,32 @@ const Layout: React.FC<{ tenant?: any }> = ({ tenant }) => {
       >
         <nav className="flex justify-between items-center w-full px-6 py-4 max-w-screen-2xl mx-auto">
 
-          {/* Platform & Tenant Branding (Left) */}
-          <div className="flex items-center gap-4">
-            {/* Tenant Branding */}
-            <div className="flex items-center gap-2 pr-4 border-r border-outline-variant/20">
-              <img
-                src={tenantLogo}
-                alt="Club Logo"
-                className="h-6 w-auto object-contain opacity-90"
-              />
-            </div>
+          {/* Branding (Left) */}
+          <div className="flex items-center gap-3">
+            {/* Club logo */}
+            <img
+              src={tenantLogo}
+              alt="Club Logo"
+              className="h-6 w-auto object-contain opacity-90"
+            />
 
-            {/* Platform Branding */}
-            <div className="flex items-center gap-2">
-              <img
-                src="/portal/vechelon-halfchainring.svg"
-                alt="Vechelon"
-                className="h-5 w-auto object-contain"
-              />
-              <span className="font-headline text-lg font-extrabold tracking-tighter italic uppercase">VECHELON</span>
-              <span
-                className={`text-[8px] px-1.5 py-0.5 rounded font-label tracking-widest transition-colors ${
-                  isPriorityMode
-                    ? 'bg-error text-on-error'
-                    : 'bg-on-surface text-surface-container-lowest'
-                }`}
-              >
-                {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
-              </span>
-            </div>
+            {/* Admin badge */}
+            <span
+              className={`text-[8px] px-1.5 py-0.5 rounded font-label tracking-widest transition-colors ${
+                isPriorityMode
+                  ? 'bg-error text-on-error'
+                  : 'bg-on-surface text-surface-container-lowest'
+              }`}
+            >
+              {isPriorityMode ? 'PRIORITY' : 'ADMIN'}
+            </span>
+
+            {/* Vechelon half-chainring */}
+            <img
+              src="/portal/vechelon-halfchainring.svg"
+              alt="Vechelon"
+              className="h-5 w-auto object-contain"
+            />
           </div>
 
           {/* Primary Navigation */}
