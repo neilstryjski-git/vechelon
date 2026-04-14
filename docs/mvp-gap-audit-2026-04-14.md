@@ -113,16 +113,16 @@ The pillars describe a self-service registration model only, but a club with exi
 
 ---
 
-### Scenario I — QR Code → Ride Landing (Screen Scan)
-> *The admin has the dashboard open at a café meetup or at the start line. A member scans the QR from the screen with their phone, is taken directly to that ride, and can RSVP or join the live map depending on whether the ride has started.*
+### Scenario I — QR Code → Ride Landing
+> *A member scans the QR code, is taken directly to that ride, and can RSVP or join the live map depending on whether the ride has started.*
 
 **Status: MISSING**
 
-The QR is a screen-to-phone interaction at a physical gathering — the high-frequency club moment. It is not a print use case. This makes it more valuable, not less.
+The QR is already generated correctly by the admin portal. The gap is entirely on the destination side — there is no portal route `/ride/:rideId` that members land on after scanning. The QR presenter (Captain showing the code at the start line) is a Rail 3 / mobile concern and out of scope here.
 
-The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a live map context. There is no portal route `/ride/:rideId` that handles either state.
+The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a live map context. A member scanning it before the ride starts has nowhere to land.
 
-**The QR has one URL but two legitimate uses:**
+**The one URL needs to handle all states:**
 
 | Ride status | Expected behaviour |
 |-------------|-------------------|
@@ -130,12 +130,12 @@ The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a l
 | `active` (race day) | Go straight to live tactical map |
 | `saved` (post-ride) | Show summary / attendance |
 
-**Recommended solution:** A single `/ride/:rideId` smart landing page in the portal that branches on `rides.status`. The QR base URL config (`VITE_JOIN_BASE_URL`) moves from the mobile join domain to `/portal/ride/{rideId}`. This route also becomes the entry point for W64 (anonymous guest join on race day), giving it double value.
+**Recommended solution:** A single `/ride/:rideId` smart landing page in the portal that branches on `rides.status`. The QR base URL config (`VITE_JOIN_BASE_URL`) is updated to point at `/portal/ride/{rideId}`. This route also becomes the entry point for W64 (anonymous guest join on race day).
 
 **Three Amigos:**
-- **Business:** The Captain is at the start line with their phone. They open the portal, pull up the ride QR, and hold the screen out. Every rider scans in under 10 seconds. Same QR works pre-ride (RSVP) and on race day (live map). One URL, always correct.
-- **Dev:** The landing page (`/ride/:rideId`) is the in-scope work — moderate effort. The Captain-side presenter view (full-screen QR on mobile) is Rail 3 / parking lot and out of scope here.
-- **QA:** Captain loads QR on phone — verify it renders full-screen legibly. Rider scans → lands on correct state. Authenticated member gets RSVP or map. Guest sees join prompt. Edge case: Captain's phone screen brightness, QR contrast.
+- **Business:** Same QR the admin already generates works for pre-ride RSVP and race-day join. No new QR needed, no workflow change for the admin.
+- **Dev:** One new `/ride/:rideId` route + a branching component reusing the existing ride card. `VITE_JOIN_BASE_URL` env var updated. Moderate effort.
+- **QA:** Authenticated member gets RSVP if pre-ride, map redirect if active. Unauthenticated user sees join/sign-in prompt. Completed ride shows summary. Edge case: cancelled ride shows a graceful message.
 
 ---
 
