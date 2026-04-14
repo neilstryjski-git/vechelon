@@ -43,7 +43,7 @@ interface RideFormModalProps {
   initialValues?:   Partial<EditFormValues>;
   isOpen:           boolean;
   onClose:          () => void;
-  onCreated?:       (rideId: string) => void;
+  onCreated?:       (rideId: string | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,10 +120,65 @@ async function generateQRWithLogo(url: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Series date generation
+// ---------------------------------------------------------------------------
+
+type Frequency = 'weekly' | 'biweekly' | 'monthly';
+
+const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function generateSeriesDates(
+  startDateStr: string,
+  frequency: Frequency,
+  selectedDays: number[], // 0 = Mon … 6 = Sun
+  count: number,
+): Date[] {
+  if (!startDateStr || count < 1) return [];
+  const start = new Date(startDateStr);
+  if (isNaN(start.getTime())) return [];
+
+  const h = start.getHours();
+  const m = start.getMinutes();
+  const jsToOur = (d: number) => (d + 6) % 7;
+  const startOurDay = jsToOur(start.getDay());
+  const days = [...(selectedDays.length > 0 ? selectedDays : [startOurDay])].sort((a, b) => a - b);
+
+  if (frequency === 'monthly') {
+    const dates: Date[] = [];
+    const d = new Date(start);
+    while (dates.length < count) {
+      dates.push(new Date(d));
+      d.setMonth(d.getMonth() + 1);
+    }
+    return dates;
+  }
+
+  const intervalWeeks = frequency === 'biweekly' ? 2 : 1;
+  const weekBase = new Date(start);
+  weekBase.setDate(start.getDate() - startOurDay);
+  weekBase.setHours(h, m, 0, 0);
+
+  const dates: Date[] = [];
+  const cursor = new Date(weekBase);
+
+  while (dates.length < count) {
+    for (const day of days) {
+      if (dates.length >= count) break;
+      const d = new Date(cursor);
+      d.setDate(cursor.getDate() + day);
+      if (d >= start) dates.push(new Date(d));
+    }
+    cursor.setDate(cursor.getDate() + intervalWeeks * 7);
+  }
+
+  return dates;
+}
+
+// ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
 
-function useCreateRide(onCreated?: (rideId: string) => void, onClose?: () => void) {
+function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: () => void) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
 
@@ -134,12 +189,20 @@ function useCreateRide(onCreated?: (rideId: string) => void, onClose?: () => voi
       externalUrl,
       selectedRoute,
       pendingFile,
+      isRecurring,
+      frequency,
+      selectedDays,
+      occurrenceCount,
     }: {
-      name:           string;
-      scheduledStart: string;
-      externalUrl:    string;
-      selectedRoute:  RouteRow | null;
-      pendingFile:    File | null;
+      name:            string;
+      scheduledStart:  string;
+      externalUrl:     string;
+      selectedRoute:   RouteRow | null;
+      pendingFile:     File | null;
+      isRecurring:     boolean;
+      frequency:       Frequency;
+      selectedDays:    number[];
+      occurrenceCount: number;
     }) => {
       let gpxPath:      string | null = null;
       let thumbnailUrl: string | null = null;
@@ -197,33 +260,47 @@ function useCreateRide(onCreated?: (rideId: string) => void, onClose?: () => voi
         thumbnailUrl = thumbUrl;
       }
 
-      const rideId  = crypto.randomUUID();
-      const joinUrl = `${JOIN_BASE}/join/${rideId}`;
-      const qrCode  = await generateQRWithLogo(joinUrl);
+      // Build ride dates — one date for single, multiple for series
+      const dates: Date[] = isRecurring
+        ? generateSeriesDates(scheduledStart, frequency, selectedDays, occurrenceCount)
+        : scheduledStart ? [new Date(scheduledStart)] : [new Date()];
 
-      const { error } = await supabase.from('rides').insert({
-        id:              rideId,
-        name:            name.trim(),
-        type:            'scheduled',
-        status:          'created',
-        scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
-        external_url:    externalUrl.trim() || null,
-        gpx_path:        gpxPath,
-        thumbnail_url:   thumbnailUrl,
-        start_coords:    startCoords,
-        finish_coords:   finishCoords,
-        qr_code:         qrCode,
-        tenant_id:       TENANT_ID,
-        created_by:      USER_ID,
-      });
+      const seriesId = isRecurring ? crypto.randomUUID() : null;
+      const rideName = name.trim();
+
+      // Build all rows (generating a QR per instance)
+      const rows = await Promise.all(dates.map(async (date) => {
+        const rideId  = crypto.randomUUID();
+        const joinUrl = `${JOIN_BASE}/join/${rideId}`;
+        const qrCode  = await generateQRWithLogo(joinUrl);
+        return {
+          id:              rideId,
+          name:            rideName,
+          type:            'scheduled',
+          status:          'created',
+          scheduled_start: date.toISOString(),
+          external_url:    externalUrl.trim() || null,
+          gpx_path:        gpxPath,
+          thumbnail_url:   thumbnailUrl,
+          start_coords:    startCoords,
+          finish_coords:   finishCoords,
+          qr_code:         qrCode,
+          series_id:       seriesId,
+          tenant_id:       TENANT_ID,
+          created_by:      USER_ID,
+        };
+      }));
+
+      const { error } = await supabase.from('rides').insert(rows);
       if (error) throw error;
 
-      return rideId;
+      // Return first rideId for single rides (→ builder), null for series (→ calendar)
+      return isRecurring ? null : rows[0].id;
     },
     onSuccess: (rideId) => {
       queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
-      addToast('Ride scheduled. Opening builder…', 'success');
+      addToast(rideId ? 'Ride scheduled. Opening builder…' : 'Series created and added to calendar.', 'success');
       onClose?.();
       onCreated?.(rideId);
     },
@@ -495,6 +572,28 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const [selectedRoute, setSelectedRoute] = useState<RouteRow | null>(null);
   const [pendingFile, setPendingFile]     = useState<File | null>(null);
 
+  // ── Recurring state ──────────────────────────────────────────────────────
+  const [isRecurring, setIsRecurring]       = useState(false);
+  const [frequency, setFrequency]           = useState<Frequency>('weekly');
+  const [selectedDays, setSelectedDays]     = useState<number[]>([]);
+  const [occurrenceCount, setOccurrenceCount] = useState(8);
+
+  // Auto-select the start date's day-of-week when it changes
+  useEffect(() => {
+    if (scheduledStart) {
+      const d = new Date(scheduledStart);
+      const ourDay = (d.getDay() + 6) % 7;
+      setSelectedDays([ourDay]);
+    }
+  }, [scheduledStart]);
+
+  const seriesDates = isRecurring && scheduledStart
+    ? generateSeriesDates(scheduledStart, frequency, selectedDays, occurrenceCount)
+    : [];
+  const projectedEnd = seriesDates.length > 0
+    ? seriesDates[seriesDates.length - 1]
+    : null;
+
   // ── Edit state ───────────────────────────────────────────────────────────
   const [editValues, setEditValues] = useState<EditFormValues>(EMPTY_EDIT);
 
@@ -525,6 +624,10 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       setRouteTab('library');
       setSelectedRoute(null);
       setPendingFile(null);
+      setIsRecurring(false);
+      setFrequency('weekly');
+      setSelectedDays([]);
+      setOccurrenceCount(8);
     } else {
       setEditValues({ ...EMPTY_EDIT, ...initialValues });
     }
@@ -538,7 +641,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const handleSubmitCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile });
+    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile, isRecurring, frequency, selectedDays, occurrenceCount });
   };
 
   const handleSubmitEdit = (e: React.FormEvent) => {
@@ -609,6 +712,102 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   className={inputClass}
                 />
               </div>
+
+              {/* Recurring Ride Toggle */}
+              <div className="flex items-center justify-between py-1">
+                <div>
+                  <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Recurring Ride</p>
+                  <p className="font-body text-xs text-on-surface-variant/60 mt-0.5">Create a series of individual ride instances</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRecurring(v => !v)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isRecurring ? 'bg-primary' : 'bg-outline-variant/40'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${isRecurring ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Recurring Controls */}
+              {isRecurring && (
+                <div className="bg-surface-container-low rounded-xl p-4 space-y-4 border border-outline-variant/10">
+
+                  {/* Frequency */}
+                  <div>
+                    <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant mb-2">Repeat Frequency</p>
+                    <div className="flex gap-2">
+                      {(['weekly', 'biweekly', 'monthly'] as Frequency[]).map(f => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setFrequency(f)}
+                          className={`flex-1 py-1.5 rounded-lg font-label text-[9px] uppercase tracking-widest transition-all ${
+                            frequency === f
+                              ? 'bg-primary text-on-primary shadow-sm'
+                              : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'
+                          }`}
+                        >
+                          {f === 'biweekly' ? 'Bi-Weekly' : f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Day Selector (not shown for monthly) */}
+                  {frequency !== 'monthly' && (
+                    <div>
+                      <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant mb-2">Select Days</p>
+                      <div className="flex gap-1.5">
+                        {DAY_LABELS.map((label, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setSelectedDays(prev =>
+                              prev.includes(i) ? prev.filter(d => d !== i) : [...prev, i]
+                            )}
+                            className={`flex-1 aspect-square flex items-center justify-center rounded-lg font-label text-[10px] font-bold transition-all ${
+                              selectedDays.includes(i)
+                                ? 'bg-primary text-on-primary'
+                                : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Occurrence Count */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">Occurrences</p>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setOccurrenceCount(v => Math.max(1, v - 1))} className="w-5 h-5 rounded-full bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high flex items-center justify-center font-bold text-xs transition-colors">−</button>
+                        <span className="font-headline font-bold text-on-background text-sm w-6 text-center tabular-nums">{occurrenceCount}</span>
+                        <button type="button" onClick={() => setOccurrenceCount(v => Math.min(52, v + 1))} className="w-5 h-5 rounded-full bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high flex items-center justify-center font-bold text-xs transition-colors">+</button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={1} max={52}
+                      value={occurrenceCount}
+                      onChange={e => setOccurrenceCount(Number(e.target.value))}
+                      className="w-full accent-primary"
+                    />
+                  </div>
+
+                  {/* Projected End Date */}
+                  {projectedEnd && (
+                    <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10">
+                      <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">Projected End</p>
+                      <p className="font-body text-sm font-semibold text-on-background">
+                        {projectedEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* External URL */}
               <div>
@@ -688,7 +887,9 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               {/* Geometry note */}
               <p className="font-label text-[9px] text-on-surface-variant/50 leading-relaxed bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                 <span className="material-symbols-outlined text-[11px] align-middle mr-1">info</span>
-                After creating, you'll be taken to Ride Builder to set the start point, finish, and any waypoints.
+                {isRecurring
+                  ? `${occurrenceCount} individual ride instances will be created and added to your calendar.`
+                  : "After creating, you'll be taken to Ride Builder to set the start point, finish, and any waypoints."}
               </p>
 
               {/* Actions */}
@@ -706,9 +907,9 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">
-                    {isPending ? 'sync' : 'arrow_forward'}
+                    {isPending ? 'sync' : isRecurring ? 'event_repeat' : 'arrow_forward'}
                   </span>
-                  {isPending ? 'Creating…' : 'Create & Open Builder'}
+                  {isPending ? 'Creating…' : isRecurring ? `Create ${occurrenceCount} Rides` : 'Create & Open Builder'}
                 </button>
               </div>
             </form>

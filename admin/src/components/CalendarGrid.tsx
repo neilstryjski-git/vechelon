@@ -278,7 +278,7 @@ const CalendarGrid: React.FC = () => {
         mode="create"
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        onCreated={(rideId) => navigate(`/builder/${rideId}`)}
+        onCreated={(rideId) => rideId ? navigate(`/builder/${rideId}`) : undefined}
       />
     </div>
   );
