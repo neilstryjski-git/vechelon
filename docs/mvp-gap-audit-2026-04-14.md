@@ -133,9 +133,9 @@ The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a l
 **Recommended solution:** A single `/ride/:rideId` smart landing page in the portal that branches on `rides.status`. The QR base URL config (`VITE_JOIN_BASE_URL`) moves from the mobile join domain to `/portal/ride/{rideId}`. This route also becomes the entry point for W64 (anonymous guest join on race day), giving it double value.
 
 **Three Amigos:**
-- **Business:** The admin opens the dashboard at the Saturday café stop. Every rider scans and RSVPs in under 10 seconds. Same QR works on race day to join the live map. One URL, always correct.
-- **Dev:** One new `/ride/:rideId` route + a branching component that reuses the existing ride card from RiderHome. The `VITE_JOIN_BASE_URL` env var is updated. Moderate effort.
-- **QA:** Unauthenticated user sees sign-in prompt (guest join path, W64). Authenticated member gets RSVP if ride not started, map redirect if active. Completed ride shows summary. Edge case: cancelled ride shows a graceful message.
+- **Business:** The Captain is at the start line with their phone. They open the portal, pull up the ride QR, and hold the screen out. Every rider scans in under 10 seconds. Same QR works pre-ride (RSVP) and on race day (live map). One URL, always correct.
+- **Dev:** Two parts: (1) a `/ride/:rideId` smart landing page in the portal — moderate effort. (2) The admin dashboard QR display needs to be reachable and readable on a mobile screen — the current desktop-only sidebar layout makes the QR card hard to use on a phone. A dedicated mobile-friendly QR view (full-screen QR code for a given ride) would be the right solution.
+- **QA:** Captain loads QR on phone — verify it renders full-screen legibly. Rider scans → lands on correct state. Authenticated member gets RSVP or map. Guest sees join prompt. Edge case: Captain's phone screen brightness, QR contrast.
 
 ---
 
