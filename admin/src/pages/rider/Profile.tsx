@@ -132,7 +132,7 @@ const Profile: React.FC = () => {
 
   const initials = profile.name
     ? profile.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
-    : profile.email[0].toUpperCase();
+    : (profile.email?.[0] ?? '?').toUpperCase();
 
   return (
     <div className="max-w-lg mx-auto space-y-10">
@@ -189,7 +189,7 @@ const Profile: React.FC = () => {
           </label>
           <input
             type="email"
-            value={profile.email}
+            value={profile.email ?? ''}
             disabled
             className="w-full bg-surface-container-low/50 border border-outline-variant/20 rounded-lg px-4 py-3 font-body text-sm text-on-surface-variant/60 cursor-not-allowed"
           />
