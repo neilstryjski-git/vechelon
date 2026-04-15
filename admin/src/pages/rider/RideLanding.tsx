@@ -459,7 +459,7 @@ const RideLanding: React.FC = () => {
                 </div>
               ) : (
                 <button
-                  onClick={handleJoin}
+                  onClick={() => handleJoin()}
                   disabled={isJoining}
                   className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                 >
