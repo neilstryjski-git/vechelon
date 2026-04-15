@@ -59,9 +59,38 @@ const RideDetailSideSheet: React.FC = () => {
   useEffect(() => {
     if (!selectedRideId) { setQrDataUrl(null); return; }
     const url = `${window.location.origin}/portal/ride/${selectedRideId}`;
-    QRCode.toDataURL(url, { width: 160, margin: 1, color: { dark: '#1c1c1c', light: '#fafafa' } })
-      .then(setQrDataUrl)
-      .catch(() => setQrDataUrl(null));
+    const size = 160;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    QRCode.toCanvas(canvas, url, {
+      width: size,
+      margin: 1,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#1c1c1c', light: '#fafafa' },
+    }).then(() => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // White circle background for logo
+      const logoSize = size * 0.22;
+      const cx = size / 2;
+      const cy = size / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, logoSize * 0.65, 0, 2 * Math.PI);
+      ctx.fillStyle = '#fafafa';
+      ctx.fill();
+
+      // Draw Vechelon logo in center
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
+        setQrDataUrl(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
+      img.src = '/portal/vechelon-halfchainring.svg';
+    }).catch(() => setQrDataUrl(null));
   }, [selectedRideId]);
 
   useEffect(() => {
