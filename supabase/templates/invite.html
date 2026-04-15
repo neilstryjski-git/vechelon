@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You've been invited to Racer Sportif</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: #f5f3f2;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #1a1a1a;
+      padding: 40px 20px;
+    }
+
+    .wrapper {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      padding-bottom: 32px;
+    }
+
+    .header img {
+      height: 48px;
+      width: auto;
+      margin-bottom: 16px;
+    }
+
+    .header h1 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    /* Card */
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+    }
+
+    /* Card top stripe */
+    .stripe {
+      height: 4px;
+      background: linear-gradient(90deg, #5f5e5e 0%, #535252 100%);
+    }
+
+    .card-body {
+      padding: 40px 40px 32px;
+    }
+
+    .eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 12px;
+    }
+
+    .card-body h2 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      font-style: italic;
+      color: #111;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .card-body p {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #555;
+      margin-bottom: 32px;
+    }
+
+    /* What you get list */
+    .perks {
+      list-style: none;
+      margin: -16px 0 32px;
+    }
+
+    .perks li {
+      font-size: 13px;
+      color: #555;
+      padding: 6px 0;
+      padding-left: 20px;
+      position: relative;
+    }
+
+    .perks li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: #5f5e5e;
+      font-weight: 700;
+    }
+
+    /* CTA button */
+    .btn {
+      display: inline-block;
+      background: linear-gradient(15deg, #5f5e5e 0%, #535252 100%);
+      color: #faf7f6 !important;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 16px 32px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .expiry {
+      font-size: 11px;
+      color: #aaa;
+      letter-spacing: 0.05em;
+    }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid #f0eeec;
+      margin: 28px 0;
+    }
+
+    /* Fallback link */
+    .fallback {
+      font-size: 11px;
+      color: #aaa;
+      line-height: 1.6;
+    }
+
+    .fallback a {
+      color: #5f5e5e;
+      word-break: break-all;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding-top: 28px;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #bbb;
+    }
+
+    .footer a {
+      color: #bbb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <!-- Header -->
+    <div class="header">
+      <h1>Racer Sportif</h1>
+    </div>
+
+    <!-- Card -->
+    <div class="card">
+      <div class="stripe"></div>
+      <div class="card-body">
+
+        <p class="eyebrow">Club Invitation</p>
+        <h2>You've been invited to the peloton.</h2>
+
+        <p>
+          Your club admin has added you to the Racer Sportif rider portal.
+          Click below to claim your account — no password required.
+        </p>
+
+        <ul class="perks">
+          <li>View and RSVP to upcoming club rides</li>
+          <li>Access the full route library</li>
+          <li>Join the live tactical map on race day</li>
+        </ul>
+
+        <a href="{{ .ConfirmationURL }}" class="btn">
+          Claim Your Account →
+        </a>
+
+        <p class="expiry">This invitation expires in 24 hours.</p>
+
+        <hr class="divider" />
+
+        <p class="fallback">
+          Button not working? Copy and paste this link into your browser:<br />
+          <a href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a>
+        </p>
+
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>
+        You received this because a club admin added your email to Racer Sportif.<br />
+        If this was unexpected, you can safely ignore it — no account will be created until you click the link.
+      </p>
+      <br />
+      <p>
+        <a href="#">racersportif.co.uk</a>
+        &nbsp;·&nbsp;
+        <a href="#">Privacy</a>
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>
