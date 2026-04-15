@@ -10,6 +10,7 @@ import RouteLibraryPage from './pages/RouteLibrary';
 import RideBuilder from './pages/RideBuilder';
 import AuthPage from './pages/rider/AuthPage';
 import RiderHome from './pages/rider/RiderHome';
+import RideLanding from './pages/rider/RideLanding';
 import Profile from './pages/rider/Profile';
 import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
@@ -153,6 +154,7 @@ function AppContent() {
           <Route path="builder/:rideId" element={<RideBuilder />} />
           <Route path="members"   element={<Members />}          />
           <Route path="profile"   element={<Profile />}          />
+          <Route path="ride/:rideId" element={<RideLanding />}  />
 
           {/* Catch-all */}
           <Route path="*" element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
