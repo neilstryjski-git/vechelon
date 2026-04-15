@@ -6,6 +6,7 @@ import { fetchGpxPoints, formatPoint, parsePoint } from '../lib/maps';
 import { useToast } from '../store/useToast';
 import InteractiveMap from '../components/InteractiveMap';
 import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +33,7 @@ const RideBuilder: React.FC = () => {
   const [routePoints, setRoutePoints] = useState<{lat: number, lng: number}[]>([]);
   const [markers, setMarkers] = useState<Waypoint[]>([]);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 1. Fetch Ride Data
   const { data: ride, isLoading } = useQuery({
@@ -184,24 +186,50 @@ const RideBuilder: React.FC = () => {
     }
   });
 
+  const handleDelete = async () => {
+    const { error } = await supabase.from('rides').delete().eq('id', rideId);
+    if (error) { addToast(`Delete failed: ${error.message}`, 'error'); return; }
+    addToast('Ride deleted.', 'success');
+    queryClient.invalidateQueries({ queryKey: ['rides'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-rides'] });
+    navigate('/');
+  };
+
   if (isLoading) return <div className="p-12 animate-pulse text-center font-label uppercase">Initializing Tactical Builder...</div>;
 
   const selectedMarker = markers.find(m => m.id === selectedMarkerId);
 
   return (
+    <>
+    <Modal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      title="Delete Ride"
+      message={`Are you sure you want to delete "${ride?.name}"? This cannot be undone.`}
+      confirmLabel="Delete"
+      type="danger"
+    />
     <div className="h-[calc(100vh-120px)] flex flex-col space-y-6">
-      <PageHeader 
+      <PageHeader
         label="Ride Customization"
         title={`Builder: ${ride?.name}`}
       >
         <div className="flex gap-3">
-          <button 
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-4 py-2 rounded-md border border-error/30 text-error font-label text-[10px] uppercase tracking-widest hover:bg-error/10 transition-colors flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">delete</span>
+            Delete
+          </button>
+          <button
             onClick={() => navigate('/calendar')}
             className="px-4 py-2 rounded-md border border-outline-variant/30 font-label text-[10px] uppercase tracking-widest hover:bg-surface-container-low transition-colors"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             className="signature-gradient text-on-primary px-6 py-2 rounded-md font-headline font-bold flex items-center gap-2 shadow-ambient disabled:opacity-50"
@@ -369,6 +397,7 @@ const RideBuilder: React.FC = () => {
         </aside>
       </div>
     </div>
+    </>
   );
 };
 

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { parsePoint } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
+import Modal from './Modal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +48,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [isJoining, setIsJoining] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
@@ -186,6 +188,17 @@ const RideDetailSideSheet: React.FC = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!selectedRideId) return;
+    const { error } = await supabase.from('rides').delete().eq('id', selectedRideId);
+    if (error) { addToast(`Delete failed: ${error.message}`, 'error'); return; }
+    addToast('Ride deleted.', 'success');
+    close();
+    queryClient.invalidateQueries({ queryKey: ['rides'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-rides'] });
+    navigate('/');
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -196,8 +209,18 @@ const RideDetailSideSheet: React.FC = () => {
         onClick={close}
       />
 
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        title="Delete Ride"
+        message={`Are you sure you want to delete "${ride?.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        type="danger"
+      />
+
       {/* Side Sheet */}
-      <aside 
+      <aside
         className={`fixed top-0 right-0 h-full w-full max-w-md bg-surface-container-lowest shadow-2xl z-50 transform transition-transform duration-500 ease-out border-l border-outline-variant/20 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
@@ -362,16 +385,22 @@ const RideDetailSideSheet: React.FC = () => {
                 </button>
 
                 {isAdmin && (
-                  <button
-                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                    onClick={() => {
-                      close();
-                      navigate(`/builder/${selectedRideId}`);
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-sm">edit_location_alt</span>
-                    Customize Geometry
-                  </button>
+                  <>
+                    <button
+                      className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                      onClick={() => { close(); navigate(`/builder/${selectedRideId}`); }}
+                    >
+                      <span className="material-symbols-outlined text-sm">edit_location_alt</span>
+                      Customize Geometry
+                    </button>
+                    <button
+                      className="w-full bg-error/10 text-error py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-error/20 transition-colors"
+                      onClick={() => setShowDeleteConfirm(true)}
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                      Delete Ride
+                    </button>
+                  </>
                 )}
               </div>
             </>
