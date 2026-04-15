@@ -89,20 +89,95 @@ serve(async (req) => {
       invitedUserId = inviteData.user.id
     }
 
-    // Fetch the invite template (optional: could just inline a basic one for MVP)
-    // For now, let's use a polished HTML string inline that matches our branding
-    const emailHtml = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1c1c1c;">
-        <h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em;">VECHELON</h1>
-        <p style="font-size: 14px; line-height: 1.6;">You have been invited to join the <strong>Racer Sportif</strong> club portal.</p>
-        <div style="margin: 30px 0;">
-          <a href="${inviteLink}" style="background: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">Accept Invitation</a>
-        </div>
-        <p style="font-size: 12px; color: #666;">If you didn't expect this invitation, you can safely ignore this email.</p>
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-        <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: #999;">Tactical Ride Intelligence</p>
-      </div>
-    `;
+    const emailHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:#1c1c1c;padding:32px 40px;">
+            <p style="margin:0;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;color:#888;font-weight:600;">Tactical Ride Intelligence</p>
+            <h1 style="margin:8px 0 0;font-size:36px;font-weight:900;font-style:italic;letter-spacing:-0.04em;color:#ffffff;">VECHELON</h1>
+          </td>
+        </tr>
+
+        <!-- Hero -->
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <h2 style="margin:0 0 16px;font-size:24px;font-weight:800;color:#1c1c1c;letter-spacing:-0.02em;">You've been invited to ride.</h2>
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#444;">
+              Your club admin has added you to the <strong>Racer Sportif</strong> portal on Vechelon — the tactical command centre for serious group rides.
+            </p>
+            <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#444;">
+              Once you accept, you'll have access to the ride calendar, route library, live ride tracking, and RSVP tools — everything your club needs to ride together, faster and smarter.
+            </p>
+
+            <!-- CTA Button -->
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#1c1c1c;border-radius:8px;">
+                  <a href="${inviteLink}" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.05em;text-transform:uppercase;">Accept Invitation →</a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:20px 0 0;font-size:12px;color:#999;">
+              Or copy this link into your browser:<br>
+              <a href="${inviteLink}" style="color:#555;word-break:break-all;">${inviteLink}</a>
+            </p>
+          </td>
+        </tr>
+
+        <!-- Feature Grid -->
+        <tr>
+          <td style="padding:0 40px 40px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="48%" style="background:#f9f9f9;border-radius:8px;padding:20px;vertical-align:top;">
+                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;">Ride Calendar</p>
+                  <p style="margin:0;font-size:13px;color:#444;line-height:1.5;">Browse upcoming rides, RSVP instantly, and never miss a roll-out.</p>
+                </td>
+                <td width="4%"></td>
+                <td width="48%" style="background:#f9f9f9;border-radius:8px;padding:20px;vertical-align:top;">
+                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;">Route Library</p>
+                  <p style="margin:0;font-size:13px;color:#444;line-height:1.5;">Access your club's curated routes with elevation profiles and GPX downloads.</p>
+                </td>
+              </tr>
+              <tr><td colspan="3" style="height:12px;"></td></tr>
+              <tr>
+                <td width="48%" style="background:#f9f9f9;border-radius:8px;padding:20px;vertical-align:top;">
+                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;">Live Tracking</p>
+                  <p style="margin:0;font-size:13px;color:#444;line-height:1.5;">See your peloton in real time during active rides with the tactical HUD.</p>
+                </td>
+                <td width="4%"></td>
+                <td width="48%" style="background:#f9f9f9;border-radius:8px;padding:20px;vertical-align:top;">
+                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;">WhatsApp Ready</p>
+                  <p style="margin:0;font-size:13px;color:#444;line-height:1.5;">Ride announcements broadcast directly to your group with one tap.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;border-top:1px solid #eee;padding:24px 40px;">
+            <p style="margin:0 0 8px;font-size:12px;color:#999;line-height:1.6;">
+              This invitation was sent by your club admin at <strong>Racer Sportif</strong>. If you weren't expecting this, you can safely ignore it — no account will be created unless you click the link above.
+            </p>
+            <p style="margin:0;font-size:11px;color:#bbb;letter-spacing:0.15em;text-transform:uppercase;">Vechelon · Tactical Ride Intelligence · vechelon.ca</p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
     const { error: resendError } = await sendResendEmail({
       to: normalizedEmail,
