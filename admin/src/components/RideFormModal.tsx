@@ -582,9 +582,6 @@ function RouteUploader({
 // Shared style constant (used by sub-components and main form)
 // ---------------------------------------------------------------------------
 
-const INPUT_CLASS =
-  'w-full bg-surface-container-lowest border border-outline-variant/30 rounded-md px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors';
-
 // ---------------------------------------------------------------------------
 // MeetupLocationPicker — inline Google Maps picker with Places Autocomplete
 // ---------------------------------------------------------------------------
@@ -597,14 +594,13 @@ interface MeetupLocationPickerProps {
 }
 
 function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
-  const mapDivRef       = useRef<HTMLDivElement>(null);
-  const mapRef          = useRef<google.maps.Map | null>(null);
-  const markerRef       = useRef<google.maps.Marker | null>(null);
-  const acInputRef      = useRef<HTMLInputElement>(null);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const mapDivRef      = useRef<HTMLDivElement>(null);
+  const acContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef         = useRef<google.maps.Map | null>(null);
+  const markerRef      = useRef<google.maps.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // Initialize map + Places Autocomplete on mount
+  // Initialize map + Places Autocomplete (New API) on mount
   useEffect(() => {
     if (!mapDivRef.current) return;
 
@@ -612,8 +608,8 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
     (async () => {
       const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
       await importLibrary('marker');
-      const { Autocomplete, AutocompleteSessionToken } =
-        await importLibrary('places') as google.maps.PlacesLibrary;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { PlaceAutocompleteElement } = await importLibrary('places') as any;
 
       if (cancelled || !mapDivRef.current) return;
 
@@ -648,25 +644,25 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
         onCoordsChange({ lat: e.latLng.lat(), lng: e.latLng.lng() });
       });
 
-      if (acInputRef.current) {
-        sessionTokenRef.current = new AutocompleteSessionToken();
+      // PlaceAutocompleteElement — Places API (New), required for projects after March 2025
+      if (acContainerRef.current) {
+        const placeAC = new PlaceAutocompleteElement();
+        acContainerRef.current.appendChild(placeAC);
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ac = new Autocomplete(acInputRef.current as any);
-        ac.addListener('place_changed', () => {
-          const place = ac.getPlace();
-          if (!place.geometry?.location) return;
+        placeAC.addEventListener('gmp-placeselect', async ({ place }: any) => {
+          await place.fetchFields({ fields: ['location', 'displayName'] });
+          if (!place.location) return;
           const pos = {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
+            lat: place.location.lat(),
+            lng: place.location.lng(),
           };
           map.panTo(pos);
           map.setZoom(16);
           marker.setPosition(pos);
           marker.setVisible(true);
           onCoordsChange(pos);
-          if (!label && place.name) onLabelChange(place.name);
-          // Rotate session token after each completed session (billing best practice)
-          sessionTokenRef.current = new AutocompleteSessionToken();
+          if (!label && place.displayName) onLabelChange(place.displayName);
         });
       }
 
@@ -687,11 +683,10 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
 
   return (
     <div className="space-y-2">
-      <input
-        ref={acInputRef}
-        type="text"
-        placeholder="Search for a location…"
-        className={INPUT_CLASS}
+      {/* PlaceAutocompleteElement injects itself here as a Web Component */}
+      <div
+        ref={acContainerRef}
+        className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
       />
       <div
         ref={mapDivRef}
