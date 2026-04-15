@@ -91,7 +91,7 @@ const RideDetailSideSheet: React.FC = () => {
         setQrDataUrl(canvas.toDataURL('image/png'));
       };
       img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
-      img.src = tenant?.logo_url || '/portal/vechelon-halfchainring.svg';
+      img.src = '/portal/favicon.svg';
     }).catch(() => setQrDataUrl(null));
   }, [selectedRideId, tenant?.logo_url]);
 
