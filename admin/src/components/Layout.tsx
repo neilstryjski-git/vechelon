@@ -29,7 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   useOfflineStatus();
 
   const { data: profile } = useQuery({
-    queryKey: ['my-profile'],
+    queryKey: ['my-avatar'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
