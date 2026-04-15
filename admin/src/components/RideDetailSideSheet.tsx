@@ -48,6 +48,8 @@ const RideDetailSideSheet: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
+  const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
+
   const isOpen = !!selectedRideId;
 
   const close = () => setSelectedRideId(null);
@@ -89,9 +91,9 @@ const RideDetailSideSheet: React.FC = () => {
         setQrDataUrl(canvas.toDataURL('image/png'));
       };
       img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
-      img.src = '/portal/vechelon-halfchainring.svg';
+      img.src = tenant?.logo_url || '/portal/vechelon-halfchainring.svg';
     }).catch(() => setQrDataUrl(null));
-  }, [selectedRideId]);
+  }, [selectedRideId, tenant?.logo_url]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
