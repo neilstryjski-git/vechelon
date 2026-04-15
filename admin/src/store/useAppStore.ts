@@ -51,7 +51,7 @@ interface AppState {
   updateCachedParticipants: (rideId: string, participants: Participant[]) => void;
   processLocationUpdate: (rideId: string, update: Partial<Participant> & { id: string }) => void;
   runHeartbeat: (rideId: string) => void;
-  joinRide: (rideId: string) => Promise<void>;
+  joinRide: (rideId: string, guestName?: string) => Promise<void>;
   endRide: (rideId: string) => Promise<{ summary: string; weather: any }>;
   addActiveBeacon: (participantId: string) => void;
   removeActiveBeacon: (participantId: string) => void;
@@ -165,12 +165,12 @@ export const useAppStore = create<AppState>()(
        * Fulfills Pillar 2 / Section 10.5.
        * Fulfills W64: Anonymous Join (No Auth).
        */
-      joinRide: async (rideId) => {
+      joinRide: async (rideId, guestName?: string) => {
         const { data: { user } } = await supabase.auth.getUser();
         const sessionCookieId = useAppStore.getState().sessionCookieId;
-        
+
         let accountId = user?.id || null;
-        let displayName = 'Guest Rider';
+        let displayName = guestName ?? 'Guest Rider';
         let phone = null;
 
         if (user) {
@@ -179,11 +179,11 @@ export const useAppStore = create<AppState>()(
             .select('name, phone')
             .eq('id', user.id)
             .maybeSingle();
-          
+
           displayName = account?.name || user.email?.split('@')[0] || 'Member';
           phone = account?.phone;
         } else {
-          // If not logged in, we set the guest flag for W63 history conversion
+          // If not logged in, we set the guest flag for history conversion
           set({ isRideGuest: true });
         }
 

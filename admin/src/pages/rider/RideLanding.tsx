@@ -138,6 +138,8 @@ const RideLanding: React.FC = () => {
   const joinRide = useAppStore((s) => s.joinRide);
 
   const [isJoining, setIsJoining] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
 
   // -------------------------------------------------------------------------
   // Fetch ride
@@ -225,11 +227,11 @@ const RideLanding: React.FC = () => {
   // Actions
   // -------------------------------------------------------------------------
 
-  const handleJoin = async () => {
+  const handleJoin = async (nameOverride?: string) => {
     if (!ride) return;
     setIsJoining(true);
     try {
-      await joinRide(ride.id);
+      await joinRide(ride.id, nameOverride);
       addToast(
         ride.status === 'active' ? 'You have joined the ride!' : 'RSVP confirmed.',
         'success',
@@ -393,19 +395,33 @@ const RideLanding: React.FC = () => {
             {/* Action area — branches on tier */}
             {isGuest && (
               !participation ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Your name *"
+                    className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
+                  />
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="Email (optional)"
+                    className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
+                  />
                   <button
-                    onClick={handleJoin}
-                    disabled={isJoining}
+                    onClick={() => handleJoin(guestName.trim())}
+                    disabled={isJoining || !guestName.trim()}
                     className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-lg">
                       {isActive ? 'play_circle' : 'event_available'}
                     </span>
-                    {isJoining ? 'Joining…' : (isActive ? 'Join as Guest' : 'RSVP as Guest')}
+                    {isJoining ? 'Joining…' : (isActive ? 'Join Ride' : 'RSVP Now')}
                   </button>
                   <p className="text-center font-label text-[9px] text-on-surface-variant/60">
-                    Join now and claim your history later by <button onClick={() => navigate('/auth')} className="underline font-bold">signing in</button>.
+                    Already a member? <button onClick={() => navigate('/auth')} className="underline font-bold">Sign in</button>
                   </p>
                 </div>
               ) : (
@@ -413,7 +429,7 @@ const RideLanding: React.FC = () => {
                   <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
                     <span className="material-symbols-outlined text-lg">check_circle</span>
                     <span className="font-headline font-bold uppercase tracking-widest text-[10px]">
-                      {isActive ? 'Joined as Guest' : 'Guest RSVP Confirmed'}
+                      {isActive ? 'You\'re on the ride' : 'RSVP Confirmed'}
                     </span>
                   </div>
                   <button
