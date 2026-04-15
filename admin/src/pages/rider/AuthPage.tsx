@@ -13,11 +13,11 @@ const AuthPage: React.FC = () => {
 
   // If already authenticated, go straight to home
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: { data: any }) => {
       if (data.session) navigate('/', { replace: true });
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       if (session) {
         // Ensure account row exists then redirect
         const { sessionCookieId, setIsRideGuest } = useAppStore.getState();

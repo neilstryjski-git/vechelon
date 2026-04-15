@@ -18,9 +18,10 @@ interface MemberRow {
   status:     AccountStatus;
   joined_at:  string;
   accounts: {
-    name:  string | null;
-    email: string;
-    phone: string;
+    name:       string | null;
+    email:      string;
+    phone:      string;
+    avatar_url: string | null;
   };
 }
 
@@ -97,12 +98,21 @@ function tierLabel(role: AccountRole): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function Avatar({ name }: { name: string | null }) {
+function Avatar({ name, avatarUrl }: { name: string | null; avatarUrl: string | null }) {
   return (
-    <div className="h-10 w-10 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
-      <span className="font-label text-xs font-bold text-on-surface-variant">
-        {getInitials(name)}
-      </span>
+    <div className="h-10 w-10 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 overflow-hidden">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={name ?? 'Avatar'}
+          className="w-full h-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      ) : (
+        <span className="font-label text-xs font-bold text-on-surface-variant">
+          {getInitials(name)}
+        </span>
+      )}
     </div>
   );
 }
@@ -163,7 +173,8 @@ const Members: React.FC = () => {
           accounts (
             name,
             email,
-            phone
+            phone,
+            avatar_url
           )
         `)
         .not('status', 'in', '("archived","deleted")')
@@ -196,10 +207,19 @@ const Members: React.FC = () => {
 
   const { mutate: sendInvite, isPending: isSending } = useMutation({
     mutationFn: async ({ email, role }: { email: string; role: 'member' | 'admin' }) => {
+      const { data: { session } } = await supabase.auth.getSession();
       const { error } = await supabase.functions.invoke('invite-member', {
         body: { email, role },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       });
-      if (error) throw error;
+      if (error) {
+        let msg = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
     },
     onSuccess: (_, { email, role }) => {
       addToast(`Invitation sent to ${email} as ${role}`, 'success');
@@ -392,7 +412,7 @@ const Members: React.FC = () => {
               className="grid grid-cols-12 gap-4 px-8 py-6 items-center hover:bg-surface-container-highest transition-colors"
             >
               <div className="col-span-4 flex items-center gap-4">
-                <Avatar name={m.accounts?.name ?? null} />
+                <Avatar name={m.accounts?.name ?? null} avatarUrl={m.accounts?.avatar_url ?? null} />
                 <div>
                   <h5 className="font-headline font-bold text-sm text-on-background">
                     {m.accounts?.name ?? m.accounts?.email ?? '—'}

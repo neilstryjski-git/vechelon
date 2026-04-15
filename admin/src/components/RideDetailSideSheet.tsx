@@ -53,7 +53,7 @@ const RideDetailSideSheet: React.FC = () => {
   const close = () => setSelectedRideId(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+    supabase.auth.getUser().then(({ data }: { data: any }) => setCurrentUser(data.user));
   }, []);
 
   useEffect(() => {

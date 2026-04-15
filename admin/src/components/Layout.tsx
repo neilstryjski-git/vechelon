@@ -24,8 +24,6 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ tenant }) => {
-  const isSidebarOpen = useAppStore((state) => state.isSidebarOpen);
-  const toggleSidebar = useAppStore((state) => state.toggleSidebar);
   const isPriorityMode = useAppStore((state) => state.isPriorityMode);
   const isAdmin = useAppStore((state) => state.isAdmin);
   useOfflineStatus();
@@ -47,13 +45,13 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const baseLinks = [
+  const baseLinks: { to: string; label: string; end?: boolean }[] = [
     { to: '/', label: 'Dashboard', end: true },
     { to: '/calendar', label: 'Calendar' },
     { to: '/routes', label: 'Route Library' },
   ];
 
-  const adminLinks = [
+  const adminLinks: { to: string; label: string; end?: boolean }[] = [
     { to: '/members', label: 'Member Directory' },
     { to: '/settings', label: 'Club Settings' },
   ];
