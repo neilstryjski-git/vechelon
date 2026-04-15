@@ -133,6 +133,9 @@ function AppContent() {
     console.warn('[v1.3.0] Using fallback branding:', tenantError);
   }
 
+  // Update tab title to tenant name
+  if (tenant?.name) document.title = tenant.name;
+
   // Fallback to Velo Modern defaults
   useBranding(tenant && tenant.primary_color ? {
     primaryColor: tenant.primary_color,

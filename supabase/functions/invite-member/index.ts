@@ -59,20 +59,35 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const portalUrl = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal'
+    const origin = req.headers.get('origin') ?? req.headers.get('referer')?.split('/portal')[0]
+    const portalUrl = origin ? `${origin}/portal` : (Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal')
 
-    // Create the user in auth.users (triggers invite but we will override with Resend)
-    // Note: We use generateLink to get the actual magic link for Resend
-    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    const normalizedEmail = email.trim().toLowerCase()
+
+    let inviteLink: string
+    let invitedUserId: string
+
+    // Try invite first; if user already exists fall back to magic link
+    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.generateLink({
       type: 'invite',
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       options: { redirectTo: portalUrl }
     })
 
-    if (linkError) throw linkError
-
-    const inviteLink = linkData.properties.action_link
-    const invitedUserId = linkData.user.id
+    if (inviteError) {
+      // User likely already exists — send a magic link instead
+      const { data: mlData, error: mlError } = await adminClient.auth.admin.generateLink({
+        type: 'magiclink',
+        email: normalizedEmail,
+        options: { redirectTo: portalUrl }
+      })
+      if (mlError) throw mlError
+      inviteLink = mlData.properties.action_link
+      invitedUserId = mlData.user.id
+    } else {
+      inviteLink = inviteData.properties.action_link
+      invitedUserId = inviteData.user.id
+    }
 
     // Fetch the invite template (optional: could just inline a basic one for MVP)
     // For now, let's use a polished HTML string inline that matches our branding
@@ -90,7 +105,7 @@ serve(async (req) => {
     `;
 
     const { error: resendError } = await sendResendEmail({
-      to: email.trim().toLowerCase(),
+      to: normalizedEmail,
       subject: 'Join Vechelon | Racer Sportif Invitation',
       html: emailHtml
     })
@@ -101,7 +116,7 @@ serve(async (req) => {
     await adminClient
       .from('accounts')
       .upsert(
-        { id: invitedUserId, email: email.trim().toLowerCase() },
+        { id: invitedUserId, email: normalizedEmail },
         { onConflict: 'id', ignoreDuplicates: true }
       )
 
