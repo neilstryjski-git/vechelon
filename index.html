@@ -116,94 +116,6 @@
       padding: 2px;
     }
 
-    .coming {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.42em;
-      text-transform: uppercase;
-      color: #4A7A9A;
-      margin-top: 40px;
-    }
-
-    /* Signup Form Styles */
-    .signup-container {
-      margin-top: 30px;
-      width: 100%;
-      max-width: 400px;
-      padding: 0 20px;
-    }
-
-    .signup-form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .signup-input {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(var(--primary-rgb), 0.2);
-      border-radius: 4px;
-      padding: 14px 20px;
-      color: #ffffff;
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0.15em;
-      outline: none;
-      transition: all 0.3s ease;
-      text-align: center;
-    }
-
-    .signup-input:focus {
-      border-color: var(--primary-color);
-      background: rgba(var(--primary-rgb), 0.08);
-      box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
-    }
-
-    .signup-input::placeholder {
-      color: rgba(255, 255, 255, 0.3);
-    }
-
-    .signup-button {
-      background: var(--primary-color);
-      color: #ffffff;
-      border: none;
-      border-radius: 4px;
-      padding: 14px;
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 14px;
-      font-weight: 800;
-      letter-spacing: 0.3em;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    }
-
-    .signup-button:hover {
-      filter: brightness(1.1);
-      box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.4);
-      transform: translateY(-1px);
-    }
-
-    .signup-button:active {
-      transform: translateY(1px);
-    }
-
-    .signup-feedback {
-      margin-top: 15px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      color: var(--primary-color);
-      text-align: center;
-      animation: fade-in 0.5s ease-out;
-    }
-
-    @keyframes fade-in {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
     .explore-link {
       margin-top: 40px;
       font-size: 13px;
@@ -526,27 +438,6 @@
 
     <div class="swatch-wrap" id="swatches"></div>
 
-    <div class="coming">Coming Soon</div>
-
-    <!-- Waitlist Signup -->
-    <div class="signup-container">
-      <form id="waitlist-form" class="signup-form">
-        <input 
-          type="email" 
-          id="email-input" 
-          placeholder="ENTER EMAIL FOR EARLY ACCESS" 
-          required
-          class="signup-input"
-        />
-        <button type="submit" class="signup-button">
-          JOIN WAITLIST
-        </button>
-      </form>
-      <div id="signup-success" class="signup-feedback" style="display: none;">
-        ✓ YOU ARE ON THE LIST. PREPARE FOR ROLLOUT.
-      </div>
-    </div>
-
     <a href="#logic" class="explore-link">EXPLORE THE TACTICAL LOGIC ↓</a>
     <a href="/prototype" class="explore-link" style="margin-top:14px;">VIEW PROTOTYPE →</a>
   </section>
@@ -861,22 +752,6 @@
       document.querySelectorAll('.visual-container').forEach(vc => {
         vc.style.borderColor = c;
       });
-    }
-
-    // ── form logic ──────────────────────────────────────────────────────────
-    const form = document.getElementById('waitlist-form');
-    const feedback = document.getElementById('signup-success');
-
-    if (form) {
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        const email = document.getElementById('email-input').value;
-        console.log('Waitlist Registration:', email);
-        
-        // Hide form and show feedback
-        form.style.display = 'none';
-        feedback.style.display = 'block';
-      };
     }
 
     paint(col);
