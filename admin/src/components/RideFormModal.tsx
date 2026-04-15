@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { supabase } from '../lib/supabase';
-import { formatPoint, getStaticMapUrl } from '../lib/maps';
+import { formatPoint, getStaticMapUrl, getStaticMapPinUrl } from '../lib/maps';
 import { parseGPXCoords } from '../lib/validation';
 import { useToast } from '../store/useToast';
+import type { RideType } from '../store/useAppStore';
+import { importLibrary } from '../lib/mapsLoader';
+import { veloModernStyle } from '../lib/mapStyles';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -193,6 +196,9 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       frequency,
       selectedDays,
       occurrenceCount,
+      rideType,
+      meetupLabel,
+      meetupCoords,
     }: {
       name:            string;
       scheduledStart:  string;
@@ -203,6 +209,9 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       frequency:       Frequency;
       selectedDays:    number[];
       occurrenceCount: number;
+      rideType:        RideType;
+      meetupLabel:     string;
+      meetupCoords:    { lat: number; lng: number } | null;
     }) => {
       let gpxPath:      string | null = null;
       let thumbnailUrl: string | null = null;
@@ -220,7 +229,13 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
         thumbnailUrl = selectedRoute.thumbnail_url;
         // Fetch GPX to extract first/last track point
         const { data: gpxBlob } = await supabase.storage.from('gpx-routes').download(selectedRoute.file_path);
-        if (gpxBlob) applyGpxCoords(parseGPXCoords(await gpxBlob.text()));
+        if (gpxBlob) {
+          const parsed = parseGPXCoords(await gpxBlob.text());
+          if (!parsed) throw new Error('Failed to extract coordinates from selected route GPX');
+          applyGpxCoords(parsed);
+        } else {
+          throw new Error('Failed to download selected route GPX');
+        }
       } else if (pendingFile) {
         const text   = await pendingFile.text();
         const parsed = parseGPXCoords(text);
@@ -260,6 +275,21 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
         thumbnailUrl = thumbUrl;
       }
 
+      // For meetup rides: use the admin pin-drop coords instead of GPX coords
+      if (rideType === 'meetup' && meetupCoords) {
+        startCoords = formatPoint(meetupCoords);
+        thumbnailUrl = getStaticMapPinUrl(meetupCoords.lat, meetupCoords.lng);
+      }
+
+      // Safety check: rides table REQUIRES start_coords
+      if (!startCoords) {
+        throw new Error(
+          rideType === 'meetup'
+            ? 'A meetup location pin is required.'
+            : 'A route or GPX file is required to provide the mandatory start coordinates.'
+        );
+      }
+
       // Build ride dates — one date for single, multiple for series
       const dates: Date[] = isRecurring
         ? generateSeriesDates(scheduledStart, frequency, selectedDays, occurrenceCount)
@@ -276,14 +306,18 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
         return {
           id:              rideId,
           name:            rideName,
-          type:            'scheduled',
+          type:            rideType,
           status:          'created',
           scheduled_start: date.toISOString(),
           external_url:    externalUrl.trim() || null,
-          gpx_path:        gpxPath,
+          gpx_path:        rideType === 'meetup' ? null : gpxPath,
           thumbnail_url:   thumbnailUrl,
           start_coords:    startCoords,
-          finish_coords:   finishCoords,
+          start_label:     rideType === 'meetup'
+                             ? (meetupLabel.trim() || 'Meetup')
+                             : (startCoords ? 'Start' : null),
+          finish_coords:   rideType === 'meetup' ? null : finishCoords,
+          finish_label:    (rideType !== 'meetup' && finishCoords) ? 'Finish' : null,
           qr_code:         qrCode,
           series_id:       seriesId,
           tenant_id:       TENANT_ID,
@@ -545,6 +579,134 @@ function RouteUploader({
 }
 
 // ---------------------------------------------------------------------------
+// Shared style constant (used by sub-components and main form)
+// ---------------------------------------------------------------------------
+
+const INPUT_CLASS =
+  'w-full bg-surface-container-lowest border border-outline-variant/30 rounded-md px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors';
+
+// ---------------------------------------------------------------------------
+// MeetupLocationPicker — inline Google Maps picker with Places Autocomplete
+// ---------------------------------------------------------------------------
+
+interface MeetupLocationPickerProps {
+  coords:         { lat: number; lng: number } | null;
+  label:          string;
+  onCoordsChange: (c: { lat: number; lng: number }) => void;
+  onLabelChange:  (l: string) => void;
+}
+
+function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
+  const mapDivRef       = useRef<HTMLDivElement>(null);
+  const mapRef          = useRef<google.maps.Map | null>(null);
+  const markerRef       = useRef<google.maps.Marker | null>(null);
+  const acInputRef      = useRef<HTMLInputElement>(null);
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  // Initialize map + Places Autocomplete on mount
+  useEffect(() => {
+    if (!mapDivRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
+      await importLibrary('marker');
+      const { Autocomplete, AutocompleteSessionToken } =
+        await importLibrary('places') as google.maps.PlacesLibrary;
+
+      if (cancelled || !mapDivRef.current) return;
+
+      const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 }; // Toronto
+      const map = new Map(mapDivRef.current, {
+        center: defaultCenter,
+        zoom:   coords ? 15 : 11,
+        styles: veloModernStyle,
+        disableDefaultUI: true,
+        zoomControl: true,
+      });
+      mapRef.current = map;
+
+      const marker = new google.maps.Marker({
+        map,
+        position:  defaultCenter,
+        draggable: true,
+        visible:   !!coords,
+      });
+      markerRef.current = marker;
+
+      map.addListener('click', (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        marker.setPosition(e.latLng);
+        marker.setVisible(true);
+        onCoordsChange(pos);
+      });
+
+      marker.addListener('dragend', (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        onCoordsChange({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+      });
+
+      if (acInputRef.current) {
+        sessionTokenRef.current = new AutocompleteSessionToken();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ac = new Autocomplete(acInputRef.current as any);
+        ac.addListener('place_changed', () => {
+          const place = ac.getPlace();
+          if (!place.geometry?.location) return;
+          const pos = {
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng(),
+          };
+          map.panTo(pos);
+          map.setZoom(16);
+          marker.setPosition(pos);
+          marker.setVisible(true);
+          onCoordsChange(pos);
+          if (!label && place.name) onLabelChange(place.name);
+          // Rotate session token after each completed session (billing best practice)
+          sessionTokenRef.current = new AutocompleteSessionToken();
+        });
+      }
+
+      setIsMapReady(true);
+    })();
+
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync externally-set coords into map (e.g. GPX auto-populate for Route Rides)
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current || !markerRef.current || !coords) return;
+    mapRef.current.panTo(coords);
+    mapRef.current.setZoom(16);
+    markerRef.current.setPosition(coords);
+    markerRef.current.setVisible(true);
+  }, [isMapReady, coords?.lat, coords?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={acInputRef}
+        type="text"
+        placeholder="Search for a location…"
+        className={INPUT_CLASS}
+      />
+      <div
+        ref={mapDivRef}
+        className="w-full h-[200px] rounded-xl overflow-hidden border border-outline-variant/20"
+      />
+      <p className="font-label text-[9px] text-on-surface-variant/50">
+        {coords
+          ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} · Click map or drag pin to adjust`
+          : 'Search above or click the map to drop a pin'}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -572,6 +734,11 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const [selectedRoute, setSelectedRoute] = useState<RouteRow | null>(null);
   const [pendingFile, setPendingFile]     = useState<File | null>(null);
 
+  // ── Ride type + meetup location state ───────────────────────────────────
+  const [rideType, setRideType]         = useState<RideType>('route');
+  const [meetupLabel, setMeetupLabel]   = useState('');
+  const [meetupCoords, setMeetupCoords] = useState<{ lat: number; lng: number } | null>(null);
+
   // ── Recurring state ──────────────────────────────────────────────────────
   const [isRecurring, setIsRecurring]       = useState(false);
   const [frequency, setFrequency]           = useState<Frequency>('weekly');
@@ -586,6 +753,27 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       setSelectedDays([ourDay]);
     }
   }, [scheduledStart]);
+
+  // Auto-populate meetup pin from GPX start coords (Route Rides only)
+  useEffect(() => {
+    if (rideType !== 'route') return;
+    if (!selectedRoute && !pendingFile) return;
+
+    (async () => {
+      let parsed: ReturnType<typeof parseGPXCoords> | null = null;
+      if (selectedRoute) {
+        const { data: gpxBlob } = await supabase.storage
+          .from('gpx-routes')
+          .download(selectedRoute.file_path);
+        if (gpxBlob) parsed = parseGPXCoords(await gpxBlob.text());
+      } else if (pendingFile) {
+        parsed = parseGPXCoords(await pendingFile.text());
+      }
+      if (parsed?.start) {
+        setMeetupCoords({ lat: parsed.start.lat, lng: parsed.start.lon });
+      }
+    })();
+  }, [selectedRoute, pendingFile, rideType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const seriesDates = isRecurring && scheduledStart
     ? generateSeriesDates(scheduledStart, frequency, selectedDays, occurrenceCount)
@@ -628,6 +816,9 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       setFrequency('weekly');
       setSelectedDays([]);
       setOccurrenceCount(8);
+      setRideType('route');
+      setMeetupLabel('');
+      setMeetupCoords(null);
     } else {
       setEditValues({ ...EMPTY_EDIT, ...initialValues });
     }
@@ -641,7 +832,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const handleSubmitCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile, isRecurring, frequency, selectedDays, occurrenceCount });
+    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile, isRecurring, frequency, selectedDays, occurrenceCount, rideType, meetupLabel, meetupCoords });
   };
 
   const handleSubmitEdit = (e: React.FormEvent) => {
@@ -674,10 +865,10 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
           <div className="px-6 py-5 border-b border-surface-container-low flex justify-between items-center">
             <div>
               <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-0.5">
-                {mode === 'create' ? 'New Scheduled Ride' : 'Edit Ride'}
+                {mode === 'create' ? (rideType === 'meetup' ? 'New Meetup Ride' : 'New Route Ride') : 'Edit Ride'}
               </span>
               <h2 className="font-headline font-bold text-lg text-on-background">
-                {mode === 'create' ? 'Schedule a Ride' : 'Update Ride Details'}
+                {mode === 'create' ? (rideType === 'meetup' ? 'Plan a Meetup' : 'Schedule a Ride') : 'Update Ride Details'}
               </h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-surface-container-high rounded-full transition-colors">
@@ -710,6 +901,55 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   value={scheduledStart}
                   onChange={e => setScheduledStart(e.target.value)}
                   className={inputClass}
+                />
+              </div>
+
+              {/* Ride Type Toggle */}
+              <div>
+                <label className={labelClass}>Ride Type</label>
+                <div className="flex gap-2">
+                  {(['route', 'meetup'] as RideType[]).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => {
+                        setRideType(t);
+                        if (t === 'meetup') { setSelectedRoute(null); setPendingFile(null); }
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg font-label text-[9px] uppercase tracking-widest transition-all ${
+                        rideType === t
+                          ? 'bg-primary text-on-primary shadow-sm'
+                          : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'
+                      }`}
+                    >
+                      {t === 'route' ? 'Route Ride' : 'Meetup Ride'}
+                    </button>
+                  ))}
+                </div>
+                {rideType === 'meetup' && (
+                  <p className="font-body text-xs text-on-surface-variant/60 mt-1.5">
+                    No GPX required — group decides the route at the start.
+                  </p>
+                )}
+              </div>
+
+              {/* Meetup Location */}
+              <div>
+                <label className={labelClass}>
+                  Meetup Location{rideType === 'meetup' ? ' *' : ''}
+                </label>
+                <input
+                  type="text"
+                  value={meetupLabel}
+                  onChange={e => setMeetupLabel(e.target.value)}
+                  placeholder="e.g. Snug Harbour, 2214 Bloor St W"
+                  className={`${inputClass} mb-2`}
+                />
+                <MeetupLocationPicker
+                  coords={meetupCoords}
+                  label={meetupLabel}
+                  onCoordsChange={setMeetupCoords}
+                  onLabelChange={setMeetupLabel}
                 />
               </div>
 
@@ -811,19 +1051,19 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
 
               {/* External URL */}
               <div>
-                <label className={labelClass}>Activity URL <span className="opacity-40 normal-case tracking-normal">(Garmin / Strava)</span></label>
+                <label className={labelClass}>External Link <span className="opacity-40 normal-case tracking-normal">{rideType === 'meetup' ? '(Event page / details link)' : '(Route / course link)'}</span></label>
                 <input
                   type="url"
                   value={externalUrl}
                   onChange={e => setExternalUrl(e.target.value)}
-                  placeholder="https://connect.garmin.com/…"
+                  placeholder="https://www.komoot.com/…"
                   className={inputClass}
                 />
               </div>
 
               {/* Route Section */}
-              <div>
-                <label className={labelClass}>Route</label>
+              <div className={rideType === 'meetup' ? 'opacity-30 grayscale pointer-events-none' : ''}>
+                <label className={labelClass}>Route{rideType === 'meetup' ? ' — not required for meetup' : ''}</label>
 
                 {/* Tabs */}
                 <div className="flex gap-1 bg-surface-container-low p-1 rounded-lg mb-3">
@@ -887,9 +1127,11 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               {/* Geometry note */}
               <p className="font-label text-[9px] text-on-surface-variant/50 leading-relaxed bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                 <span className="material-symbols-outlined text-[11px] align-middle mr-1">info</span>
-                {isRecurring
-                  ? `${occurrenceCount} individual ride instances will be created and added to your calendar.`
-                  : "After creating, you'll be taken to Ride Builder to set the start point, finish, and any waypoints."}
+                {rideType === 'meetup'
+                  ? 'Meetup rides gather at the pinned location. No GPX route is required — the group decides on the day.'
+                  : isRecurring
+                    ? `${occurrenceCount} individual ride instances will be created and added to your calendar.`
+                    : "After creating, you'll be taken to Ride Builder to set the start point, finish, and any waypoints."}
               </p>
 
               {/* Actions */}
@@ -903,13 +1145,13 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isPending || !name.trim()}
+                  disabled={isPending || !name.trim() || (rideType === 'meetup' && (!meetupCoords || !meetupLabel.trim()))}
                   className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">
-                    {isPending ? 'sync' : isRecurring ? 'event_repeat' : 'arrow_forward'}
+                    {isPending ? 'sync' : isRecurring ? 'event_repeat' : rideType === 'meetup' ? 'location_on' : 'arrow_forward'}
                   </span>
-                  {isPending ? 'Creating…' : isRecurring ? `Create ${occurrenceCount} Rides` : 'Create & Open Builder'}
+                  {isPending ? 'Creating…' : isRecurring ? `Create ${occurrenceCount} Rides` : rideType === 'meetup' ? 'Create Meetup' : 'Create & Open Builder'}
                 </button>
               </div>
             </form>
@@ -964,12 +1206,12 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               </div>
 
               <div>
-                <label className={labelClass}>Activity URL</label>
+                <label className={labelClass}>External Link</label>
                 <input
                   type="url"
                   value={editValues.external_url}
                   onChange={e => setEditValues(v => ({ ...v, external_url: e.target.value }))}
-                  placeholder="https://connect.garmin.com/…"
+                  placeholder="https://www.komoot.com/…"
                   className={inputClass}
                 />
               </div>

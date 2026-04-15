@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { parsePoint } from '../../lib/maps';
 import { useAppStore } from '../../store/useAppStore';
 import { useToast } from '../../store/useToast';
 
@@ -57,6 +58,8 @@ interface RideRow {
   name: string;
   scheduled_start: string;
   start_label: string | null;
+  start_coords: string | null;
+  external_url: string | null;
   thumbnail_url: string | null;
   status: 'created' | 'active' | 'saved' | 'cancelled';
   actual_end: string | null;
@@ -146,7 +149,7 @@ const RideLanding: React.FC = () => {
       if (!rideId) return null;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, thumbnail_url, status, actual_end')
+        .select('id, name, scheduled_start, start_label, start_coords, external_url, thumbnail_url, status, actual_end')
         .eq('id', rideId)
         .maybeSingle();
       if (error) throw error;
@@ -197,17 +200,25 @@ const RideLanding: React.FC = () => {
   const { data: participation } = useQuery({
     queryKey: ['my-participation', rideId],
     queryFn: async () => {
+      if (!rideId) return null;
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data } = await supabase
+      const sessionCookieId = useAppStore.getState().sessionCookieId;
+
+      const query = supabase
         .from('ride_participants')
         .select('id')
-        .eq('ride_id', rideId)
-        .eq('account_id', user.id)
-        .maybeSingle();
+        .eq('ride_id', rideId);
+
+      if (user) {
+        query.eq('account_id', user.id);
+      } else {
+        query.eq('session_cookie_id', sessionCookieId).is('account_id', null);
+      }
+
+      const { data } = await query.maybeSingle();
       return data;
     },
-    enabled: !!rideId && (ride?.status === 'created' || ride?.status === 'active') && userTier === 'affiliated',
+    enabled: !!rideId && (ride?.status === 'created' || ride?.status === 'active'),
   });
 
   // -------------------------------------------------------------------------
@@ -349,28 +360,71 @@ const RideLanding: React.FC = () => {
               <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
                 {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
               </p>
-              {ride.start_label && (
-                <p className="font-body text-xs text-on-surface-variant mt-1">
-                  <span className="material-symbols-outlined text-[12px] align-middle mr-1">location_on</span>
-                  {ride.start_label}
-                </p>
+              {ride.start_label && (() => {
+                const coords = parsePoint(ride.start_coords);
+                const mapsUrl = coords
+                  ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                  : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
+                return (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[12px]">location_on</span>
+                    {ride.start_label}
+                  </a>
+                );
+              })()}
+              {ride.external_url && (
+                <a
+                  href={ride.external_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[12px]">route</span>
+                  Route
+                </a>
               )}
             </div>
 
             {/* Action area — branches on tier */}
             {isGuest && (
-              <div className="space-y-3">
-                <p className="font-body text-sm text-on-surface-variant">
-                  Sign in to {isActive ? 'join the live ride' : 'RSVP for this ride'}.
-                </p>
-                <button
-                  onClick={() => navigate('/auth')}
-                  className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
-                >
-                  <span className="material-symbols-outlined text-lg">login</span>
-                  Sign In / Register
-                </button>
-              </div>
+              !participation ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={handleJoin}
+                    disabled={isJoining}
+                    className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-lg">
+                      {isActive ? 'play_circle' : 'event_available'}
+                    </span>
+                    {isJoining ? 'Joining…' : (isActive ? 'Join as Guest' : 'RSVP as Guest')}
+                  </button>
+                  <p className="text-center font-label text-[9px] text-on-surface-variant/60">
+                    Join now and claim your history later by <button onClick={() => navigate('/auth')} className="underline font-bold">signing in</button>.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
+                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-[10px]">
+                      {isActive ? 'Joined as Guest' : 'Guest RSVP Confirmed'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => navigate('/auth')}
+                    className="w-full bg-surface-container-high text-on-surface py-2.5 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-all"
+                  >
+                    <span className="material-symbols-outlined text-sm">login</span>
+                    Sign In to Claim History
+                  </button>
+                </div>
+              )
             )}
 
             {isInitiated && (

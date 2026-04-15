@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { useAppStore } from '../../store/useAppStore';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -19,7 +20,9 @@ const AuthPage: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         // Ensure account row exists then redirect
-        supabase.rpc('ensure_account_exists').then(() => {
+        const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
+        supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId }).then(() => {
+          setIsRideGuest(false);
           navigate('/', { replace: true });
         });
       }
@@ -35,20 +38,17 @@ const AuthPage: React.FC = () => {
     setStage('sending');
     setErrorMsg('');
 
-    const redirectTo = `${window.location.origin}/portal`;
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: redirectTo },
+    const { data, error } = await supabase.functions.invoke('send-magic-link', {
+      body: { email: email.trim().toLowerCase() },
     });
 
-    if (error) {
+    if (error || (data && data.error)) {
       setStage('error');
-      setErrorMsg(error.message);
+      setErrorMsg(error?.message || data.error);
     } else {
       setStage('sent');
     }
-  };
+    };
 
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">

@@ -115,6 +115,7 @@ const CalendarGrid: React.FC = () => {
   const navigate = useNavigate();
 
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const isAdmin = useAppStore((state) => state.isAdmin);
   const { data: rides = [], isLoading } = useCalendarRides(year, month);
 
   const ridesForDay = (day: number) =>
@@ -154,13 +155,15 @@ const CalendarGrid: React.FC = () => {
             <span className="material-symbols-outlined text-on-surface-variant text-lg">chevron_right</span>
           </button>
         </div>
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95"
-        >
-          <span className="material-symbols-outlined text-lg">add_circle</span>
-          Create New Ride
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95"
+          >
+            <span className="material-symbols-outlined text-lg">add_circle</span>
+            Create New Ride
+          </button>
+        )}
       </PageHeader>
 
       {/* Calendar Grid */}

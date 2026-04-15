@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
+import { useToast } from '../../store/useToast';
 
 interface NextRide {
   id: string;
@@ -33,8 +34,45 @@ function useNextRide() {
 
 const RiderHome: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const userTier = useAppStore((s) => s.userTier);
+  const joinRide = useAppStore((s) => s.joinRide);
   const { data: nextRide, isLoading } = useNextRide();
+
+  const [isJoining, setIsJoining] = useState(false);
+
+  // Check if already joined
+  const { data: participation } = useQuery({
+    queryKey: ['my-participation', nextRide?.id],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !nextRide?.id) return null;
+      const { data } = await supabase
+        .from('ride_participants')
+        .select('id')
+        .eq('ride_id', nextRide.id)
+        .eq('account_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!nextRide?.id && userTier === 'affiliated',
+  });
+
+  const handleJoin = async () => {
+    if (!nextRide) return;
+    setIsJoining(true);
+    try {
+      await joinRide(nextRide.id);
+      addToast(nextRide.status === 'active' ? 'You have joined the ride!' : 'RSVP confirmed.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['my-participation', nextRide.id] });
+      queryClient.invalidateQueries({ queryKey: ['ride-participants', nextRide.id] });
+    } catch (e: any) {
+      addToast(`Failed to join: ${e.message}`, 'error');
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   const isGuest = userTier === 'guest';
   const isInitiated = userTier === 'initiated';
@@ -97,14 +135,31 @@ const RiderHome: React.FC = () => {
                   <p className="font-label text-[10px] text-on-surface-variant/60 italic">
                     Full RSVP access available once your membership is confirmed.
                   </p>
+                ) : participation ? (
+                  <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
+                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-[10px]">Already Joined</span>
+                  </div>
                 ) : (
-                  <button
-                    onClick={() => navigate('/calendar')}
-                    className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
-                  >
-                    <span className="material-symbols-outlined text-lg">event_available</span>
-                    View Full Calendar
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleJoin}
+                      disabled={isJoining}
+                      className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        {nextRide.status === 'active' ? 'play_circle' : 'event_available'}
+                      </span>
+                      {isJoining ? 'Processing...' : (nextRide.status === 'active' ? 'Join Ride' : 'RSVP Now')}
+                    </button>
+                    <button
+                      onClick={() => navigate('/calendar')}
+                      className="px-4 py-3 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low transition-colors"
+                      title="View Full Calendar"
+                    >
+                      <span className="material-symbols-outlined text-lg">calendar_month</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

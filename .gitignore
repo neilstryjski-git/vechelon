@@ -2,3 +2,20 @@
 .stride_auth_gemini.md
 .stride_auth_claude.md
 .stride-env-cache
+
+# Environment files
+.env
+.env.local
+.env.*.local
+admin/.env
+admin/.env.local
+
+# Scratch files
+InteractiveMap_new.tsx
+InteractiveMap_old.tsx
+board_data.json
+cleaned_tasks.json
+
+# Dependencies
+node_modules/
+package-lock.json

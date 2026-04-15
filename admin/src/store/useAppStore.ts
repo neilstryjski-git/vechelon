@@ -4,6 +4,13 @@ import { supabase } from '../lib/supabase';
 
 export type UserTier = 'guest' | 'initiated' | 'affiliated';
 export type RiderStatus = 'active' | 'stopped' | 'inactive' | 'dark';
+export type RideType = 'route' | 'adhoc' | 'meetup';
+
+export const RIDE_TYPE_LABELS: Record<RideType | string, string> = {
+  route:  'Route Ride',
+  meetup: 'Meetup Ride',
+  adhoc:  'Ad Hoc',
+};
 
 export interface Participant {
   id: string; // account_id
@@ -19,12 +26,14 @@ interface AppState {
   // UI State (Persisted)
   currentTenantId: string | null;
   isSidebarOpen: boolean;
+  sessionCookieId: string | null;
   
   // Tactical & Auth State (Non-Persisted)
   isOnline: boolean;
   isPriorityMode: boolean;
   userTier: UserTier;
   isAdmin: boolean;
+  isRideGuest: boolean;
   membershipStatus: string | null;
   activeBeacons: string[]; // participantIds
   cachedParticipants: Record<string, Participant[]>; // rideId -> participants
@@ -37,10 +46,12 @@ interface AppState {
   setSelectedParticipantId: (id: string | null) => void;
   toggleSidebar: () => void;
   setOnlineStatus: (status: boolean) => void;
+  setIsRideGuest: (status: boolean) => void;
   setTier: (tier: UserTier, status?: string | null, role?: string | null) => void;
   updateCachedParticipants: (rideId: string, participants: Participant[]) => void;
   processLocationUpdate: (rideId: string, update: Partial<Participant> & { id: string }) => void;
   runHeartbeat: (rideId: string) => void;
+  joinRide: (rideId: string) => Promise<void>;
   endRide: (rideId: string) => Promise<{ summary: string; weather: any }>;
   addActiveBeacon: (participantId: string) => void;
   removeActiveBeacon: (participantId: string) => void;
@@ -51,16 +62,19 @@ interface AppState {
  * Fulfills W23: Implement Fleet Heartbeat & Rider State Machine.
  * Fulfills W26: Implement Ride Closure logic.
  * Fulfills W35: Rider Portal state.
+ * Fulfills W59: Implement Linked History Logic (Post-Registration).
  */
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       currentTenantId: '00000000-0000-0000-0000-000000000001',
       isSidebarOpen: true,
+      sessionCookieId: null,
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       isPriorityMode: false,
       userTier: 'guest',
       isAdmin: false,
+      isRideGuest: false,
       membershipStatus: null,
       activeBeacons: [],
       cachedParticipants: {},
@@ -72,6 +86,7 @@ export const useAppStore = create<AppState>()(
       setSelectedParticipantId: (id) => set({ selectedParticipantId: id }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setOnlineStatus: (status) => set({ isOnline: status }),
+      setIsRideGuest: (status) => set({ isRideGuest: status }),
       setTier: (tier, status = null, role = null) => set({ 
         userTier: tier, 
         membershipStatus: status,
@@ -146,14 +161,54 @@ export const useAppStore = create<AppState>()(
       }),
 
       /**
+       * RSVP to a ride (affiliates the user with the ride instance).
+       * Fulfills Pillar 2 / Section 10.5.
+       * Fulfills W64: Anonymous Join (No Auth).
+       */
+      joinRide: async (rideId) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const sessionCookieId = useAppStore.getState().sessionCookieId;
+        
+        let accountId = user?.id || null;
+        let displayName = 'Guest Rider';
+        let phone = null;
+
+        if (user) {
+          const { data: account } = await supabase
+            .from('accounts')
+            .select('name, phone')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          displayName = account?.name || user.email?.split('@')[0] || 'Member';
+          phone = account?.phone;
+        } else {
+          // If not logged in, we set the guest flag for W63 history conversion
+          set({ isRideGuest: true });
+        }
+
+        const { error } = await supabase
+          .from('ride_participants')
+          .insert({
+            ride_id: rideId,
+            account_id: accountId,
+            display_name: displayName,
+            phone: phone,
+            role: 'member',
+            status: 'rsvpd',
+            session_cookie_id: sessionCookieId
+          });
+
+        if (error) throw error;
+      },
+
+      /**
        * Finalize a ride, capture metadata, and fetch AI summary.
        * Fulfills W26: Implement Ride Closure logic.
        */
       endRide: async (rideId) => {
-        // 1. Capture final coordinates (lat/long from browser)
         const coords = await new Promise<GeolocationPosition>((resolve) => {
           navigator.geolocation.getCurrentPosition(resolve, () => {
-            // Fallback if permission denied
             resolve({ coords: { latitude: 0, longitude: 0 } } as any);
           });
         });
@@ -161,7 +216,6 @@ export const useAppStore = create<AppState>()(
         const lat = coords.coords.latitude;
         const long = coords.coords.longitude;
 
-        // 2. Update DB Status to 'saved'
         const { error: updateError } = await supabase
           .from('rides')
           .update({ 
@@ -173,7 +227,6 @@ export const useAppStore = create<AppState>()(
 
         if (updateError) throw updateError;
 
-        // 3. Trigger AI Summary Edge Function
         const { data, error: functionError } = await supabase.functions.invoke('generate-ride-summary', {
           body: { rideId }
         });
@@ -203,8 +256,16 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'vechelon-admin-storage-v2',
+      onRehydrateStorage: () => (state) => {
+        // Initialize sessionCookieId if missing after rehydration
+        if (state && !state.sessionCookieId) {
+          state.sessionCookieId = crypto.randomUUID();
+        }
+      },
       partialize: (state) => ({ 
         isSidebarOpen: state.isSidebarOpen,
+        sessionCookieId: state.sessionCookieId,
+        isRideGuest: state.isRideGuest,
       }),
     }
   )

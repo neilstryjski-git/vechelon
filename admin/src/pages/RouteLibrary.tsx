@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
 import { getStaticMapUrl } from '../lib/maps';
 import { useToast } from '../store/useToast';
+import { useAppStore } from '../store/useAppStore';
 import Modal from '../components/Modal';
 import PageHeader from '../components/PageHeader';
 
@@ -168,7 +169,7 @@ function SkeletonCard() {
 }
 
 function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRow) => void }) {
-  const isAdmin = true; // DEV BYPASS
+  const isAdmin = useAppStore((state) => state.isAdmin);
   const date = new Date(route.created_at).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
@@ -353,7 +354,7 @@ const RouteLibrary: React.FC = () => {
   const { data: routes = [], isLoading }               = useRoutes();
   const { mutate: upload, isPending }                  = useUploadRoute();
   const { mutate: deleteRoute }                        = useDeleteRoute();
-  const isAdmin = true; // DEV BYPASS
+  const isAdmin = useAppStore((state) => state.isAdmin);
 
   const [search, setSearch]           = useState('');
 

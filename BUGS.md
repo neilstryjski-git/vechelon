@@ -18,4 +18,7 @@
 | **D4** (Vercel Deployment) | Switched output directory to `dist_production` to resolve folder collision/missing folder errors in Vercel. | 2026-04-12 |
 | **P1** (Proxy Hang) | Fixed `createSafeProxy` in `supabase.ts` to correctly handle `then` property, preventing indefinite hangs when environment variables are missing. | 2026-04-13 |
 | **P2** (Prod Build Sync) | Rebuilt admin portal with correct environment variables and synchronized `public/` and `dist_production/` to ensure working deployment. | 2026-04-13 |
+| **W61** (GPX Extraction Bridge) | Implemented robust GPX coordinate extraction in RideFormModal, ensured coordinates and labels are passed to and persisted in RideBuilder, and improved map fit-bounds behavior. | 2026-04-14 |
+| **W63** (Resend SMTP Integration) | Wired up Resend as transactional email provider for Edge Functions (e.g. member invitations) to ensure professional branding and deliverability. | 2026-04-15 |
+| **W64** (Anonymous Join) | Enabled unauthenticated "Join as Guest" functionality in `RideLanding` using persisted `sessionCookieId`. | 2026-04-15 |
 

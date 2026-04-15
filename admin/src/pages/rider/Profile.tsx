@@ -83,14 +83,15 @@ const Profile: React.FC = () => {
       if (uploadErr) throw uploadErr;
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const versionedUrl = `${publicUrl}?v=${Date.now()}`;
 
       const { error: updateErr } = await supabase
         .from('accounts')
-        .update({ avatar_url: publicUrl })
+        .update({ avatar_url: versionedUrl })
         .eq('id', session.user.id);
       if (updateErr) throw updateErr;
 
-      return publicUrl;
+      return versionedUrl;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-profile'] });

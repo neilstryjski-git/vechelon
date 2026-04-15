@@ -74,10 +74,20 @@ const RideBuilder: React.FC = () => {
       const initialMarkers: Waypoint[] = [];
       
       const start = parsePoint(ride.start_coords);
-      if (start) initialMarkers.push({ id: 'start', ...start, label: 'Start', type: 'start' });
+      if (start) initialMarkers.push({ 
+        id: 'start', 
+        ...start, 
+        label: ride.start_label || 'Start', 
+        type: 'start' 
+      });
 
       const finish = parsePoint(ride.finish_coords);
-      if (finish) initialMarkers.push({ id: 'finish', ...finish, label: 'Finish', type: 'finish' });
+      if (finish) initialMarkers.push({ 
+        id: 'finish', 
+        ...finish, 
+        label: ride.finish_label || 'Finish', 
+        type: 'finish' 
+      });
 
       ride.waypoints?.forEach((w: any) => {
         const p = parsePoint(w.coords);
@@ -97,7 +107,7 @@ const RideBuilder: React.FC = () => {
     const newWaypoint: Waypoint = {
       id: crypto.randomUUID(),
       ...pos,
-      label: 'New Waypoint',
+      label: `Waypoint ${markers.filter(m => m.type === 'waypoint').length + 1}`,
       type: 'waypoint'
     };
     setMarkers(prev => [...prev, newWaypoint]);
@@ -138,7 +148,9 @@ const RideBuilder: React.FC = () => {
         .from('rides')
         .update({
           start_coords: start ? formatPoint(start) : null,
+          start_label:  start?.label || null,
           finish_coords: finish ? formatPoint(finish) : null,
+          finish_label:  finish?.label || null,
         })
         .eq('id', rideId);
       if (rideError) throw rideError;

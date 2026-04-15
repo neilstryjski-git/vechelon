@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
@@ -69,6 +70,22 @@ function useTotalMembersCount() {
   });
 }
 
+function useRideParticipants(rideId: string | null) {
+  return useQuery({
+    queryKey: ['ride-participants', rideId],
+    queryFn: async () => {
+      if (!rideId) return [];
+      const { data, error } = await supabase
+        .from('ride_participants')
+        .select('id, display_name, role, status, last_location')
+        .eq('ride_id', rideId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!rideId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -97,32 +114,40 @@ function StatCard({ label, value, isLoading }: {
 // ---------------------------------------------------------------------------
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const setSelectedParticipantId = useAppStore((state) => state.setSelectedParticipantId);
   const selectedRideId    = useAppStore((state) => state.selectedRideId);
+  const activeBeacons     = useAppStore((state) => state.activeBeacons);
+  const isAdmin           = useAppStore((state) => state.isAdmin);
+  const isRideGuest       = useAppStore((state) => state.isRideGuest);
+  const userTier          = useAppStore((state) => state.userTier);
+  
   const { data: activeRidesCount, isLoading: loadingCount } = useActiveRidesCount();
   const { data: upcomingRides,    isLoading: loadingUpcoming } = useUpcomingRidesCount();
   const { data: totalMembers,     isLoading: loadingMembers } = useTotalMembersCount();
   const { data: activeRidesList } = useActiveRides();
 
-  // Fetch gpx_path for the selected ride (may not be in the active list)
+  const primaryRideId = selectedRideId || activeRidesList?.[0]?.id || null;
+  const { data: participants = [] } = useRideParticipants(primaryRideId);
+
+  // Fetch gpx_path for the selected ride
   const { data: selectedRideData } = useQuery({
-    queryKey: ['ride-gpx-path', selectedRideId],
+    queryKey: ['ride-gpx-path', primaryRideId],
     queryFn: async () => {
       const { data } = await supabase
         .from('rides')
         .select('gpx_path')
-        .eq('id', selectedRideId!)
+        .eq('id', primaryRideId!)
         .single();
       return data;
     },
-    enabled: !!selectedRideId,
+    enabled: !!primaryRideId,
   });
 
   const [mapPoints, setMapPoints] = useState<any[]>([]);
 
-  const gpxPath = selectedRideId
-    ? selectedRideData?.gpx_path
-    : activeRidesList?.[0]?.gpx_path;
+  const gpxPath = selectedRideData?.gpx_path || activeRidesList?.[0]?.gpx_path;
 
   useEffect(() => {
     if (gpxPath) {
@@ -131,6 +156,21 @@ const Dashboard: React.FC = () => {
       setMapPoints([]);
     }
   }, [gpxPath]);
+
+  // Convert participants to markers
+  const participantMarkers = participants.map((p: any) => {
+    if (!p.last_location) return null;
+    const match = p.last_location.match(/\((.*),(.*)\)/);
+    if (!match) return null;
+    
+    return {
+      id: p.id,
+      position: { lat: parseFloat(match[2]), lng: parseFloat(match[1]) },
+      label: p.display_name,
+      type: 'rider' as const,
+      alert: activeBeacons.includes(p.id)
+    };
+  }).filter(Boolean);
 
   return (
     <div className="space-y-10">
@@ -148,6 +188,24 @@ const Dashboard: React.FC = () => {
         </div>
       </PageHeader>
 
+      {/* Guest Conversion Card */}
+      {userTier === 'guest' && isRideGuest && (
+        <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="space-y-2 text-center md:text-left">
+            <h3 className="font-headline font-bold text-xl text-on-background">Claim your ride history</h3>
+            <p className="font-body text-sm text-on-surface-variant max-w-md">
+              You've joined tactical sessions as a guest. Create a permanent account to preserve your pings, routes, and club achievements.
+            </p>
+          </div>
+          <button 
+            onClick={() => navigate('/auth')}
+            className="signature-gradient text-on-primary px-8 py-3 rounded-md font-headline font-bold shadow-lg hover:opacity-90 transition-all active:scale-95 whitespace-nowrap"
+          >
+            Create Account
+          </button>
+        </div>
+      )}
+
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard label="Active Rides"       value={activeRidesCount ?? 0} isLoading={loadingCount}   />
@@ -156,78 +214,86 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Tactical Testing Area (Mounting the End Ride Button) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-2' : ''} gap-8`}>
         
         {/* Active Rides Tactical Control */}
-        <section className="space-y-4">
-          <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
-            Tactical Session Control
-          </h3>
-          <div className="space-y-4">
-            {activeRidesList && activeRidesList.length > 0 ? (
-              activeRidesList.map((ride: any) => (
-                <div 
-                  key={ride.id} 
-                  onClick={() => setSelectedRideId(ride.id)}
-                  className="bg-surface-container-lowest overflow-hidden rounded-2xl shadow-ambient border border-surface-container-low/50 flex flex-col md:flex-row cursor-pointer hover:bg-surface-container-low transition-colors group"
-                >
-                  {/* Thumbnail */}
-                  <div className="w-full md:w-48 h-32 bg-surface-container-high shrink-0">
-                    {ride.thumbnail_url ? (
-                      <img 
-                        src={ride.thumbnail_url} 
-                        alt={ride.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="material-symbols-outlined text-on-surface-variant/30">map</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-6 flex-1 flex flex-col justify-between">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-headline font-bold text-lg text-on-background line-clamp-1">{ride.name}</h4>
-                        {ride.external_url && (
-                          <a 
-                            href={ride.external_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-primary mt-1"
-                          >
-                            Activity Link <span className="material-symbols-outlined text-[10px]">open_in_new</span>
-                          </a>
-                        )}
-                      </div>
-                      <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Active</span>
+        {isAdmin && (
+          <section className="space-y-4">
+            <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
+              Tactical Session Control
+            </h3>
+            <div className="space-y-4">
+              {activeRidesList && activeRidesList.length > 0 ? (
+                activeRidesList.map((ride: any) => (
+                  <div 
+                    key={ride.id} 
+                    onClick={() => setSelectedRideId(ride.id)}
+                    className={`bg-surface-container-lowest overflow-hidden rounded-2xl shadow-ambient border flex flex-col md:flex-row cursor-pointer transition-all group ${
+                      primaryRideId === ride.id ? 'border-primary ring-1 ring-primary/20 bg-surface-container-low' : 'border-surface-container-low/50 hover:bg-surface-container-low'
+                    }`}
+                  >
+                    {/* Thumbnail */}
+                    <div className="w-full md:w-48 h-32 bg-surface-container-high shrink-0">
+                      {ride.thumbnail_url ? (
+                        <img 
+                          src={ride.thumbnail_url} 
+                          alt={ride.name} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="material-symbols-outlined text-on-surface-variant/30">map</span>
+                        </div>
+                      )}
                     </div>
-                    <EndRideButton rideId={ride.id} />
+
+                    <div className="p-6 flex-1 flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-headline font-bold text-lg text-on-background line-clamp-1">{ride.name}</h4>
+                          {ride.external_url && (
+                            <a 
+                              href={ride.external_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-primary mt-1"
+                            >
+                              Activity Link <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                            </a>
+                          )}
+                        </div>
+                        <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Active</span>
+                      </div>
+                      <EndRideButton rideId={ride.id} />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-ambient border border-surface-container-low/50 min-h-[200px] flex flex-col justify-center text-center space-y-4">
+                  <p className="font-body text-sm text-on-surface-variant opacity-60 italic">
+                    No active tactical sessions detected.
+                  </p>
+                  <div className="pt-4 opacity-30 grayscale pointer-events-none">
+                     <EndRideButton rideId="test-mock-id" />
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-ambient border border-surface-container-low/50 min-h-[200px] flex flex-col justify-center text-center space-y-4">
-                <p className="font-body text-sm text-on-surface-variant opacity-60 italic">
-                  No active tactical sessions detected.
-                </p>
-                <div className="pt-4 opacity-30 grayscale pointer-events-none">
-                   <EndRideButton rideId="test-mock-id" />
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Live Tactical Intelligence (Interactive Map) */}
         <section className="space-y-4">
           <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
             Live Tactical Intelligence
           </h3>
-          <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-[400px] relative">
-            {gpxPath ? (
-              <InteractiveMap points={mapPoints} />
+          <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-[400px] relative font-label">
+            {primaryRideId ? (
+              <InteractiveMap 
+                points={mapPoints} 
+                markers={participantMarkers as any}
+                onMarkerClick={(id) => setSelectedParticipantId(id)}
+              />
             ) : (
               <div className="p-12 text-center my-auto opacity-40">
                 <p className="font-label text-sm text-on-surface-variant tracking-tight">

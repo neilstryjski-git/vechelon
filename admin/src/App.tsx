@@ -66,6 +66,19 @@ const queryClient = new QueryClient({
   },
 });
 
+function ClubSettings() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-6">
+      <span className="material-symbols-outlined text-5xl text-primary/30">settings</span>
+      <h1 className="font-headline font-black text-2xl tracking-tighter text-on-background uppercase">Club Settings</h1>
+      <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Coming Soon</p>
+      <p className="font-body text-sm text-on-surface-variant/70 max-w-sm">
+        Branding, membership tiers, notification preferences, and integrations will be configurable here.
+      </p>
+    </div>
+  );
+}
+
 /** Renders Dashboard for admins, RiderHome for everyone else. */
 function SmartHome() {
   const isAdmin = useAppStore((s) => s.isAdmin);
@@ -97,7 +110,7 @@ function AppContent() {
       
       const fetchPromise = supabase
         .from('tenants')
-        .select('primary_color, accent_color, logo_url')
+        .select('primary_color, accent_color, logo_url, name')
         .limit(1)
         .maybeSingle();
 
@@ -154,6 +167,7 @@ function AppContent() {
           <Route path="builder/:rideId" element={<RideBuilder />} />
           <Route path="members"   element={<Members />}          />
           <Route path="profile"   element={<Profile />}          />
+          <Route path="settings"  element={<ClubSettings />}    />
           <Route path="ride/:rideId" element={<RideLanding />}  />
 
           {/* Catch-all */}

@@ -77,22 +77,51 @@ export const fetchGpxPoints = async (filePath: string) => {
 };
 
 /**
- * Parses a Supabase POINT string '(x,y)' into a {lat, lng} object.
+ * Generates a Google Static Maps URL centred on a single pin location.
+ * Used for meetup ride thumbnails and any ride without a GPX polyline.
+ * Zoom 16 gives approximately 200m of context around the pin.
+ */
+export const getStaticMapPinUrl = (lat: number, lng: number, options: { width?: number; height?: number } = {}) => {
+  const { width = 600, height = 300 } = options;
+
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=${width}x${height}&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+};
+
+/**
+ * Parses a Supabase POINT string '(x,y)' or object {x, y} into a {lat, lng} object.
  * Note: Supabase POINT stores as (lon, lat) usually, following (x, y) convention.
  */
-export const parsePoint = (pointStr: string | null) => {
-  if (!pointStr) return null;
-  const match = pointStr.match(/\((.*),(.*)\)/);
-  if (!match) return null;
-  return {
-    lng: parseFloat(match[1]),
-    lat: parseFloat(match[2]),
-  };
+export const parsePoint = (point: string | { x?: number; y?: number; lat?: number; lng?: number; lon?: number } | null | undefined) => {
+  if (!point) return null;
+  
+  // Handle string format '(lng,lat)'
+  if (typeof point === 'string') {
+    const match = point.match(/\((.*),(.*)\)/);
+    if (!match) return null;
+    return {
+      lng: parseFloat(match[1]),
+      lat: parseFloat(match[2]),
+    };
+  }
+  
+  // Handle object format {x, y} or {lon, lat}
+  const lng = point.x ?? point.lon ?? point.lng;
+  const lat = point.y ?? point.lat;
+  
+  if (typeof lng === 'number' && typeof lat === 'number') {
+    return { lat, lng };
+  }
+  
+  return null;
 };
 
 /**
  * Formats a {lat, lng} object into a Supabase POINT string '(lon,lat)'.
  */
 export const formatPoint = (coords: { lat: number; lng: number }) => {
+  if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return null;
   return `(${coords.lng},${coords.lat})`;
 };

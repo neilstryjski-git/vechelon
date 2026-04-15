@@ -142,6 +142,7 @@ const Members: React.FC = () => {
   const [activeTab, setActiveTab]       = useState<ActiveTab>('all');
   const [showInvite, setShowInvite]     = useState(false);
   const [inviteEmail, setInviteEmail]   = useState('');
+  const [inviteRole, setInviteRole]     = useState<'member' | 'admin'>('member');
   const { addToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -194,15 +195,16 @@ const Members: React.FC = () => {
   // -------------------------------------------------------------------------
 
   const { mutate: sendInvite, isPending: isSending } = useMutation({
-    mutationFn: async (email: string) => {
+    mutationFn: async ({ email, role }: { email: string; role: 'member' | 'admin' }) => {
       const { error } = await supabase.functions.invoke('invite-member', {
-        body: { email },
+        body: { email, role },
       });
       if (error) throw error;
     },
-    onSuccess: (_, email) => {
-      addToast(`Invitation sent to ${email}`, 'success');
+    onSuccess: (_, { email, role }) => {
+      addToast(`Invitation sent to ${email} as ${role}`, 'success');
       setInviteEmail('');
+      setInviteRole('member');
       setShowInvite(false);
       queryClient.invalidateQueries({ queryKey: ['members'] });
     },
@@ -214,7 +216,7 @@ const Members: React.FC = () => {
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
-    sendInvite(inviteEmail.trim());
+    sendInvite({ email: inviteEmail.trim(), role: inviteRole });
   };
 
   // -------------------------------------------------------------------------
@@ -269,22 +271,47 @@ const Members: React.FC = () => {
           onSubmit={handleInviteSubmit}
           className="bg-surface-container-low rounded-xl p-6 flex items-end gap-4 border border-outline-variant/20"
         >
-          <div className="flex-1">
-            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-              Rider Email Address
-            </label>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="rider@example.com"
-              required
-              autoFocus
-              className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
-            />
-            <p className="font-label text-[10px] text-on-surface-variant/60 mt-2">
-              They'll receive a branded invite email. Their account is created as Validated — they can ride immediately.
-            </p>
+          <div className="flex-1 space-y-3">
+            <div>
+              <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+                Rider Email Address
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="rider@example.com"
+                required
+                autoFocus
+                className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+              />
+            </div>
+            <div>
+              <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+                Role
+              </label>
+              <div className="flex gap-2">
+                {(['member', 'admin'] as const).map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setInviteRole(r)}
+                    className={`px-4 py-2 rounded-lg font-label text-[10px] uppercase tracking-widest transition-colors ${
+                      inviteRole === r
+                        ? 'bg-on-background text-background'
+                        : 'border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <p className="font-label text-[10px] text-on-surface-variant/60 mt-2">
+                {inviteRole === 'admin'
+                  ? 'Admin can manage rides, members, and club settings.'
+                  : 'Member can view rides and RSVP. Their account is created as Validated.'}
+              </p>
+            </div>
           </div>
           <div className="flex gap-2 shrink-0">
             <button

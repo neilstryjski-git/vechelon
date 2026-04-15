@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
+import { importLibrary } from '../lib/mapsLoader';
+import { veloModernStyle } from '../lib/mapStyles';
 
 interface Coordinate {
   lat: number;
@@ -12,6 +13,7 @@ interface MarkerData {
   label?: string;
   draggable?: boolean;
   type?: 'start' | 'finish' | 'waypoint' | 'rider';
+  alert?: boolean;
 }
 
 interface InteractiveMapProps {
@@ -30,11 +32,15 @@ interface InteractiveMapProps {
 
 const ICON_BASE = 'https://maps.google.com/mapfiles/ms/icons/';
 
-function markerIcon(type: MarkerData['type'], focused: boolean) {
-  const color = type === 'start' ? 'green' : type === 'finish' ? 'red' : 'blue';
+function markerIcon(type: MarkerData['type'], alert: boolean, focused: boolean) {
+  let color = 'blue';
+  if (type === 'start') color = 'green';
+  if (type === 'finish') color = 'red';
+  if (type === 'rider') color = alert ? 'orange' : 'yellow';
+  
   return {
     url: focused
-      ? `${ICON_BASE}yellow-dot.png`
+      ? `${ICON_BASE}pink-dot.png` 
       : `${ICON_BASE}${color}-dot.png`,
     scaledSize: new google.maps.Size(focused ? 44 : 32, focused ? 44 : 32),
   };
@@ -60,31 +66,16 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const markersRef = useRef<Record<string, google.maps.Marker>>({});
 
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    console.log('[Vechelon] Map API Key detected:', apiKey ? 'YES (starts with ' + apiKey.substring(0, 4) + ')' : 'NO');
-    
-    if (!apiKey) {
-      setLoaderError("Google Maps API Key Missing");
-      return;
-    }
-
-    setOptions({
-      key: apiKey,
-      version: "weekly"
-    } as any);
-
     const initMap = async () => {
       try {
-        console.log('[Vechelon] Importing Google Maps library...');
         const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
-        console.log('[Vechelon] Maps library imported successfully.');
-        // Marker library is often needed for newer features
         await importLibrary('marker');
         
         if (mapRef.current && !map) {
           const newMap = new Map(mapRef.current, {
             center,
             zoom,
+            styles: veloModernStyle,
             disableDefaultUI: true,
             zoomControl: true,
             mapTypeControl: false,
@@ -135,7 +126,24 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     return () => polyline.setMap(null);
   }, [isLoaded, map, points, pathColor]);
 
-  // Sync Markers + highlight focused
+  // Fit bounds to markers if no points are provided
+  useEffect(() => {
+    if (!isLoaded || !map || points.length > 0 || markers.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    markers.forEach(m => bounds.extend(m.position));
+    map.fitBounds(bounds);
+    
+    // If only one marker, zoom out a bit after fitting
+    if (markers.length === 1) {
+      const listener = google.maps.event.addListener(map, 'idle', () => {
+        map.setZoom(15);
+        google.maps.event.removeListener(listener);
+      });
+    }
+  }, [isLoaded, map, points.length, markers]);
+
+  // Sync Markers + highlight focused + pulse alerts
   useEffect(() => {
     if (!isLoaded || !map) return;
 
@@ -153,16 +161,18 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
       if (marker) {
         marker.setPosition(m.position);
-        marker.setIcon(markerIcon(m.type, focused));
-        marker.setZIndex(focused ? 10 : 1);
+        marker.setIcon(markerIcon(m.type, !!m.alert, focused));
+        marker.setZIndex(focused || m.alert ? 10 : 1);
+        marker.setAnimation(m.alert ? google.maps.Animation.BOUNCE : null);
       } else {
         marker = new google.maps.Marker({
           position:  m.position,
           map,
           title:     m.label,
           draggable: m.draggable && !readOnly,
-          icon:      markerIcon(m.type, focused),
-          zIndex:    focused ? 10 : 1,
+          icon:      markerIcon(m.type, !!m.alert, focused),
+          zIndex:    focused || m.alert ? 10 : 1,
+          animation: m.alert ? google.maps.Animation.BOUNCE : null,
         });
 
         marker.addListener('click', () => {
@@ -199,9 +209,6 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         <p className="text-[10px] uppercase tracking-widest font-bold">Interactive Map Load Error</p>
         <p className="text-[9px] mt-2 max-w-[200px] leading-relaxed opacity-70">
           {loaderError}
-        </p>
-        <p className="text-[8px] mt-2 opacity-50 uppercase tracking-tighter">
-          Check API Key Restrictions and enabled Services
         </p>
       </div>
     );

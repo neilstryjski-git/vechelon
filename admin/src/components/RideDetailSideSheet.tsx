@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import QRCode from 'qrcode';
 import { supabase } from '../lib/supabase';
+import { parsePoint } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
-import { parsePoint } from '../lib/maps';
-import RideFormModal from './RideFormModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,12 +26,8 @@ interface RideDetail {
   scheduled_start: string;
   start_label: string | null;
   finish_label: string | null;
-  type: 'scheduled' | 'adhoc';
-  qr_code: string | null;
   external_url: string | null;
-  gpx_path: string | null;
   start_coords: string | null;
-  finish_coords: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,20 +36,33 @@ interface RideDetail {
 
 const RideDetailSideSheet: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const selectedRideId = useAppStore((state) => state.selectedRideId);
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const isAdmin = useAppStore((state) => state.isAdmin);
+  const userTier = useAppStore((state) => state.userTier);
+  const joinRide = useAppStore((state) => state.joinRide);
+
+  const [isJoining, setIsJoining] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const isOpen = !!selectedRideId;
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const { addToast } = useToast();
 
   const close = () => setSelectedRideId(null);
 
-  const formatCoord = (pointStr: string | null) => {
-    const p = parsePoint(pointStr);
-    if (!p) return null;
-    return `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
-  };
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRideId) { setQrDataUrl(null); return; }
+    const url = `${window.location.origin}/portal/ride/${selectedRideId}`;
+    QRCode.toDataURL(url, { width: 160, margin: 1, color: { dark: '#1c1c1c', light: '#fafafa' } })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
+  }, [selectedRideId]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -71,7 +80,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null as any;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, type, qr_code, external_url, gpx_path, start_coords, finish_coords')
+        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, start_coords')
         .eq('id', selectedRideId)
         .single();
       if (error) throw error;
@@ -94,51 +103,55 @@ const RideDetailSideSheet: React.FC = () => {
     enabled: !!selectedRideId,
   });
 
-  const JOIN_BASE = import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.app';
-  const joinUrl = ride ? `${JOIN_BASE}/join/${ride.id}` : '';
+  const hasJoined = participants.some(p => p.id === currentUser?.id);
 
-  const isLoop = (() => {
-    const s = parsePoint(ride?.start_coords ?? null);
-    const f = parsePoint(ride?.finish_coords ?? null);
-    if (!s || !f) return false;
-    return Math.abs(s.lat - f.lat) < 0.0005 && Math.abs(s.lng - f.lng) < 0.0005;
-  })();
-
-  const downloadGpx = async () => {
-    if (!ride?.gpx_path) return;
-    const { data, error } = await supabase.storage.from('gpx-routes').download(ride.gpx_path);
-    if (error || !data) { addToast('GPX download failed.', 'error'); return; }
-    const url = URL.createObjectURL(data);
-    const a   = document.createElement('a');
-    a.href     = url;
-    a.download = `${ride.name.replace(/\s+/g, '_')}.gpx`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleJoin = async () => {
+    if (!selectedRideId) return;
+    setIsJoining(true);
+    try {
+      await joinRide(selectedRideId);
+      addToast(ride?.status === 'active' ? 'Joined tactical session.' : 'RSVP confirmed.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['ride-participants', selectedRideId] });
+      queryClient.invalidateQueries({ queryKey: ['my-participation', selectedRideId] });
+    } catch (e: any) {
+      addToast(`Failed to join: ${e.message}`, 'error');
+    } finally {
+      setIsJoining(false);
+    }
   };
 
-  const copyWhatsAppSummary = async () => {
+  const handleCopyBroadcast = async () => {
     if (!ride) return;
-    const dateStr = ride.scheduled_start
-      ? new Date(ride.scheduled_start).toLocaleString('en-GB', {
-          weekday: 'long', day: 'numeric', month: 'long',
-          year: 'numeric', hour: '2-digit', minute: '2-digit',
-        })
-      : 'TBC';
-    const text = [
-      `*${ride.name}*`,
+
+    const dt = new Date(ride.scheduled_start);
+    const dateStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    const coords = parsePoint(ride.start_coords);
+    const mapsUrl = coords
+      ? `https://maps.google.com/maps?q=${coords.lat},${coords.lng}`
+      : null;
+
+    const meetupLines = ride.start_label && mapsUrl
+      ? [`📍 ${ride.start_label}`, mapsUrl]
+      : ride.start_label
+        ? [`📍 ${ride.start_label}`]
+        : [];
+
+    const lines = [
+      ride.name,
       '',
-      `Date: ${dateStr}`,
-      `Start: ${ride.start_label || 'TBC'}`,
-      `Finish: ${ride.finish_label || 'TBC'}`,
-      `Riders: ${participants.length}`,
-      '',
-      `Join link: ${joinUrl}`,
-    ].join('\n');
+      `📅 ${dateStr} · ${timeStr}`,
+      ...(meetupLines.length ? ['', ...meetupLines] : []),
+      ...(ride.external_url ? [`🔗 Route: ${ride.external_url}`] : []),
+      `🔵 Details: https://vechelon.app/ride/${ride.id}`,
+    ];
+
     try {
-      await navigator.clipboard.writeText(text);
-      addToast('WhatsApp summary copied to clipboard.', 'success');
+      await navigator.clipboard.writeText(lines.join('\n'));
+      addToast('Copied!', 'success');
     } catch {
-      addToast('Clipboard access denied.', 'error');
+      addToast('Could not access clipboard', 'error');
     }
   };
 
@@ -211,43 +224,27 @@ const RideDetailSideSheet: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Start Point</span>
-                    {ride.start_label ? (
-                      <p className="font-body text-sm font-medium text-on-background truncate">{ride.start_label}</p>
-                    ) : formatCoord(ride.start_coords) ? (
-                      <p className="font-label text-[10px] text-on-surface-variant tabular-nums">{formatCoord(ride.start_coords)}</p>
-                    ) : (
-                      <p className="font-body text-sm text-on-surface-variant/40 italic">Not set</p>
-                    )}
+                    <p className="font-body text-sm font-medium text-on-background truncate">
+                      {ride.start_label || 'Default Start'}
+                    </p>
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Finish Point</span>
-                    {isLoop ? (
-                      <p className="font-body text-sm font-medium text-on-background">Loop Ride</p>
-                    ) : ride.finish_label ? (
-                      <p className="font-body text-sm font-medium text-on-background truncate">{ride.finish_label}</p>
-                    ) : formatCoord(ride.finish_coords) ? (
-                      <p className="font-label text-[10px] text-on-surface-variant tabular-nums">{formatCoord(ride.finish_coords)}</p>
-                    ) : (
-                      <p className="font-body text-sm text-on-surface-variant/40 italic">Not set</p>
-                    )}
+                    <p className="font-body text-sm font-medium text-on-background truncate">
+                      {ride.finish_label || 'Default Finish'}
+                    </p>
                   </div>
                 </div>
               </div>
 
               {/* QR Code */}
-              {ride.qr_code && (
-                <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10 flex flex-col items-center gap-3">
-                  <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant">
-                    Ride QR — Join Link
-                  </span>
-                  <img
-                    src={ride.qr_code}
-                    alt="Ride QR Code"
-                    className="w-32 h-32 rounded-lg"
-                  />
-                  <span className="font-label text-[9px] text-on-surface-variant/60 break-all text-center">
-                    {joinUrl}
-                  </span>
+              {qrDataUrl && (
+                <div className="flex items-center gap-4 bg-surface-container-low rounded-xl p-4 border border-outline-variant/10">
+                  <img src={qrDataUrl} alt="Ride QR Code" className="w-20 h-20 rounded-lg shrink-0" />
+                  <div>
+                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Scan to Join</p>
+                    <p className="font-body text-xs text-on-surface-variant/70">Share this ride with your group — opens the rider landing page.</p>
+                  </div>
                 </div>
               )}
 
@@ -294,73 +291,62 @@ const RideDetailSideSheet: React.FC = () => {
 
               {/* Action */}
               <div className="pt-4 space-y-3">
-                <button
+                {userTier === 'affiliated' && !hasJoined && (
+                  <button 
+                    onClick={handleJoin}
+                    disabled={isJoining}
+                    className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 mb-2"
+                  >
+                    <span className="material-symbols-outlined">
+                      {ride?.status === 'active' ? 'play_circle' : 'event_available'}
+                    </span>
+                    {isJoining ? 'Processing...' : (ride?.status === 'active' ? 'Join This Ride' : 'RSVP to Ride')}
+                  </button>
+                )}
+
+                {hasJoined && (
+                  <div className="flex items-center justify-center gap-2 py-4 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 mb-2">
+                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-xs">RSVP Confirmed</span>
+                  </div>
+                )}
+
+                <button 
                   className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98]"
-                  onClick={() => navigate('/')}
+                  onClick={() => {
+                    close();
+                    navigate('/');
+                  }}
                 >
                   <span className="material-symbols-outlined">map</span>
                   View on Tactical HUD
                 </button>
 
                 <button
-                  onClick={() => setIsEditOpen(true)}
                   className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                  Edit Ride Details
-                </button>
-
-                <button
-                  onClick={copyWhatsAppSummary}
-                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                  onClick={handleCopyBroadcast}
                 >
                   <span className="material-symbols-outlined text-sm">content_copy</span>
-                  Copy WhatsApp Summary
+                  Copy Broadcast
                 </button>
 
-                {ride.gpx_path && (
+                {isAdmin && (
                   <button
-                    onClick={downloadGpx}
                     className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={() => {
+                      close();
+                      navigate(`/builder/${selectedRideId}`);
+                    }}
                   >
-                    <span className="material-symbols-outlined text-sm">download</span>
-                    Download GPX
+                    <span className="material-symbols-outlined text-sm">edit_location_alt</span>
+                    Customize Geometry
                   </button>
                 )}
-
-                <button
-                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                  onClick={() => {
-                    close();
-                    navigate(`/builder/${selectedRideId}`);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-sm">edit_location_alt</span>
-                  Customize Geometry
-                </button>
               </div>
             </>
           )}
         </div>
       </aside>
-
-      {ride && (
-        <RideFormModal
-          mode="edit"
-          rideId={ride.id}
-          isOpen={isEditOpen}
-          onClose={() => setIsEditOpen(false)}
-          initialValues={{
-            name:            ride.name,
-            scheduled_start: ride.scheduled_start
-              ? new Date(ride.scheduled_start).toISOString().slice(0, 16)
-              : '',
-            start_label:     ride.start_label  ?? '',
-            finish_label:    ride.finish_label ?? '',
-            external_url:    ride.external_url ?? '',
-          }}
-        />
-      )}
     </>
   );
 };

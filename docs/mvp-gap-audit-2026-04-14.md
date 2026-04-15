@@ -151,7 +151,7 @@ The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a l
 | R2 | RSVP Handshake (Join button) | FAILED | ✅ RESOLVED — Gemini wired RiderHome |
 | R3 | Profile → Admin Triage Sheet | PARTIAL | ✅ RESOLVED — DB trigger added |
 | G1 | Magic Link Registration | VERIFIED | ✅ VERIFIED |
-| G2 | History Conversion (cookie → account) | FAILED | FAILED — W63 in Gemini queue |
+| G2 | History Conversion (cookie → account) | PASSED | ✅ RESOLVED — W63 complete |
 
 ---
 
@@ -161,11 +161,11 @@ The current QR points to `https://vechelon.app/join/{rideId}`, which assumes a l
 |----------|----------|--------|--------|-------|
 | 🔴 Now | Selective Purge — phone scrub | PARTIAL | Trivial (1 line) | Claude |
 | 🟠 Soon | QR → Pre-Ride RSVP landing page (I) | MISSING | Medium | Claude |
-| 🟠 Soon | 1-Tap Guest Join / W64 (A) | FAILED | Medium | Claude |
+| 🟠 Soon | 1-Tap Guest Join / W64 (A) | PASSED | Medium | Gemini W64 |
 | 🟡 Milestone | Captain Eviction UI (D) | FAILED | Medium | Claude |
 | 🟡 Milestone | Google Link Resolver (B) | FAILED | Medium-High | Gemini |
 | 🟡 Milestone | GPX → Builder Handoff | PARTIAL | Medium | Gemini W62 |
-| 🟡 Milestone | History Conversion | FAILED | Medium | Gemini W63 |
+| 🟡 Milestone | History Conversion | PASSED | Medium | Gemini W63 |
 | 🔵 Phase II | Support Vehicle Beacon (E) | FAILED | Medium | Either |
 
 ---
