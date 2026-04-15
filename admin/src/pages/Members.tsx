@@ -66,13 +66,14 @@ interface MemberRow {
 //     When I view the "Pending" tab
 //     Then I see "— No pending applications —"
 //
-//   Scenario: Admin invites a new member
+//   Scenario: Admin invites a new member (auto-affiliated)
 //     Given I am authenticated as a tenant admin
 //     When I click "Invite Member" and enter a valid email
-//     Then a magic link is sent to that email
-//     And when the recipient clicks the link, their account is created at 'initiated' status
-//     And they appear in the Pending tab awaiting affiliation
-//     If the email already has an account, they receive a sign-in link instead
+//     Then a branded invite email is sent via the invite-member edge function
+//     And the recipient's account is pre-created at 'affiliated' status
+//     And when the recipient clicks the link they land directly in the portal
+//     And they can RSVP to rides immediately — no approval step required
+//     If the email already belongs to a member, they are promoted to affiliated
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -194,10 +195,8 @@ const Members: React.FC = () => {
 
   const { mutate: sendInvite, isPending: isSending } = useMutation({
     mutationFn: async (email: string) => {
-      const redirectTo = `${window.location.origin}/portal`;
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: redirectTo },
+      const { error } = await supabase.functions.invoke('invite-member', {
+        body: { email },
       });
       if (error) throw error;
     },
@@ -205,6 +204,7 @@ const Members: React.FC = () => {
       addToast(`Invitation sent to ${email}`, 'success');
       setInviteEmail('');
       setShowInvite(false);
+      queryClient.invalidateQueries({ queryKey: ['members'] });
     },
     onError: (e: any) => {
       addToast(`Failed to send invite: ${e.message}`, 'error');
@@ -283,7 +283,7 @@ const Members: React.FC = () => {
               className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
             />
             <p className="font-label text-[10px] text-on-surface-variant/60 mt-2">
-              They'll receive a magic link. Their account will be created at Pending status — you'll approve it here.
+              They'll receive a branded invite email. Their account is created as Validated — they can ride immediately.
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
