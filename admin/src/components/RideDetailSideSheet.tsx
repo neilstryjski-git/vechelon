@@ -29,6 +29,8 @@ interface RideDetail {
   finish_label: string | null;
   external_url: string | null;
   start_coords: string | null;
+  meetup_coords: string | null;
+  meetup_label: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +115,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null as any;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, start_coords')
+        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, start_coords, meetup_coords, meetup_label')
         .eq('id', selectedRideId)
         .single();
       if (error) throw error;
@@ -160,15 +162,17 @@ const RideDetailSideSheet: React.FC = () => {
     const dateStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    const coords = parsePoint(ride.start_coords);
-    const mapsUrl = coords
-      ? `https://maps.google.com/maps?q=${coords.lat},${coords.lng}`
+    // Use meetup_coords/meetup_label if available, fall back to start_coords/start_label for legacy rides
+    const meetupPoint = parsePoint(ride.meetup_coords ?? ride.start_coords);
+    const meetupName  = ride.meetup_label ?? ride.start_label;
+    const mapsUrl = meetupPoint
+      ? `https://maps.google.com/maps?q=${meetupPoint.lat},${meetupPoint.lng}`
       : null;
 
-    const meetupLines = ride.start_label && mapsUrl
-      ? [`📍 ${ride.start_label}`, mapsUrl]
-      : ride.start_label
-        ? [`📍 ${ride.start_label}`]
+    const meetupLines = meetupName && mapsUrl
+      ? [`📍 ${meetupName}`, mapsUrl]
+      : meetupName
+        ? [`📍 ${meetupName}`]
         : [];
 
     const lines = [
@@ -281,6 +285,12 @@ const RideDetailSideSheet: React.FC = () => {
                     <p className="font-body text-sm font-medium text-on-background truncate">
                       {ride.start_label || 'Default Start'}
                     </p>
+                    {ride.meetup_label && ride.meetup_label !== ride.start_label && (
+                      <div className="mt-2">
+                        <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Meetup Point</span>
+                        <p className="font-body text-sm font-medium text-on-background truncate">{ride.meetup_label}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Finish Point</span>

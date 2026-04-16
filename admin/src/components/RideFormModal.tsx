@@ -318,6 +318,8 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
                              : (startCoords ? 'Start' : null),
           finish_coords:   rideType === 'meetup' ? null : finishCoords,
           finish_label:    (rideType !== 'meetup' && finishCoords) ? 'Finish' : null,
+          meetup_coords:   meetupCoords ? formatPoint(meetupCoords) : startCoords,
+          meetup_label:    meetupLabel.trim() || (rideType === 'meetup' ? 'Meetup' : 'Start'),
           qr_code:         qrCode,
           series_id:       seriesId,
           tenant_id:       TENANT_ID,
@@ -929,10 +931,73 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 )}
               </div>
 
-              {/* Meetup Location */}
+              {/* Route Section — route rides only */}
+              {rideType !== 'meetup' && (
+                <div>
+                  <label className={labelClass}>Route *</label>
+
+                  <div className="flex gap-1 bg-surface-container-low p-1 rounded-lg mb-3">
+                    {(['library', 'upload'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setRouteTab(tab)}
+                        className={`flex-1 py-1.5 rounded-md font-label text-[9px] uppercase tracking-widest transition-all ${
+                          routeTab === tab
+                            ? 'bg-surface-container-lowest text-on-background shadow-sm'
+                            : 'text-on-surface-variant hover:text-on-background'
+                        }`}
+                      >
+                        {tab === 'library' ? 'From Library' : 'Upload GPX'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {routeTab === 'library' ? (
+                    <RoutePickerLibrary
+                      routes={routes}
+                      selectedId={selectedRoute?.id ?? null}
+                      onSelect={r => { setSelectedRoute(r); setPendingFile(null); }}
+                    />
+                  ) : (
+                    <RouteUploader
+                      routes={routes}
+                      onRouteReady={({ file, duplicate }) => {
+                        if (duplicate) {
+                          handleUseExistingFromDuplicate(duplicate);
+                        } else {
+                          setPendingFile(file);
+                          setSelectedRoute(null);
+                        }
+                      }}
+                    />
+                  )}
+
+                  {selectedRoute && (
+                    <div className="mt-3 flex items-center gap-3 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
+                      {selectedRoute.thumbnail_url && (
+                        <img src={selectedRoute.thumbnail_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-body text-xs font-semibold text-on-background truncate">{selectedRoute.name}</p>
+                        <p className="font-label text-[9px] text-primary uppercase tracking-widest">Route selected</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRoute(null)}
+                        className="p-1 hover:bg-surface-container-high rounded-full transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-on-surface-variant text-sm">close</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Meetup Location — all ride types */}
               <div>
                 <label className={labelClass}>
-                  Meetup Location{rideType === 'meetup' ? ' *' : ''}
+                  Meetup Location{rideType === 'meetup' ? ' *' : ' (optional override)'}
                 </label>
                 <input
                   type="text"
@@ -947,6 +1012,11 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   onCoordsChange={setMeetupCoords}
                   onLabelChange={setMeetupLabel}
                 />
+                {rideType === 'route' && !meetupCoords && (
+                  <p className="font-body text-xs text-on-surface-variant/60 mt-1.5">
+                    Auto-populated from GPX start when a route is selected.
+                  </p>
+                )}
               </div>
 
               {/* Recurring Ride Toggle */}
@@ -1057,69 +1127,6 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 />
               </div>
 
-              {/* Route Section */}
-              <div className={rideType === 'meetup' ? 'opacity-30 grayscale pointer-events-none' : ''}>
-                <label className={labelClass}>Route{rideType === 'meetup' ? ' — not required for meetup' : ''}</label>
-
-                {/* Tabs */}
-                <div className="flex gap-1 bg-surface-container-low p-1 rounded-lg mb-3">
-                  {(['library', 'upload'] as const).map(tab => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setRouteTab(tab)}
-                      className={`flex-1 py-1.5 rounded-md font-label text-[9px] uppercase tracking-widest transition-all ${
-                        routeTab === tab
-                          ? 'bg-surface-container-lowest text-on-background shadow-sm'
-                          : 'text-on-surface-variant hover:text-on-background'
-                      }`}
-                    >
-                      {tab === 'library' ? 'From Library' : 'Upload GPX'}
-                    </button>
-                  ))}
-                </div>
-
-                {routeTab === 'library' ? (
-                  <RoutePickerLibrary
-                    routes={routes}
-                    selectedId={selectedRoute?.id ?? null}
-                    onSelect={r => { setSelectedRoute(r); setPendingFile(null); }}
-                  />
-                ) : (
-                  <RouteUploader
-                    routes={routes}
-                    onRouteReady={({ file, duplicate }) => {
-                      if (duplicate) {
-                        handleUseExistingFromDuplicate(duplicate);
-                      } else {
-                        setPendingFile(file);
-                        setSelectedRoute(null);
-                      }
-                    }}
-                  />
-                )}
-
-                {/* Selected route summary */}
-                {selectedRoute && (
-                  <div className="mt-3 flex items-center gap-3 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
-                    {selectedRoute.thumbnail_url && (
-                      <img src={selectedRoute.thumbnail_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-body text-xs font-semibold text-on-background truncate">{selectedRoute.name}</p>
-                      <p className="font-label text-[9px] text-primary uppercase tracking-widest">Route selected</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRoute(null)}
-                      className="p-1 hover:bg-surface-container-high rounded-full transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-on-surface-variant text-sm">close</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* Geometry note */}
               <p className="font-label text-[9px] text-on-surface-variant/50 leading-relaxed bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
                 <span className="material-symbols-outlined text-[11px] align-middle mr-1">info</span>
@@ -1127,7 +1134,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   ? 'Meetup rides gather at the pinned location. No GPX route is required — the group decides on the day.'
                   : isRecurring
                     ? `${occurrenceCount} individual ride instances will be created and added to your calendar.`
-                    : "After creating, you'll be taken to Ride Builder to set the start point, finish, and any waypoints."}
+                    : "After creating, you'll be taken to Ride Builder to fine-tune start, finish, and waypoints."}
               </p>
 
               {/* Actions */}
