@@ -13,7 +13,7 @@ import { veloModernStyle } from '../lib/mapStyles';
 // Constants
 // ---------------------------------------------------------------------------
 
-const JOIN_BASE = import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.app';
+const JOIN_BASE = import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca';
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const USER_ID   = '00000000-0000-0000-0000-00000000000a';
 
@@ -301,7 +301,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       // Build all rows (generating a QR per instance)
       const rows = await Promise.all(dates.map(async (date) => {
         const rideId  = crypto.randomUUID();
-        const joinUrl = `${JOIN_BASE}/join/${rideId}`;
+        const joinUrl = `${JOIN_BASE}/portal/ride/${rideId}`;
         const qrCode  = await generateQRWithLogo(joinUrl);
         return {
           id:              rideId,

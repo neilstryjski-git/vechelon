@@ -40,7 +40,7 @@ export const parseGPXCoords = (gpxString: string) => {
 export const generateRideQR = async (rideId: string) => {
   try {
     // URL structure for guest join: [domain]/join/[rideId]
-    const joinUrl = `${window.location.origin}/join/${rideId}`;
+    const joinUrl = `${window.location.origin}/portal/ride/${rideId}`;
     const qrDataUrl = await QRCode.toDataURL(joinUrl, {
       width: 400,
       margin: 2,
