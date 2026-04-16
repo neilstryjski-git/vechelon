@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
@@ -112,7 +111,7 @@ const CalendarGrid: React.FC = () => {
   const cells = getCalendarCells(year, month);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const navigate = useNavigate();
+
 
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
   const isAdmin = useAppStore((state) => state.isAdmin);
