@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
-import { fetchGpxPoints } from '../lib/maps';
+import { fetchGpxPoints, parsePoint } from '../lib/maps';
 import InteractiveMap from '../components/InteractiveMap';
 import EndRideButton from '../components/EndRideButton';
 import PageHeader from '../components/PageHeader';
@@ -131,13 +131,13 @@ const Dashboard: React.FC = () => {
   const primaryRideId = selectedRideId || activeRidesList?.[0]?.id || null;
   const { data: participants = [] } = useRideParticipants(primaryRideId);
 
-  // Fetch gpx_path for the selected ride
+  // Fetch route + location data for the selected ride
   const { data: selectedRideData } = useQuery({
     queryKey: ['ride-gpx-path', primaryRideId],
     queryFn: async () => {
       const { data } = await supabase
         .from('rides')
-        .select('gpx_path')
+        .select('gpx_path, meetup_coords, meetup_label, start_coords, start_label')
         .eq('id', primaryRideId!)
         .single();
       return data;
@@ -165,7 +165,7 @@ const Dashboard: React.FC = () => {
     if (!p.last_location) return null;
     const match = p.last_location.match(/\((.*),(.*)\)/);
     if (!match) return null;
-    
+
     return {
       id: p.id,
       position: { lat: parseFloat(match[2]), lng: parseFloat(match[1]) },
@@ -174,6 +174,24 @@ const Dashboard: React.FC = () => {
       alert: activeBeacons.includes(p.id)
     };
   }).filter(Boolean);
+
+  // Build meetup/start marker for the selected ride so the map always shows something
+  const meetupMarker = (() => {
+    if (!selectedRideData || !primaryRideId) return null;
+    const coords = parsePoint(selectedRideData.meetup_coords ?? selectedRideData.start_coords);
+    if (!coords) return null;
+    return {
+      id: `meetup-${primaryRideId}`,
+      position: coords,
+      label: selectedRideData.meetup_label ?? selectedRideData.start_label ?? 'Meetup',
+      type: 'start' as const,
+    };
+  })();
+
+  const allMarkers = [
+    ...(meetupMarker ? [meetupMarker] : []),
+    ...(participantMarkers as any[]),
+  ];
 
   return (
     <div className="space-y-10">
@@ -292,9 +310,9 @@ const Dashboard: React.FC = () => {
           </h3>
           <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-[400px] relative font-label">
             {primaryRideId ? (
-              <InteractiveMap 
-                points={mapPoints} 
-                markers={participantMarkers as any}
+              <InteractiveMap
+                points={mapPoints}
+                markers={allMarkers}
                 onMarkerClick={(id) => setSelectedParticipantId(id)}
               />
             ) : (
