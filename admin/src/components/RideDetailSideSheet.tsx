@@ -192,6 +192,19 @@ const RideDetailSideSheet: React.FC = () => {
     }
   };
 
+  const handleCloseRide = async () => {
+    if (!selectedRideId) return;
+    const { error } = await supabase
+      .from('rides')
+      .update({ status: 'saved', actual_end: new Date().toISOString() })
+      .eq('id', selectedRideId);
+    if (error) { addToast(`Failed to close ride: ${error.message}`, 'error'); return; }
+    addToast('Ride closed.', 'success');
+    queryClient.invalidateQueries({ queryKey: ['ride-detail', selectedRideId] });
+    queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides'] });
+    queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides-list'] });
+  };
+
   const handleDelete = async () => {
     if (!selectedRideId) return;
     const { error } = await supabase.from('rides').delete().eq('id', selectedRideId);
@@ -410,6 +423,15 @@ const RideDetailSideSheet: React.FC = () => {
                       <span className="material-symbols-outlined text-sm">delete</span>
                       Delete Ride
                     </button>
+                    {ride?.status === 'active' && (
+                      <button
+                        onClick={handleCloseRide}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg font-label text-[10px] uppercase tracking-widest border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-sm">flag</span>
+                        Close Ride
+                      </button>
+                    )}
                   </>
                 )}
               </div>

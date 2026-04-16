@@ -147,15 +147,18 @@ const Dashboard: React.FC = () => {
 
   const [mapPoints, setMapPoints] = useState<any[]>([]);
 
-  const gpxPath = selectedRideData?.gpx_path || activeRidesList?.[0]?.gpx_path;
-
   useEffect(() => {
+    if (!selectedRideData) {
+      setMapPoints([]);
+      return;
+    }
+    const gpxPath = selectedRideData.gpx_path;
     if (gpxPath) {
       fetchGpxPoints(gpxPath).then(setMapPoints).catch(console.error);
     } else {
       setMapPoints([]);
     }
-  }, [gpxPath]);
+  }, [selectedRideData]);
 
   // Convert participants to markers
   const participantMarkers = participants.map((p: any) => {
