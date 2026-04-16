@@ -842,11 +842,9 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
         const dt = scheduledStart ? new Date(scheduledStart) : new Date();
         const dateStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
         const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-        const meetupValue = meetupLabel.trim()
-          ? meetupCoords
-            ? `${meetupLabel.trim()} — https://maps.google.com/maps?q=${meetupCoords.lat},${meetupCoords.lng}`
-            : meetupLabel.trim()
-          : '—';
+        const meetupValue = meetupCoords
+          ? `${meetupLabel.trim() || 'Start'} — https://maps.google.com/maps?q=${meetupCoords.lat},${meetupCoords.lng}`
+          : meetupLabel.trim() || '—';
         const broadcast = [
           `*${name.trim()}*`,
           `Date/Time: ${dateStr} · ${timeStr}`,
