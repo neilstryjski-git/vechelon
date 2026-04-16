@@ -174,7 +174,7 @@ const RideDetailSideSheet: React.FC = () => {
       ? `${meetupName} — ${mapsUrl}`
       : meetupName ?? '—';
     return [
-      ride.name,
+      `*${ride.name}*`,
       `Date/Time: ${dateStr} · ${timeStr}`,
       `Meeting Place: ${meetupValue}`,
       `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
