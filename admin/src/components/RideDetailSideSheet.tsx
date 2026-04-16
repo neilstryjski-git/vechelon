@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
@@ -54,8 +54,6 @@ const RideDetailSideSheet: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [broadcastDraft, setBroadcastDraft] = useState<string | null>(null);
-  const broadcastRef = useRef<HTMLTextAreaElement>(null);
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
@@ -185,28 +183,14 @@ const RideDetailSideSheet: React.FC = () => {
     ].join('\n');
   };
 
-  const handleOpenBroadcast = () => {
-    setBroadcastDraft(buildBroadcastText());
-  };
-
   const handleCopyBroadcast = async () => {
-    const text = broadcastDraft ?? buildBroadcastText();
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(buildBroadcastText());
       addToast('Copied!', 'success');
-      setBroadcastDraft(null);
     } catch {
       addToast('Could not access clipboard', 'error');
     }
   };
-
-  useEffect(() => {
-    if (broadcastDraft !== null && broadcastRef.current) {
-      const el = broadcastRef.current;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
-  }, [broadcastDraft]);
 
   const handleCloseRide = async () => {
     if (!selectedRideId) return;
@@ -417,40 +401,13 @@ const RideDetailSideSheet: React.FC = () => {
                   View on Tactical HUD
                 </button>
 
-                {broadcastDraft !== null ? (
-                  <div className="space-y-2">
-                    <textarea
-                      ref={broadcastRef}
-                      value={broadcastDraft}
-                      onChange={(e) => setBroadcastDraft(e.target.value)}
-                      rows={7}
-                      className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl p-3 font-body text-sm text-on-background resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        className="flex-1 bg-surface-container-high text-on-surface-variant py-2 rounded-xl font-label text-[10px] uppercase tracking-widest hover:bg-surface-container-highest transition-colors"
-                        onClick={() => setBroadcastDraft(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="flex-1 bg-primary text-on-primary py-2 rounded-xl font-label text-[10px] uppercase tracking-widest hover:opacity-90 transition-colors flex items-center justify-center gap-1"
-                        onClick={handleCopyBroadcast}
-                      >
-                        <span className="material-symbols-outlined text-sm">content_copy</span>
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                    onClick={handleOpenBroadcast}
-                  >
-                    <span className="material-symbols-outlined text-sm">content_copy</span>
-                    Copy Broadcast
-                  </button>
-                )}
+                <button
+                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                  onClick={handleCopyBroadcast}
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                  Copy Broadcast
+                </button>
 
                 {isAdmin && (
                   <>
