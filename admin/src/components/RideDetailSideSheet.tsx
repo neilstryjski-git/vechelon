@@ -175,17 +175,11 @@ const RideDetailSideSheet: React.FC = () => {
       ? `${meetupName} — ${mapsUrl}`
       : meetupName ?? '—';
 
-    // If meetup differs from GPX start, show both meeting place and start line
-    const meetupDiffersFromStart = ride.meetup_label && ride.start_label && ride.meetup_label !== ride.start_label;
-    const startLine = meetupDiffersFromStart
-      ? `Start: ${ride.external_url ? `${ride.start_label} — ${ride.external_url}` : ride.start_label}`
-      : null;
-
     return [
       `*${ride.name}*`,
       `Date/Time: ${dateStr} · ${timeStr}`,
-      `Meeting Place: ${meetupValue}`,
-      ...(startLine ? [startLine] : []),
+      ...(ride.external_url ? [`Route: ${ride.external_url}`] : []),
+      `Meetup: ${meetupValue}`,
       `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
       '',
     ].join('\n');
