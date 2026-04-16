@@ -65,6 +65,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [loaderError, setLoaderError] = useState<string | null>(null);
   const markersRef = useRef<Record<string, google.maps.Marker>>({});
+  // Keep a stable ref so the map click listener always calls the latest handler
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   useEffect(() => {
     const initMap = async () => {
@@ -86,10 +89,10 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             fullscreenControl: false,
           });
 
-          if (onMapClick && !readOnly) {
+          if (!readOnly) {
             newMap.addListener('click', (e: google.maps.MapMouseEvent) => {
-              if (e.latLng) {
-                onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+              if (e.latLng && onMapClickRef.current) {
+                onMapClickRef.current({ lat: e.latLng.lat(), lng: e.latLng.lng() });
               }
             });
           }
