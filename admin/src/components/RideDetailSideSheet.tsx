@@ -180,7 +180,7 @@ const RideDetailSideSheet: React.FC = () => {
       `Date/Time: ${dateStr} · ${timeStr}`,
       ...(ride.external_url ? [`Route: ${ride.external_url}`] : []),
       `Meetup: ${meetupValue}`,
-      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
+      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/portal/ride/${ride.id}`,
       '',
     ].join('\n');
   };
