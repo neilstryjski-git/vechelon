@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
@@ -54,6 +54,8 @@ const RideDetailSideSheet: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [broadcastDraft, setBroadcastDraft] = useState<string | null>(null);
+  const broadcastRef = useRef<HTMLTextAreaElement>(null);
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
@@ -158,38 +160,50 @@ const RideDetailSideSheet: React.FC = () => {
     }
   };
 
-  const handleCopyBroadcast = async () => {
-    if (!ride) return;
-
+  const buildBroadcastText = () => {
+    if (!ride) return '';
     const dt = new Date(ride.scheduled_start);
     const dateStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-    // Use meetup_coords/meetup_label if available, fall back to start_coords/start_label for legacy rides
     const meetupPoint = parsePoint(ride.meetup_coords ?? ride.start_coords);
     const meetupName  = ride.meetup_label ?? ride.start_label;
     const mapsUrl = meetupPoint
       ? `https://maps.google.com/maps?q=${meetupPoint.lat},${meetupPoint.lng}`
       : null;
-
     const meetupValue = meetupName && mapsUrl
       ? `${meetupName} — ${mapsUrl}`
       : meetupName ?? '—';
-
-    const lines = [
+    return [
       ride.name,
       `Date/Time: ${dateStr} · ${timeStr}`,
       `Meeting Place: ${meetupValue}`,
       `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
-    ];
+      '',
+    ].join('\n');
+  };
 
+  const handleOpenBroadcast = () => {
+    setBroadcastDraft(buildBroadcastText());
+  };
+
+  const handleCopyBroadcast = async () => {
+    const text = broadcastDraft ?? buildBroadcastText();
     try {
-      await navigator.clipboard.writeText(lines.join('\n'));
+      await navigator.clipboard.writeText(text);
       addToast('Copied!', 'success');
+      setBroadcastDraft(null);
     } catch {
       addToast('Could not access clipboard', 'error');
     }
   };
+
+  useEffect(() => {
+    if (broadcastDraft !== null && broadcastRef.current) {
+      const el = broadcastRef.current;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [broadcastDraft]);
 
   const handleCloseRide = async () => {
     if (!selectedRideId) return;
@@ -400,13 +414,40 @@ const RideDetailSideSheet: React.FC = () => {
                   View on Tactical HUD
                 </button>
 
-                <button
-                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                  onClick={handleCopyBroadcast}
-                >
-                  <span className="material-symbols-outlined text-sm">content_copy</span>
-                  Copy Broadcast
-                </button>
+                {broadcastDraft !== null ? (
+                  <div className="space-y-2">
+                    <textarea
+                      ref={broadcastRef}
+                      value={broadcastDraft}
+                      onChange={(e) => setBroadcastDraft(e.target.value)}
+                      rows={7}
+                      className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl p-3 font-body text-sm text-on-background resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        className="flex-1 bg-surface-container-high text-on-surface-variant py-2 rounded-xl font-label text-[10px] uppercase tracking-widest hover:bg-surface-container-highest transition-colors"
+                        onClick={() => setBroadcastDraft(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="flex-1 bg-primary text-on-primary py-2 rounded-xl font-label text-[10px] uppercase tracking-widest hover:opacity-90 transition-colors flex items-center justify-center gap-1"
+                        onClick={handleCopyBroadcast}
+                      >
+                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={handleOpenBroadcast}
+                  >
+                    <span className="material-symbols-outlined text-sm">content_copy</span>
+                    Copy Broadcast
+                  </button>
+                )}
 
                 {isAdmin && (
                   <>
