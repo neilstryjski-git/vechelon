@@ -172,19 +172,15 @@ const RideDetailSideSheet: React.FC = () => {
       ? `https://maps.google.com/maps?q=${meetupPoint.lat},${meetupPoint.lng}`
       : null;
 
-    const meetupLines = meetupName && mapsUrl
-      ? [`📍 ${meetupName}`, mapsUrl]
-      : meetupName
-        ? [`📍 ${meetupName}`]
-        : [];
+    const meetupValue = meetupName && mapsUrl
+      ? `${meetupName} — ${mapsUrl}`
+      : meetupName ?? '—';
 
     const lines = [
       ride.name,
-      '',
-      `📅 ${dateStr} · ${timeStr}`,
-      ...(meetupLines.length ? ['', ...meetupLines] : []),
-      ...(ride.external_url ? [`🔗 Route: ${ride.external_url}`] : []),
-      `🔵 Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
+      `Date/Time: ${dateStr} · ${timeStr}`,
+      `Meeting Place: ${meetupValue}`,
+      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
     ];
 
     try {
