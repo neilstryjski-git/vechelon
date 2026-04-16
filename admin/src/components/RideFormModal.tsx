@@ -199,6 +199,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       rideType,
       meetupLabel,
       meetupCoords,
+      singleRideId,
     }: {
       name:            string;
       scheduledStart:  string;
@@ -212,6 +213,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       rideType:        RideType;
       meetupLabel:     string;
       meetupCoords:    { lat: number; lng: number } | null;
+      singleRideId?:   string;
     }) => {
       let gpxPath:      string | null = null;
       let thumbnailUrl: string | null = null;
@@ -299,8 +301,8 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       const rideName = name.trim();
 
       // Build all rows (generating a QR per instance)
-      const rows = await Promise.all(dates.map(async (date) => {
-        const rideId  = crypto.randomUUID();
+      const rows = await Promise.all(dates.map(async (date, i) => {
+        const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
         const joinUrl = `${JOIN_BASE}/portal/ride/${rideId}`;
         const qrCode  = await generateQRWithLogo(joinUrl);
         return {
@@ -336,7 +338,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
     onSuccess: (rideId) => {
       queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
-      addToast(rideId ? 'Ride scheduled.' : 'Series created and added to calendar.', 'success');
+      addToast(rideId ? 'Ride saved — broadcast copied to clipboard.' : 'Series created and added to calendar.', 'success');
       onClose?.();
       onCreated?.(rideId);
     },
@@ -830,7 +832,36 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const handleSubmitCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile, isRecurring, frequency, selectedDays, occurrenceCount, rideType, meetupLabel, meetupCoords });
+
+    // Pre-generate the ride ID so the broadcast URL is complete
+    const singleRideId = isRecurring ? undefined : crypto.randomUUID();
+
+    // Copy broadcast immediately on click (before async save) — single rides only
+    if (singleRideId) {
+      try {
+        const dt = scheduledStart ? new Date(scheduledStart) : new Date();
+        const dateStr = dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+        const timeStr = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const meetupValue = meetupLabel.trim()
+          ? meetupCoords
+            ? `${meetupLabel.trim()} — https://maps.google.com/maps?q=${meetupCoords.lat},${meetupCoords.lng}`
+            : meetupLabel.trim()
+          : '—';
+        const broadcast = [
+          `*${name.trim()}*`,
+          `Date/Time: ${dateStr} · ${timeStr}`,
+          ...(externalUrl.trim() ? [`Route: ${externalUrl.trim()}`] : []),
+          `Meetup: ${meetupValue}`,
+          `Details: ${JOIN_BASE}/portal/ride/${singleRideId}`,
+          '',
+        ].join('\n');
+        navigator.clipboard.writeText(broadcast).catch(() => {});
+      } catch {
+        // clipboard failure is non-fatal
+      }
+    }
+
+    createMutation.mutate({ name, scheduledStart, externalUrl, selectedRoute, pendingFile, isRecurring, frequency, selectedDays, occurrenceCount, rideType, meetupLabel, meetupCoords, singleRideId });
   };
 
   const handleSubmitEdit = (e: React.FormEvent) => {
