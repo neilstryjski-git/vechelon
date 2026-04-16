@@ -336,7 +336,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
     onSuccess: (rideId) => {
       queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
       queryClient.invalidateQueries({ queryKey: ['route-library'] });
-      addToast(rideId ? 'Ride scheduled. Opening builder…' : 'Series created and added to calendar.', 'success');
+      addToast(rideId ? 'Ride scheduled.' : 'Series created and added to calendar.', 'success');
       onClose?.();
       onCreated?.(rideId);
     },
