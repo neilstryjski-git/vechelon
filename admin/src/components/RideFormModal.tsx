@@ -608,8 +608,7 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
     (async () => {
       const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
       await importLibrary('marker');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { PlaceAutocompleteElement } = await importLibrary('places') as any;
+      await importLibrary('places');
 
       if (cancelled || !mapDivRef.current) return;
 
@@ -645,7 +644,9 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
       });
 
       // PlaceAutocompleteElement — Places API (New), required for projects after March 2025
-      if (acContainerRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const PlaceAutocompleteElement = (google.maps.places as any).PlaceAutocompleteElement;
+      if (acContainerRef.current && PlaceAutocompleteElement) {
         const placeAC = new PlaceAutocompleteElement();
         acContainerRef.current.appendChild(placeAC);
 
