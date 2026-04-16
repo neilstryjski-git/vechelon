@@ -181,7 +181,7 @@ const RideDetailSideSheet: React.FC = () => {
       `📅 ${dateStr} · ${timeStr}`,
       ...(meetupLines.length ? ['', ...meetupLines] : []),
       ...(ride.external_url ? [`🔗 Route: ${ride.external_url}`] : []),
-      `🔵 Details: https://vechelon.app/ride/${ride.id}`,
+      `🔵 Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/ride/${ride.id}`,
     ];
 
     try {
