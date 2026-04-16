@@ -3,7 +3,47 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../store/useToast';
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_AVATAR_BYTES  = 10 * 1024 * 1024; // 10 MB hard reject
+const TARGET_AVATAR_BYTES = 500 * 1024;     // 500 KB target after compression
+
+/** Compress any image file to a JPEG under TARGET_AVATAR_BYTES. */
+async function compressToJpeg(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      // Scale down if very large — cap longest edge at 1024 px
+      const MAX_DIM = 1024;
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        if (width > height) { height = Math.round((height / width) * MAX_DIM); width = MAX_DIM; }
+        else                { width  = Math.round((width / height) * MAX_DIM); height = MAX_DIM; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+
+      // Binary-search quality until output is under target
+      let lo = 0.1, hi = 0.92, blob: Blob | null = null;
+      const tryQuality = (q: number) =>
+        new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/jpeg', q));
+
+      (async () => {
+        for (let i = 0; i < 6; i++) {
+          const mid = (lo + hi) / 2;
+          blob = await tryQuality(mid);
+          if (blob.size <= TARGET_AVATAR_BYTES) lo = mid; else hi = mid;
+        }
+        blob = blob ?? await tryQuality(lo);
+        resolve(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
+      })().catch(reject);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
 
 interface AccountProfile {
   id: string;
@@ -69,17 +109,17 @@ const Profile: React.FC = () => {
   // Avatar upload mutation
   const { mutate: uploadAvatar, isPending: isUploading } = useMutation({
     mutationFn: async (file: File) => {
-      if (file.size > MAX_AVATAR_BYTES) throw new Error('Image must be under 2 MB');
+      if (file.size > MAX_AVATAR_BYTES) throw new Error('Image is too large (max 10 MB)');
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const ext  = file.name.split('.').pop() ?? 'jpg';
-      const path = `${session.user.id}/avatar.${ext}`;
+      const compressed = await compressToJpeg(file);
+      const path = `${session.user.id}/avatar.jpg`;
 
       const { error: uploadErr } = await supabase.storage
         .from('avatars')
-        .upload(path, file, { upsert: true, contentType: file.type });
+        .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
       if (uploadErr) throw uploadErr;
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
