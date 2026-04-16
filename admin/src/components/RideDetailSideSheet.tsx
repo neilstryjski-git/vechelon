@@ -17,6 +17,7 @@ interface ParticipantDetail {
   display_name: string;
   role: 'member' | 'captain' | 'support' | 'guest';
   status: string;
+  account_id: string | null;
 }
 
 interface RideDetail {
@@ -43,6 +44,8 @@ const RideDetailSideSheet: React.FC = () => {
   const { addToast } = useToast();
   const selectedRideId = useAppStore((state) => state.selectedRideId);
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
+  const rideSheetVisible = useAppStore((state) => state.rideSheetVisible);
+  const closeSheet = useAppStore((state) => state.closeSheet);
   const isAdmin = useAppStore((state) => state.isAdmin);
   const userTier = useAppStore((state) => state.userTier);
   const joinRide = useAppStore((state) => state.joinRide);
@@ -54,7 +57,7 @@ const RideDetailSideSheet: React.FC = () => {
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
-  const isOpen = !!selectedRideId;
+  const isOpen = rideSheetVisible && !!selectedRideId;
 
   const close = () => setSelectedRideId(null);
 
@@ -130,7 +133,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return [];
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('id, display_name, role, status')
+        .select('id, display_name, role, status, account_id')
         .eq('ride_id', selectedRideId);
       if (error) throw error;
       return data || [];
@@ -352,7 +355,9 @@ const RideDetailSideSheet: React.FC = () => {
                           </div>
                           <div>
                             <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
-                            <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">{p.role}</p>
+                            <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
+                              {!p.account_id ? 'Guest' : p.role}
+                            </p>
                           </div>
                         </div>
                         <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
@@ -391,7 +396,7 @@ const RideDetailSideSheet: React.FC = () => {
                 <button 
                   className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98]"
                   onClick={() => {
-                    close();
+                    closeSheet();
                     navigate('/');
                   }}
                 >

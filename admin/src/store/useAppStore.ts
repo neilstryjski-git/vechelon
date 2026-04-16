@@ -39,10 +39,12 @@ interface AppState {
   cachedParticipants: Record<string, Participant[]>; // rideId -> participants
   selectedRideId: string | null;
   selectedParticipantId: string | null;
-  
+  rideSheetVisible: boolean;
+
   // Actions
   setTenantId: (id: string | null) => void;
   setSelectedRideId: (id: string | null) => void;
+  closeSheet: () => void;
   setSelectedParticipantId: (id: string | null) => void;
   toggleSidebar: () => void;
   setOnlineStatus: (status: boolean) => void;
@@ -80,9 +82,11 @@ export const useAppStore = create<AppState>()(
       cachedParticipants: {},
       selectedRideId: null,
       selectedParticipantId: null,
+      rideSheetVisible: false,
 
       setTenantId: (id) => set({ currentTenantId: id }),
-      setSelectedRideId: (id) => set({ selectedRideId: id }),
+      setSelectedRideId: (id) => set({ selectedRideId: id, rideSheetVisible: id !== null }),
+      closeSheet: () => set({ rideSheetVisible: false }),
       setSelectedParticipantId: (id) => set({ selectedParticipantId: id }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setOnlineStatus: (status) => set({ isOnline: status }),
@@ -194,7 +198,7 @@ export const useAppStore = create<AppState>()(
             account_id: accountId,
             display_name: displayName,
             phone: phone,
-            role: 'member',
+            role: user ? 'member' : 'guest',
             status: 'rsvpd',
             session_cookie_id: sessionCookieId
           });
