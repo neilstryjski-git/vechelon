@@ -12,7 +12,7 @@ interface MarkerData {
   position: Coordinate;
   label?: string;
   draggable?: boolean;
-  type?: 'start' | 'finish' | 'waypoint' | 'rider';
+  type?: 'start' | 'finish' | 'waypoint' | 'rider' | 'meetup';
   alert?: boolean;
 }
 
@@ -36,6 +36,7 @@ function markerIcon(type: MarkerData['type'], alert: boolean, focused: boolean) 
   let color = 'blue';
   if (type === 'start') color = 'green';
   if (type === 'finish') color = 'red';
+  if (type === 'meetup') color = 'green';
   if (type === 'rider') color = alert ? 'orange' : 'yellow';
   
   return {

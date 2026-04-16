@@ -17,7 +17,7 @@ interface Waypoint {
   lat: number;
   lng: number;
   label: string;
-  type: 'waypoint' | 'start' | 'finish';
+  type: 'waypoint' | 'start' | 'finish' | 'meetup';
 }
 
 // ---------------------------------------------------------------------------
@@ -84,11 +84,20 @@ const RideBuilder: React.FC = () => {
       });
 
       const finish = parsePoint(ride.finish_coords);
-      if (finish) initialMarkers.push({ 
-        id: 'finish', 
-        ...finish, 
-        label: ride.finish_label || 'Finish', 
-        type: 'finish' 
+      if (finish) initialMarkers.push({
+        id: 'finish',
+        ...finish,
+        label: ride.finish_label || 'Finish',
+        type: 'finish'
+      });
+
+      // Meetup marker — falls back to start if not separately set
+      const meetup = parsePoint(ride.meetup_coords ?? ride.start_coords);
+      if (meetup) initialMarkers.push({
+        id: 'meetup',
+        ...meetup,
+        label: ride.meetup_label || 'Meetup',
+        type: 'meetup',
       });
 
       ride.waypoints?.forEach((w: any) => {
@@ -141,18 +150,21 @@ const RideBuilder: React.FC = () => {
   // 5. Save Mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const start = markers.find(m => m.type === 'start');
-      const finish = markers.find(m => m.type === 'finish');
+      const start    = markers.find(m => m.type === 'start');
+      const finish   = markers.find(m => m.type === 'finish');
+      const meetup   = markers.find(m => m.type === 'meetup');
       const waypoints = markers.filter(m => m.type === 'waypoint');
 
       // Update Ride
       const { error: rideError } = await supabase
         .from('rides')
         .update({
-          start_coords: start ? formatPoint(start) : null,
-          start_label:  start?.label || null,
+          start_coords:  start  ? formatPoint(start)  : null,
+          start_label:   start?.label  || null,
           finish_coords: finish ? formatPoint(finish) : null,
           finish_label:  finish?.label || null,
+          meetup_coords: meetup ? formatPoint(meetup) : (start ? formatPoint(start) : null),
+          meetup_label:  meetup?.label || start?.label || null,
         })
         .eq('id', rideId);
       if (rideError) throw rideError;
