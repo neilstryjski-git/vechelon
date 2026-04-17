@@ -705,10 +705,12 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
   return (
     <div className="space-y-2">
-      <div
-        ref={acContainerRef}
-        className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
-      />
+      <div className="w-full rounded-lg border border-outline-variant/30 overflow-hidden focus-within:border-primary transition-colors">
+        <div
+          ref={acContainerRef}
+          className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
+        />
+      </div>
       <div
         ref={mapDivRef}
         className="w-full h-[200px] rounded-xl overflow-hidden border border-outline-variant/20"
