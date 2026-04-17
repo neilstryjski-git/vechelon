@@ -598,25 +598,23 @@ interface MeetupLocationPickerProps {
 }
 
 function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
-  const mapDivRef      = useRef<HTMLDivElement>(null);
-  const acContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef         = useRef<google.maps.Map | null>(null);
-  const markerRef      = useRef<google.maps.Marker | null>(null);
+  const mapDivRef   = useRef<HTMLDivElement>(null);
+  const searchRef   = useRef<HTMLInputElement>(null);
+  const mapRef      = useRef<google.maps.Map | null>(null);
+  const markerRef   = useRef<google.maps.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // Initialize map + Places Autocomplete (New API) on mount
   useEffect(() => {
-    if (!mapDivRef.current) return;
-
+    if (!mapDivRef.current || !searchRef.current) return;
     let cancelled = false;
+
     (async () => {
       const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
       await importLibrary('marker');
       await importLibrary('places');
+      if (cancelled || !mapDivRef.current || !searchRef.current) return;
 
-      if (cancelled || !mapDivRef.current) return;
-
-      const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 }; // Toronto
+      const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 };
       const map = new Map(mapDivRef.current, {
         center: defaultCenter,
         zoom:   coords ? 15 : 11,
@@ -633,6 +631,22 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
       });
       markerRef.current = marker;
 
+      // Attach classic Autocomplete to the visible search input
+      const ac = new (google.maps.places as any).Autocomplete(searchRef.current, {
+        fields: ['geometry', 'name'],
+      });
+      ac.addListener('place_changed', () => {
+        const place = ac.getPlace();
+        if (!place.geometry?.location) return;
+        const pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+        map.panTo(pos);
+        map.setZoom(16);
+        marker.setPosition(pos);
+        marker.setVisible(true);
+        onCoordsChange(pos);
+        if (place.name) onLabelChange(place.name);
+      });
+
       map.addListener('click', (e: google.maps.MapMouseEvent) => {
         if (!e.latLng) return;
         const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
@@ -646,42 +660,13 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
         onCoordsChange({ lat: e.latLng.lat(), lng: e.latLng.lng() });
       });
 
-      // PlaceAutocompleteElement — Places API (New), required for projects after March 2025
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const PlaceAutocompleteElement = (google.maps.places as any).PlaceAutocompleteElement;
-      if (acContainerRef.current && PlaceAutocompleteElement) {
-        const placeAC = new PlaceAutocompleteElement();
-        acContainerRef.current.appendChild(placeAC);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        placeAC.addEventListener('gmp-placeselect', async (event: any) => {
-          // `place` lives directly on the event in most browsers; some wrap it in detail
-          const place = event.place ?? event.detail?.place;
-          if (!place) { console.warn('[MeetupPicker] gmp-placeselect fired but no place on event', event); return; }
-          await place.fetchFields({ fields: ['location', 'displayName'] });
-          const loc = place.location;
-          if (!loc) { console.warn('[MeetupPicker] place has no location after fetchFields'); return; }
-          // New Places API returns LatLng object (.lat()/.lng()) or LatLngLiteral (number props)
-          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
-          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
-          const pos = { lat, lng };
-          console.log('[MeetupPicker] place selected', place.displayName, pos);
-          map.panTo(pos);
-          map.setZoom(16);
-          marker.setPosition(pos);
-          marker.setVisible(true);
-          onCoordsChange(pos);
-          if (place.displayName) onLabelChange(place.displayName);
-        });
-      }
-
       setIsMapReady(true);
     })();
 
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync externally-set coords into map (e.g. GPX auto-populate for Route Rides)
+  // Sync externally-set coords (e.g. GPX auto-populate)
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !markerRef.current || !coords) return;
     mapRef.current.panTo(coords);
@@ -692,10 +677,12 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
   return (
     <div className="space-y-2">
-      {/* PlaceAutocompleteElement injects itself here as a Web Component */}
-      <div
-        ref={acContainerRef}
-        className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
+      <input
+        ref={searchRef}
+        type="text"
+        placeholder="Search for a location…"
+        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
       />
       <div
         ref={mapDivRef}
