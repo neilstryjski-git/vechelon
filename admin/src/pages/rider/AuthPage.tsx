@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -7,9 +7,14 @@ type Stage = 'idle' | 'sending' | 'sent' | 'error';
 
 const AuthPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [stage, setStage] = useState<Stage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Decode the click-through param set by the edge function to defeat email scanners
+  const encodedLink = searchParams.get('c');
+  const pendingLink = encodedLink ? atob(encodedLink) : null;
 
   // If already authenticated, go straight to home
   useEffect(() => {
@@ -49,6 +54,25 @@ const AuthPage: React.FC = () => {
       setStage('sent');
     }
     };
+
+  // Click-through page: user must click a button to follow the magic link.
+  // This prevents email scanners (Gmail etc.) from consuming the one-time OTP.
+  if (pendingLink) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">
+        <div className="w-full max-w-sm text-center space-y-8">
+          <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background">VECHELON</h1>
+          <p className="font-body text-sm text-on-surface-variant">Tap the button below to complete your sign-in.</p>
+          <a
+            href={pendingLink}
+            className="block w-full signature-gradient text-on-primary py-3.5 rounded-lg font-headline font-bold tracking-tight text-center hover:opacity-90 transition-all active:scale-[0.98]"
+          >
+            Enter the Portal
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">
