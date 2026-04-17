@@ -18,19 +18,36 @@ const AuthPage: React.FC = () => {
 
   // If already authenticated, go straight to home
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }: { data: any }) => {
-      if (data.session) navigate('/', { replace: true });
-    });
-
+    // Subscribe first so we never miss SIGNED_IN
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+      console.log('[Auth] onAuthStateChange', _event, session?.user?.id);
       if (session) {
-        // Ensure account row exists then redirect
         const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
         supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId }).then(() => {
           setIsRideGuest(false);
           navigate('/', { replace: true });
         });
       }
+    });
+
+    // Handle #access_token= hash from Supabase redirect after magic link click
+    const hash = window.location.hash;
+    console.log('[Auth] hash on mount:', hash.slice(0, 60));
+    if (hash.includes('access_token=')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      if (access_token && refresh_token) {
+        console.log('[Auth] calling setSession from hash');
+        supabase.auth.setSession({ access_token, refresh_token })
+          .then(({ data, error }: any) => console.log('[Auth] setSession result', data?.session?.user?.id, error));
+        return () => subscription.unsubscribe();
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }: { data: any }) => {
+      console.log('[Auth] getSession', data?.session?.user?.id);
+      if (data.session) navigate('/', { replace: true });
     });
 
     return () => subscription.unsubscribe();
