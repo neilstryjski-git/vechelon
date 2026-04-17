@@ -598,11 +598,22 @@ interface MeetupLocationPickerProps {
 }
 
 function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
-  const mapDivRef      = useRef<HTMLDivElement>(null);
-  const acContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef         = useRef<google.maps.Map | null>(null);
-  const markerRef      = useRef<google.maps.Marker | null>(null);
-  const [isMapReady, setIsMapReady] = useState(false);
+  const mapDivRef        = useRef<HTMLDivElement>(null);
+  const mapRef           = useRef<google.maps.Map | null>(null);
+  const markerRef        = useRef<google.maps.Marker | null>(null);
+  const applyLocationRef = useRef<((pos: { lat: number; lng: number }, name?: string) => void) | null>(null);
+  const sessionTokenRef  = useRef<any>(null);
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isMapReady, setIsMapReady]       = useState(false);
+  const [query, setQuery]                 = useState('');
+  const [suggestions, setSuggestions]     = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Keep parent callbacks stable inside the init effect
+  const onCoordsChangeRef = useRef(onCoordsChange);
+  const onLabelChangeRef  = useRef(onLabelChange);
+  useEffect(() => { onCoordsChangeRef.current = onCoordsChange; }, [onCoordsChange]);
+  useEffect(() => { onLabelChangeRef.current  = onLabelChange;  }, [onLabelChange]);
 
   useEffect(() => {
     if (!mapDivRef.current) return;
@@ -611,8 +622,13 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
     (async () => {
       const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
       await importLibrary('marker');
-      await importLibrary('places');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const placesLib = await importLibrary('places') as any;
       if (cancelled || !mapDivRef.current) return;
+
+      if (placesLib.AutocompleteSessionToken) {
+        sessionTokenRef.current = new placesLib.AutocompleteSessionToken();
+      }
 
       const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 };
       const map = new Map(mapDivRef.current, {
@@ -631,61 +647,24 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
       });
       markerRef.current = marker;
 
-      const applyLocation = (pos: { lat: number; lng: number }, name?: string) => {
+      applyLocationRef.current = (pos, name?) => {
         map.panTo(pos);
         map.setZoom(16);
         marker.setPosition(pos);
         marker.setVisible(true);
-        onCoordsChange(pos);
-        if (name) onLabelChange(name);
-        // Scroll map into view in case form is scrolled up
+        onCoordsChangeRef.current(pos);
+        if (name) onLabelChangeRef.current(name);
         mapDivRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const PlaceAutocompleteElement = (google.maps.places as any).PlaceAutocompleteElement;
-      if (acContainerRef.current && PlaceAutocompleteElement) {
-        const placeAC = new PlaceAutocompleteElement();
-        acContainerRef.current.appendChild(placeAC);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        placeAC.addEventListener('gmp-placeselect', async (event: any) => {
-          const place = event.place ?? event.detail?.place;
-          if (!place) return;
-          try {
-            await place.fetchFields({ fields: ['location', 'displayName'] });
-          } catch (e) {
-            console.error('[MeetupPicker] fetchFields error:', e);
-          }
-          const loc = place.location;
-          console.log('[MeetupPicker] place selected, location:', loc, 'displayName:', place.displayName);
-          if (loc) {
-            const lat = typeof loc.lat === 'function' ? loc.lat() : (loc.lat as number);
-            const lng = typeof loc.lng === 'function' ? loc.lng() : (loc.lng as number);
-            applyLocation({ lat, lng }, place.displayName);
-          } else {
-            // fetchFields returned no location — fall back to Geocoder
-            const query = place.displayName;
-            if (!query) return;
-            new google.maps.Geocoder().geocode({ address: query }, (results: any, status: any) => {
-              console.log('[MeetupPicker] geocoder fallback:', status, results?.[0]?.geometry?.location);
-              if (status === 'OK' && results?.[0]?.geometry?.location) {
-                const g = results[0].geometry.location;
-                applyLocation({ lat: g.lat(), lng: g.lng() }, query);
-              }
-            });
-          }
-        });
-      }
-
       map.addListener('click', (e: google.maps.MapMouseEvent) => {
         if (!e.latLng) return;
-        applyLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+        applyLocationRef.current?.({ lat: e.latLng.lat(), lng: e.latLng.lng() });
       });
 
       marker.addListener('dragend', (e: google.maps.MapMouseEvent) => {
         if (!e.latLng) return;
-        onCoordsChange({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+        onCoordsChangeRef.current({ lat: e.latLng.lat(), lng: e.latLng.lng() });
       });
 
       setIsMapReady(true);
@@ -693,6 +672,61 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleQueryChange = (value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { AutocompleteSuggestion } = await importLibrary('places') as any;
+        const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input:        value,
+          sessionToken: sessionTokenRef.current,
+        });
+        setSuggestions(response.suggestions ?? []);
+        setShowSuggestions(true);
+      } catch (e) {
+        console.error('[MeetupPicker] suggestions error:', e);
+        setSuggestions([]);
+      }
+    }, 300);
+  };
+
+  const handleSelect = async (suggestion: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    setShowSuggestions(false);
+    const fullText = suggestion.placePrediction?.text?.text
+      ?? suggestion.placePrediction?.mainText?.text
+      ?? '';
+    setQuery(fullText);
+
+    try {
+      const place = suggestion.placePrediction.toPlace();
+      await place.fetchFields({ fields: ['location', 'displayName'] });
+      const loc = place.location;
+      if (loc) {
+        const lat = typeof loc.lat === 'function' ? loc.lat() : (loc.lat as number);
+        const lng = typeof loc.lng === 'function' ? loc.lng() : (loc.lng as number);
+        applyLocationRef.current?.({ lat, lng }, place.displayName ?? fullText);
+        // Refresh session token — selection ends the billing session
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { AutocompleteSessionToken } = await importLibrary('places') as any;
+        if (AutocompleteSessionToken) sessionTokenRef.current = new AutocompleteSessionToken();
+      }
+    } catch (e) {
+      console.error('[MeetupPicker] place details error:', e);
+      if (fullText) {
+        new google.maps.Geocoder().geocode({ address: fullText }, (results: any, status: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+          if (status === 'OK' && results?.[0]?.geometry?.location) {
+            const g = results[0].geometry.location;
+            applyLocationRef.current?.({ lat: g.lat(), lng: g.lng() }, fullText);
+          }
+        });
+      }
+    }
+  };
 
   // Sync externally-set coords (e.g. GPX auto-populate)
   useEffect(() => {
@@ -705,11 +739,35 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
   return (
     <div className="space-y-2">
-      <div className="w-full rounded-lg border border-outline-variant/30 focus-within:border-primary transition-colors">
-        <div
-          ref={acContainerRef}
-          className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={e => handleQueryChange(e.target.value)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+          placeholder="Search for a location…"
+          className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary transition-colors"
         />
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-lg overflow-hidden">
+            {suggestions.map((s, i) => {
+              const main      = s.placePrediction?.mainText?.text ?? '';
+              const secondary = s.placePrediction?.secondaryText?.text ?? '';
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onMouseDown={() => handleSelect(s)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-surface-container-low transition-colors border-b border-outline-variant/10 last:border-0"
+                >
+                  <p className="font-body text-sm text-on-background">{main}</p>
+                  {secondary && <p className="font-label text-[9px] text-on-surface-variant/60">{secondary}</p>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div
         ref={mapDivRef}
