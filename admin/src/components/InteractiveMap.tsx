@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { importLibrary } from '../lib/mapsLoader';
-import { veloModernStyle } from '../lib/mapStyles';
+
 
 interface Coordinate {
   lat: number;
@@ -79,7 +79,6 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
           const newMap = new Map(mapRef.current, {
             center,
             zoom,
-            styles: veloModernStyle,
             disableDefaultUI: true,
             zoomControl: true,
             mapTypeControl: false,

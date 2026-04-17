@@ -7,7 +7,7 @@ import { parseGPXCoords } from '../lib/validation';
 import { useToast } from '../store/useToast';
 import type { RideType } from '../store/useAppStore';
 import { importLibrary } from '../lib/mapsLoader';
-import { veloModernStyle } from '../lib/mapStyles';
+
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -620,7 +620,6 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
       const map = new Map(mapDivRef.current, {
         center: defaultCenter,
         zoom:   coords ? 15 : 11,
-        styles: veloModernStyle,
         disableDefaultUI: true,
         zoomControl: true,
       });

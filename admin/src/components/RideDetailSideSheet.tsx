@@ -7,6 +7,7 @@ import { parsePoint } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
 import Modal from './Modal';
+import RideFormModal from './RideFormModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +55,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
@@ -236,6 +238,24 @@ const RideDetailSideSheet: React.FC = () => {
         type="danger"
       />
 
+      {showEditModal && ride && (
+        <RideFormModal
+          mode="edit"
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          rideId={selectedRideId ?? undefined}
+          initialValues={{
+            name:             ride.name,
+            scheduled_start:  ride.scheduled_start
+              ? new Date(ride.scheduled_start).toISOString().slice(0, 16)
+              : '',
+            start_label:      ride.start_label  ?? '',
+            finish_label:     ride.finish_label ?? '',
+            external_url:     ride.external_url ?? '',
+          }}
+        />
+      )}
+
       {/* Side Sheet */}
       <aside
         className={`fixed top-0 right-0 h-full w-full max-w-md bg-surface-container-lowest shadow-2xl z-50 transform transition-transform duration-500 ease-out border-l border-outline-variant/20 ${
@@ -411,6 +431,13 @@ const RideDetailSideSheet: React.FC = () => {
 
                 {isAdmin && (
                   <>
+                    <button
+                      className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                      onClick={() => setShowEditModal(true)}
+                    >
+                      <span className="material-symbols-outlined text-sm">edit</span>
+                      Edit Ride
+                    </button>
                     <button
                       className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
                       onClick={() => { close(); navigate(`/builder/${selectedRideId}`); }}
