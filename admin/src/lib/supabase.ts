@@ -49,6 +49,8 @@ function createSafeProxy(): any {
   return new Proxy(Object.assign(noop, {}), handler)
 }
 
-export const supabase = isConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+// Admin-generated magic links always produce implicit (hash-based) tokens,
+// so we must use implicit flow to detect #access_token= on redirect.
+export const supabase = isConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey, { auth: { flowType: 'implicit' } })
   : createSafeProxy();
