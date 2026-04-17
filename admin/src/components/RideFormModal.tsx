@@ -1257,9 +1257,9 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">
-                    {isPending ? 'sync' : isRecurring ? 'event_repeat' : rideType === 'meetup' ? 'location_on' : 'arrow_forward'}
+                    {isPending ? 'sync' : isRecurring ? 'event_repeat' : rideType === 'meetup' ? 'location_on' : 'check'}
                   </span>
-                  {isPending ? 'Creating…' : isRecurring ? `Create ${occurrenceCount} Rides` : rideType === 'meetup' ? 'Create Meetup' : 'Create & Open Builder'}
+                  {isPending ? 'Creating…' : isRecurring ? `Create ${occurrenceCount} Rides` : rideType === 'meetup' ? 'Create Meetup' : 'Create Ride'}
                 </button>
               </div>
             </form>
