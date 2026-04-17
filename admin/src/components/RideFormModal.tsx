@@ -598,21 +598,21 @@ interface MeetupLocationPickerProps {
 }
 
 function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
-  const mapDivRef   = useRef<HTMLDivElement>(null);
-  const searchRef   = useRef<HTMLInputElement>(null);
-  const mapRef      = useRef<google.maps.Map | null>(null);
-  const markerRef   = useRef<google.maps.Marker | null>(null);
+  const mapDivRef      = useRef<HTMLDivElement>(null);
+  const acContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef         = useRef<google.maps.Map | null>(null);
+  const markerRef      = useRef<google.maps.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
   useEffect(() => {
-    if (!mapDivRef.current || !searchRef.current) return;
+    if (!mapDivRef.current) return;
     let cancelled = false;
 
     (async () => {
       const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
       await importLibrary('marker');
       await importLibrary('places');
-      if (cancelled || !mapDivRef.current || !searchRef.current) return;
+      if (cancelled || !mapDivRef.current) return;
 
       const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 };
       const map = new Map(mapDivRef.current, {
@@ -631,43 +631,39 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
       });
       markerRef.current = marker;
 
-      // Attach classic Autocomplete to the visible search input
-      const ac = new (google.maps.places as any).Autocomplete(searchRef.current, {
-        fields: ['geometry', 'name'],
-      });
-
-      const applyLocation = (latLng: google.maps.LatLng, name?: string) => {
-        const pos = { lat: latLng.lat(), lng: latLng.lng() };
+      const applyLocation = (pos: { lat: number; lng: number }, name?: string) => {
         map.panTo(pos);
         map.setZoom(16);
         marker.setPosition(pos);
         marker.setVisible(true);
         onCoordsChange(pos);
         if (name) onLabelChange(name);
+        // Scroll map into view in case form is scrolled up
+        mapDivRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
 
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (place.geometry?.location) {
-          applyLocation(place.geometry.location, place.name);
-        } else {
-          // Fallback: geometry not returned by Autocomplete — geocode the typed value
-          const query = searchRef.current?.value || place.name;
-          if (!query) return;
-          new google.maps.Geocoder().geocode({ address: query }, (results: any, status: any) => {
-            if (status === 'OK' && results?.[0]?.geometry?.location) {
-              applyLocation(results[0].geometry.location, place.name || query);
-            }
-          });
-        }
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const PlaceAutocompleteElement = (google.maps.places as any).PlaceAutocompleteElement;
+      if (acContainerRef.current && PlaceAutocompleteElement) {
+        const placeAC = new PlaceAutocompleteElement();
+        acContainerRef.current.appendChild(placeAC);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        placeAC.addEventListener('gmp-placeselect', async (event: any) => {
+          const place = event.place ?? event.detail?.place;
+          if (!place) return;
+          await place.fetchFields({ fields: ['location', 'displayName'] });
+          const loc = place.location;
+          if (!loc) return;
+          const lat = typeof loc.lat === 'function' ? loc.lat() : (loc.lat as number);
+          const lng = typeof loc.lng === 'function' ? loc.lng() : (loc.lng as number);
+          applyLocation({ lat, lng }, place.displayName);
+        });
+      }
 
       map.addListener('click', (e: google.maps.MapMouseEvent) => {
         if (!e.latLng) return;
-        const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-        marker.setPosition(e.latLng);
-        marker.setVisible(true);
-        onCoordsChange(pos);
+        applyLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
       });
 
       marker.addListener('dragend', (e: google.maps.MapMouseEvent) => {
@@ -692,12 +688,9 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
   return (
     <div className="space-y-2">
-      <input
-        ref={searchRef}
-        type="text"
-        placeholder="Search for a location…"
-        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
-        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
+      <div
+        ref={acContainerRef}
+        className="w-full [&>gmp-placeautocomplete]:w-full [&>gmp-placeautocomplete]:block"
       />
       <div
         ref={mapDivRef}
