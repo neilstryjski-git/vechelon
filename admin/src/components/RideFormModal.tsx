@@ -652,12 +652,29 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
         placeAC.addEventListener('gmp-placeselect', async (event: any) => {
           const place = event.place ?? event.detail?.place;
           if (!place) return;
-          await place.fetchFields({ fields: ['location', 'displayName'] });
+          try {
+            await place.fetchFields({ fields: ['location', 'displayName'] });
+          } catch (e) {
+            console.error('[MeetupPicker] fetchFields error:', e);
+          }
           const loc = place.location;
-          if (!loc) return;
-          const lat = typeof loc.lat === 'function' ? loc.lat() : (loc.lat as number);
-          const lng = typeof loc.lng === 'function' ? loc.lng() : (loc.lng as number);
-          applyLocation({ lat, lng }, place.displayName);
+          console.log('[MeetupPicker] place selected, location:', loc, 'displayName:', place.displayName);
+          if (loc) {
+            const lat = typeof loc.lat === 'function' ? loc.lat() : (loc.lat as number);
+            const lng = typeof loc.lng === 'function' ? loc.lng() : (loc.lng as number);
+            applyLocation({ lat, lng }, place.displayName);
+          } else {
+            // fetchFields returned no location — fall back to Geocoder
+            const query = place.displayName;
+            if (!query) return;
+            new google.maps.Geocoder().geocode({ address: query }, (results: any, status: any) => {
+              console.log('[MeetupPicker] geocoder fallback:', status, results?.[0]?.geometry?.location);
+              if (status === 'OK' && results?.[0]?.geometry?.location) {
+                const g = results[0].geometry.location;
+                applyLocation({ lat: g.lat(), lng: g.lng() }, query);
+              }
+            });
+          }
         });
       }
 
