@@ -597,7 +597,7 @@ interface MeetupLocationPickerProps {
   onLabelChange:  (l: string) => void;
 }
 
-function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
+function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
   const mapDivRef      = useRef<HTMLDivElement>(null);
   const acContainerRef = useRef<HTMLDivElement>(null);
   const mapRef         = useRef<google.maps.Map | null>(null);
@@ -654,19 +654,24 @@ function MeetupLocationPicker({ coords, label, onCoordsChange, onLabelChange }: 
         acContainerRef.current.appendChild(placeAC);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        placeAC.addEventListener('gmp-placeselect', async ({ place }: any) => {
+        placeAC.addEventListener('gmp-placeselect', async (event: any) => {
+          // `place` lives directly on the event in most browsers; some wrap it in detail
+          const place = event.place ?? event.detail?.place;
+          if (!place) { console.warn('[MeetupPicker] gmp-placeselect fired but no place on event', event); return; }
           await place.fetchFields({ fields: ['location', 'displayName'] });
-          if (!place.location) return;
-          const pos = {
-            lat: place.location.lat(),
-            lng: place.location.lng(),
-          };
+          const loc = place.location;
+          if (!loc) { console.warn('[MeetupPicker] place has no location after fetchFields'); return; }
+          // New Places API returns LatLng object (.lat()/.lng()) or LatLngLiteral (number props)
+          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+          const pos = { lat, lng };
+          console.log('[MeetupPicker] place selected', place.displayName, pos);
           map.panTo(pos);
           map.setZoom(16);
           marker.setPosition(pos);
           marker.setVisible(true);
           onCoordsChange(pos);
-          if (!label && place.displayName) onLabelChange(place.displayName);
+          if (place.displayName) onLabelChange(place.displayName);
         });
       }
 
