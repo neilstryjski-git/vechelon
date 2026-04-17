@@ -635,16 +635,31 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
       const ac = new (google.maps.places as any).Autocomplete(searchRef.current, {
         fields: ['geometry', 'name'],
       });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place.geometry?.location) return;
-        const pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+
+      const applyLocation = (latLng: google.maps.LatLng, name?: string) => {
+        const pos = { lat: latLng.lat(), lng: latLng.lng() };
         map.panTo(pos);
         map.setZoom(16);
         marker.setPosition(pos);
         marker.setVisible(true);
         onCoordsChange(pos);
-        if (place.name) onLabelChange(place.name);
+        if (name) onLabelChange(name);
+      };
+
+      ac.addListener('place_changed', () => {
+        const place = ac.getPlace();
+        if (place.geometry?.location) {
+          applyLocation(place.geometry.location, place.name);
+        } else {
+          // Fallback: geometry not returned by Autocomplete — geocode the typed value
+          const query = searchRef.current?.value || place.name;
+          if (!query) return;
+          new google.maps.Geocoder().geocode({ address: query }, (results: any, status: any) => {
+            if (status === 'OK' && results?.[0]?.geometry?.location) {
+              applyLocation(results[0].geometry.location, place.name || query);
+            }
+          });
+        }
       });
 
       map.addListener('click', (e: google.maps.MapMouseEvent) => {
