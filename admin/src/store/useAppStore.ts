@@ -53,7 +53,7 @@ interface AppState {
   updateCachedParticipants: (rideId: string, participants: Participant[]) => void;
   processLocationUpdate: (rideId: string, update: Partial<Participant> & { id: string }) => void;
   runHeartbeat: (rideId: string) => void;
-  joinRide: (rideId: string, guestName?: string) => Promise<void>;
+  joinRide: (rideId: string, guestName?: string, guestEmail?: string) => Promise<void>;
   endRide: (rideId: string) => Promise<{ summary: string; weather: any }>;
   addActiveBeacon: (participantId: string) => void;
   removeActiveBeacon: (participantId: string) => void;
@@ -169,7 +169,7 @@ export const useAppStore = create<AppState>()(
        * Fulfills Pillar 2 / Section 10.5.
        * Fulfills W64: Anonymous Join (No Auth).
        */
-      joinRide: async (rideId, guestName?: string) => {
+      joinRide: async (rideId, guestName?: string, guestEmail?: string) => {
         const { data: { user } } = await supabase.auth.getUser();
         const sessionCookieId = useAppStore.getState().sessionCookieId;
 
@@ -198,6 +198,7 @@ export const useAppStore = create<AppState>()(
             account_id: accountId,
             display_name: displayName,
             phone: phone,
+            email: user ? null : (guestEmail || null),
             role: user ? 'member' : 'guest',
             status: 'rsvpd',
             session_cookie_id: sessionCookieId

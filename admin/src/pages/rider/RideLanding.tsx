@@ -228,11 +228,11 @@ const RideLanding: React.FC = () => {
   // Actions
   // -------------------------------------------------------------------------
 
-  const handleJoin = async (nameOverride?: string) => {
+  const handleJoin = async (nameOverride?: string, emailOverride?: string) => {
     if (!ride) return;
     setIsJoining(true);
     try {
-      await joinRide(ride.id, nameOverride);
+      await joinRide(ride.id, nameOverride, emailOverride);
       addToast(
         ride.status === 'active' ? 'You have joined the ride!' : 'RSVP confirmed.',
         'success',
@@ -432,7 +432,7 @@ const RideLanding: React.FC = () => {
                     className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
                   />
                   <button
-                    onClick={() => handleJoin(guestName.trim())}
+                    onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
                     disabled={isJoining || !guestName.trim()}
                     className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                   >
