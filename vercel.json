@@ -1,7 +1,6 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "public",
-  "cleanUrls": true,
   "redirects": [
     {
       "source": "/admin/:path*",
@@ -10,10 +9,6 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/portal",
-      "destination": "/portal/index.html"
-    },
     {
       "source": "/portal/:path*",
       "destination": "/portal/index.html"
