@@ -19,3 +19,8 @@ cleaned_tasks.json
 # Dependencies
 node_modules/
 package-lock.json
+
+# Build artifacts — never commit compiled output
+dist/
+dist_production/
+public/portal/
