@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
+import ToastContainer from './ToastContainer';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) => 
   `font-label text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
@@ -103,6 +104,8 @@ const RiderLayout: React.FC = () => {
       <main className="max-w-screen-2xl mx-auto px-6 py-12 animate-in fade-in duration-700">
         <Outlet />
       </main>
+
+      <ToastContainer />
 
       {/* Global Footer */}
       <footer className="mt-20 border-t border-surface-container-low px-6 py-8">
