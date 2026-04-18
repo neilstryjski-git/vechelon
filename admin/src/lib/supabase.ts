@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -51,6 +51,6 @@ function createSafeProxy(): any {
 
 // Admin-generated magic links always produce implicit (hash-based) tokens,
 // so we must use implicit flow to detect #access_token= on redirect.
-export const supabase = isConfigured
+export const supabase: SupabaseClient = isConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, { auth: { flowType: 'implicit' } })
   : createSafeProxy();
