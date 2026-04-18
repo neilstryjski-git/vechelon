@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
-import { getStaticMapUrl } from '../lib/maps';
+import { getStaticMapUrl, downloadGpx } from '../lib/maps';
 import { useToast } from '../store/useToast';
 import { useAppStore } from '../store/useAppStore';
 import Modal from '../components/Modal';
@@ -236,17 +236,28 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
         </div>
 
         {/* Footer Actions */}
-        {route.external_url && (
-          <div className="pt-4 border-t border-outline-variant/30">
-            <a 
-              href={route.external_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">open_in_new</span>
-              View on Garmin / Strava
-            </a>
+        {(route.external_url || route.file_path) && (
+          <div className="pt-4 border-t border-outline-variant/30 flex items-center gap-4">
+            {route.external_url && (
+              <a
+                href={route.external_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">open_in_new</span>
+                View on Garmin / Strava
+              </a>
+            )}
+            {route.file_path && (
+              <button
+                onClick={() => downloadGpx(route.file_path, route.name)}
+                className="inline-flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Download GPX
+              </button>
+            )}
           </div>
         )}
       </div>

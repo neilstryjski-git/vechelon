@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { parsePoint } from '../../lib/maps';
+import { parsePoint, downloadGpx } from '../../lib/maps';
 import { useAppStore } from '../../store/useAppStore';
 import { useToast } from '../../store/useToast';
 
@@ -60,6 +60,7 @@ interface RideRow {
   start_label: string | null;
   start_coords: string | null;
   external_url: string | null;
+  gpx_path:     string | null;
   thumbnail_url: string | null;
   status: 'created' | 'active' | 'saved' | 'cancelled';
   actual_end: string | null;
@@ -151,7 +152,7 @@ const RideLanding: React.FC = () => {
       if (!rideId) return null;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, start_coords, external_url, thumbnail_url, status, actual_end')
+        .select('id, name, scheduled_start, start_label, start_coords, external_url, gpx_path, thumbnail_url, status, actual_end')
         .eq('id', rideId)
         .maybeSingle();
       if (error) throw error;
@@ -389,6 +390,15 @@ const RideLanding: React.FC = () => {
                   <span className="material-symbols-outlined text-[12px]">route</span>
                   Route
                 </a>
+              )}
+              {ride.gpx_path && (
+                <button
+                  onClick={() => downloadGpx(ride.gpx_path!, ride.name)}
+                  className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[12px]">download</span>
+                  Download GPX
+                </button>
               )}
             </div>
 

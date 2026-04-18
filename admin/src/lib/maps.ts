@@ -125,3 +125,27 @@ export const formatPoint = (coords: { lat: number; lng: number }) => {
   if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return null;
   return `(${coords.lng},${coords.lat})`;
 };
+
+/**
+ * Returns a short-lived signed URL for a GPX file in the gpx-routes storage bucket.
+ * Expires in 1 hour — enough for a rider to download before roll-out.
+ */
+export const getSignedGpxUrl = async (filePath: string): Promise<string> => {
+  const { data, error } = await supabase.storage
+    .from('gpx-routes')
+    .createSignedUrl(filePath, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+};
+
+/**
+ * Gets a signed URL for a GPX file and triggers a browser download.
+ * filename should not include the .gpx extension — it is appended automatically.
+ */
+export const downloadGpx = async (filePath: string, filename: string): Promise<void> => {
+  const url = await getSignedGpxUrl(filePath);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}.gpx`;
+  a.click();
+};

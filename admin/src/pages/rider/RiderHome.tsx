@@ -161,6 +161,14 @@ const RiderHome: React.FC = () => {
                     </button>
                   </div>
                 )}
+
+                <button
+                  onClick={() => navigate(`/ride/${nextRide.id}`)}
+                  className="w-full flex items-center justify-center gap-1.5 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors pt-1"
+                >
+                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  View Ride Details
+                </button>
               </div>
             </div>
           ) : (

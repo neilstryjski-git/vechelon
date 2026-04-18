@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { supabase } from '../lib/supabase';
-import { parsePoint } from '../lib/maps';
+import { parsePoint, downloadGpx } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
 import Modal from './Modal';
@@ -30,6 +30,7 @@ interface RideDetail {
   start_label: string | null;
   finish_label: string | null;
   external_url: string | null;
+  gpx_path:     string | null;
   start_coords: string | null;
   meetup_coords: string | null;
   meetup_label: string | null;
@@ -122,7 +123,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null as any;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, start_coords, meetup_coords, meetup_label')
+        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label')
         .eq('id', selectedRideId)
         .single();
       if (error) throw error;
@@ -440,6 +441,16 @@ const RideDetailSideSheet: React.FC = () => {
                   <span className="material-symbols-outlined text-sm">content_copy</span>
                   Copy Broadcast
                 </button>
+
+                {ride.gpx_path && (
+                  <button
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={() => downloadGpx(ride.gpx_path!, ride.name)}
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    Download GPX
+                  </button>
+                )}
 
                 {isAdmin && (
                   <>
