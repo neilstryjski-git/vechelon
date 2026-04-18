@@ -336,6 +336,17 @@ const RideLanding: React.FC = () => {
   return (
     <div className="space-y-12 py-8">
 
+      {/* Back nav */}
+      <div className="max-w-lg mx-auto">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-1.5 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors"
+        >
+          <span className="material-symbols-outlined text-sm">arrow_back</span>
+          Back to Portal
+        </button>
+      </div>
+
       {/* Page label */}
       <div className="max-w-lg mx-auto">
         <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant mb-4">
