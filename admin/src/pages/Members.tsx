@@ -412,7 +412,7 @@ const Members: React.FC = () => {
               className="grid grid-cols-12 gap-4 px-8 py-6 items-center hover:bg-surface-container-highest transition-colors"
             >
               <div className="col-span-4 flex items-center gap-4">
-                <Avatar name={m.accounts?.name ?? null} avatarUrl={m.accounts?.avatar_url ?? null} />
+                <Avatar name={m.accounts?.name ?? m.accounts?.email ?? null} avatarUrl={m.accounts?.avatar_url ?? null} />
                 <div>
                   <h5 className="font-headline font-bold text-sm text-on-background">
                     {m.accounts?.name ?? m.accounts?.email ?? '—'}

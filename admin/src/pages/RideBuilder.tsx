@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { fetchGpxPoints, formatPoint, parsePoint } from '../lib/maps';
+import { fetchGpxPoints, formatPoint, parsePoint, getStaticMapPinUrl } from '../lib/maps';
 import { useToast } from '../store/useToast';
 import InteractiveMap from '../components/InteractiveMap';
 import PageHeader from '../components/PageHeader';
@@ -156,6 +156,11 @@ const RideBuilder: React.FC = () => {
       const waypoints = markers.filter(m => m.type === 'waypoint');
 
       // Update Ride
+      const meetupPin = meetup ?? start;
+      const newThumbnail = meetupPin
+        ? getStaticMapPinUrl(meetupPin.lat, meetupPin.lng)
+        : null;
+
       const { error: rideError } = await supabase
         .from('rides')
         .update({
@@ -165,8 +170,11 @@ const RideBuilder: React.FC = () => {
           finish_label:  finish?.label || null,
           meetup_coords: meetup ? formatPoint(meetup) : (start ? formatPoint(start) : null),
           meetup_label:  meetup?.label || start?.label || null,
+          ...(newThumbnail ? { thumbnail_url: newThumbnail } : {}),
         })
-        .eq('id', rideId);
+        .eq('id', rideId)
+        .select('id')
+        .single();
       if (rideError) throw rideError;
 
       // Sync Waypoints (Nuclear approach for MVP: Delete all and re-insert)
@@ -190,6 +198,8 @@ const RideBuilder: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ride-builder', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['ride-detail', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
       addToast('Ride geometry saved successfully.', 'success');
       navigate('/calendar');
     },

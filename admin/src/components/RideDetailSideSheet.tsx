@@ -56,6 +56,8 @@ const RideDetailSideSheet: React.FC = () => {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAllParticipants, setShowAllParticipants] = useState(false);
+  const ROSTER_LIMIT = 8;
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
 
@@ -362,24 +364,34 @@ const RideDetailSideSheet: React.FC = () => {
                       <div key={i} className="h-12 w-full bg-surface-container-low rounded-lg animate-pulse" />
                     ))
                   ) : participants.length > 0 ? (
-                    participants.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                            p.role === 'captain' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
-                          }`}>
-                            {p.display_name.charAt(0).toUpperCase()}
+                    <>
+                      {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                              p.role === 'captain' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+                            }`}>
+                              {(p.display_name ?? '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
+                              <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
+                                {!p.account_id ? 'Guest' : p.role.charAt(0).toUpperCase() + p.role.slice(1)}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
-                            <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
-                              {!p.account_id ? 'Guest' : p.role}
-                            </p>
-                          </div>
+                          <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
                         </div>
-                        <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
-                      </div>
-                    ))
+                      ))}
+                      {participants.length > ROSTER_LIMIT && (
+                        <button
+                          onClick={() => setShowAllParticipants(v => !v)}
+                          className="w-full py-2 font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors"
+                        >
+                          {showAllParticipants ? 'Show less' : `+${participants.length - ROSTER_LIMIT} more`}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <p className="text-center py-8 font-label text-xs text-on-surface-variant opacity-40 italic">
                       — No riders assigned yet —
@@ -410,7 +422,7 @@ const RideDetailSideSheet: React.FC = () => {
                   </div>
                 )}
 
-                <button 
+                <button
                   className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98]"
                   onClick={() => {
                     closeSheet();

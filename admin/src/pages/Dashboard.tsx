@@ -313,6 +313,7 @@ const Dashboard: React.FC = () => {
               <InteractiveMap
                 points={mapPoints}
                 markers={allMarkers}
+                focusedMarkerId={meetupMarker?.id ?? undefined}
                 onMarkerClick={(id) => setSelectedParticipantId(id)}
               />
             ) : (
