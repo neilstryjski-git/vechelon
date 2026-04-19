@@ -144,8 +144,14 @@ export const getSignedGpxUrl = async (filePath: string): Promise<string> => {
  */
 export const downloadGpx = async (filePath: string, filename: string): Promise<void> => {
   const url = await getSignedGpxUrl(filePath);
+  const res = await fetch(url);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
+  a.href = objectUrl;
   a.download = `${filename}.gpx`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
 };
