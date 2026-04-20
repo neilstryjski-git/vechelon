@@ -1,9 +1,27 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
 import ToastContainer from './ToastContainer';
+
+function useCurrentAvatar() {
+  return useQuery<{ name: string | null; avatar_url: string | null } | null>({
+    queryKey: ['current-user-avatar'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from('accounts')
+        .select('name, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+}
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) => 
   `font-label text-[10px] uppercase tracking-[0.2em] transition-all duration-300 ${
@@ -18,10 +36,11 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
  */
 const RiderLayout: React.FC = () => {
   useOfflineStatus();
-  
+
   const isOnline = useAppStore((state) => state.isOnline);
   const userTier = useAppStore((state) => state.userTier);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { data: currentUser } = useCurrentAvatar();
 
   const riderLinks = [
     { to: '/', label: 'Home', end: true },
@@ -89,8 +108,15 @@ const RiderLayout: React.FC = () => {
               </span>
             )}
             <button className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95 hidden sm:block">
-              {/* User avatar placeholder */}
-              <div className="w-full h-full bg-surface-container-highest" />
+              {currentUser?.avatar_url ? (
+                <img src={currentUser.avatar_url} alt={currentUser.name ?? 'Avatar'} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-surface-container-highest flex items-center justify-center">
+                  <span className="font-label text-[8px] text-on-surface-variant">
+                    {currentUser?.name?.charAt(0).toUpperCase() ?? ''}
+                  </span>
+                </div>
+              )}
             </button>
 
             {/* Mobile Menu Trigger */}
