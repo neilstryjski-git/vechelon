@@ -1,6 +1,6 @@
-# Vechelon | Internal Roadmap (v1.3.0)
+# Vechelon | Internal Roadmap (v1.4.0)
 
-Project: Vechelon | Current Version: v1.3.0 | Last Sync Date: 2026-04-20 | Status: COMMITTED
+Project: Vechelon | Current Version: v1.4.0 | Last Sync Date: 2026-04-20 | Status: COMMITTED
 
 **Source of truth for all roadmap decisions. The public roadmap is a rendered view of this document.
 If it is not here, it is not on the public roadmap. Changes via MACD only.**
@@ -40,7 +40,8 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | 1.09 | Rider Desktop Portal — RSVP for rides | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.6 |
 | 1.10 | Rider Desktop Portal — calendar view (read-only) | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.4 |
 | 1.11 | Rider Desktop Portal — route library browse and download | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.7 |
-| 1.12 | Rider Desktop Portal — member directory (names only) | Rider Portal | 🔴 Not Started | Rider Pillar II §4.8 |
+| 1.11a | Rider Desktop Portal — route library access expanded to Tier 2 (initiated) | Rider Portal | 🟡 In Build | Access previously restricted to Tier 3 only; RLS and nav updated April 2026 |
+| 1.12 | Rider Desktop Portal — member directory (names only) | Rider Portal | 🟡 In Build | MemberDirectory page, RLS policy, and nav link implemented April 2026 — awaiting UAT validation |
 | 1.13 | Rider Desktop Portal — three-tier access model | Rider Portal | 🟢 Complete | Rider Pillar I §4 |
 | 1.14 | Rider Desktop Portal — club-contextual account creation | Rider Portal | 🟢 Complete | Rider Pillar III RP-04 |
 | 1.15 | QR join flow — guest and member | Both | 🟢 Complete ✓ demo | Admin Pillar II §10.5 |
@@ -247,3 +248,4 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | v1.1.0 | 2026-04-19 | 13:00 | CHANGE | v1.0 status updated — MVE validated with Racer Sportif demo April 2026. Confirmed complete items marked ✓ demo. Items requiring PM confirmation marked 🟡 Confirm?. | TPM |
 | v1.2.0 | 2026-04-19 | 14:00 | CHANGE | v1.0 overall status corrected to In Build — Complete requires Hands assessment and UAT closure. Confirm? items relabelled to In Build. UAT note added to v1.0 status line. | TPM |
 | v1.3.0 | 2026-04-20 | 00:00 | CHANGE | The Hands codebase assessment of all v1.0 In Build items. 1.03/1.04/1.05/1.07 confirmed Complete. 1.12 downgraded to Not Started — no rider-facing member directory page exists. F1.05/F1.08 confirmed Complete. 1.16/1.17/F1.09/F1.10 remain In Build — cron schedules unconfirmed. F1.04 remains In Build — GCP billing alert unverifiable from code. F1.12 downgraded to Not Started — no Sentry integration in codebase. | The Hands |
+| v1.4.0 | 2026-04-20 | 10:00 | ADD | Two rider access milestones in build: 1.11a route library expanded to Tier 2 (initiated); 1.12 member directory (names only) implemented for Tier 3 (affiliated). RLS migrations applied, nav updated, MemberDirectory page created. | The Hands |

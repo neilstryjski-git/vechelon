@@ -12,6 +12,7 @@ import AuthPage from './pages/rider/AuthPage';
 import RiderHome from './pages/rider/RiderHome';
 import RideLanding from './pages/rider/RideLanding';
 import Profile from './pages/rider/Profile';
+import MemberDirectory from './pages/rider/MemberDirectory';
 import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
 import { useTierDetection } from './hooks/useTierDetection';
@@ -83,6 +84,12 @@ function ClubSettings() {
 function SmartHome() {
   const isAdmin = useAppStore((s) => s.isAdmin);
   return isAdmin ? <Dashboard /> : <RiderHome />;
+}
+
+/** Renders full admin Members page for admins, rider-safe MemberDirectory for riders. */
+function SmartMembers() {
+  const isAdmin = useAppStore((s) => s.isAdmin);
+  return isAdmin ? <Members /> : <MemberDirectory />;
 }
 
 /**
@@ -181,7 +188,7 @@ function AppContent() {
           <Route path="calendar"  element={<CalendarGrid />}     />
           <Route path="routes"    element={<RouteLibraryPage />} />
           <Route path="builder/:rideId" element={<RideBuilder />} />
-          <Route path="members"   element={<Members />}          />
+          <Route path="members"   element={<SmartMembers />}      />
           <Route path="profile"   element={<Profile />}          />
           <Route path="settings"  element={<ClubSettings />}    />
           <Route path="ride/:rideId" element={<RideLanding />}  />

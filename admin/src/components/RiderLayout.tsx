@@ -26,7 +26,8 @@ const RiderLayout: React.FC = () => {
   const riderLinks = [
     { to: '/', label: 'Home', end: true },
     ...(userTier !== 'guest' ? [{ to: '/calendar', label: 'Calendar' }] : []),
-    ...(userTier === 'affiliated' ? [{ to: '/routes', label: 'Routes' }] : []),
+    ...(userTier !== 'guest' ? [{ to: '/routes', label: 'Routes' }] : []),
+    ...(userTier === 'affiliated' ? [{ to: '/members', label: 'Members' }] : []),
     { to: '/profile', label: 'Profile' },
   ];
 
@@ -68,8 +69,12 @@ const RiderLayout: React.FC = () => {
               <NavLink to="/calendar" className={navLinkClass}>Calendar</NavLink>
             )}
             
-            {userTier === 'affiliated' && (
+            {userTier !== 'guest' && (
               <NavLink to="/routes" className={navLinkClass}>Routes</NavLink>
+            )}
+
+            {userTier === 'affiliated' && (
+              <NavLink to="/members" className={navLinkClass}>Members</NavLink>
             )}
 
             <NavLink to="/profile" className={navLinkClass}>Profile</NavLink>
