@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
@@ -41,13 +41,14 @@ const RiderLayout: React.FC = () => {
   const userTier = useAppStore((state) => state.userTier);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { data: currentUser } = useCurrentAvatar();
+  const navigate = useNavigate();
 
   const riderLinks = [
     { to: '/', label: 'Home', end: true },
     ...(userTier !== 'guest' ? [{ to: '/calendar', label: 'Calendar' }] : []),
     ...(userTier !== 'guest' ? [{ to: '/routes', label: 'Routes' }] : []),
     ...(userTier === 'affiliated' ? [{ to: '/members', label: 'Members' }] : []),
-    { to: '/profile', label: 'Profile' },
+    { to: '/profile', label: 'Profile' },  // mobile menu only
   ];
 
   return (
@@ -96,7 +97,6 @@ const RiderLayout: React.FC = () => {
               <NavLink to="/members" className={navLinkClass}>Members</NavLink>
             )}
 
-            <NavLink to="/profile" className={navLinkClass}>Profile</NavLink>
           </div>
 
           {/* System HUD */}
@@ -107,7 +107,11 @@ const RiderLayout: React.FC = () => {
                 OFFLINE
               </span>
             )}
-            <button className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95 hidden sm:block">
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95 hidden sm:block"
+              title="Edit Profile"
+            >
               {currentUser?.avatar_url ? (
                 <img src={currentUser.avatar_url} alt={currentUser.name ?? 'Avatar'} className="w-full h-full object-cover" />
               ) : (
