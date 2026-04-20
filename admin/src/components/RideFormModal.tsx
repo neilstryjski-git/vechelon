@@ -996,14 +996,17 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 />
               </div>
 
-              {/* Date & Time */}
-              <div>
-                <label className={labelClass}>Date & Time</label>
+              {/* Date & Time — mandatory, visually elevated */}
+              <div className="border-l-2 border-primary pl-4 py-1">
+                <label className="font-label text-[10px] uppercase tracking-widest text-primary block mb-1.5 font-bold">
+                  Date & Time <span className="text-error">*</span>
+                </label>
                 <input
                   type="datetime-local"
                   value={scheduledStart}
                   onChange={e => setScheduledStart(e.target.value)}
-                  className={inputClass}
+                  className={`${inputClass} border-primary/40 focus:border-primary`}
+                  required
                 />
               </div>
 
@@ -1280,13 +1283,15 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className={labelClass}>Date & Time</label>
+              <div className="border-l-2 border-primary pl-4 py-1">
+                <label className="font-label text-[10px] uppercase tracking-widest text-primary block mb-1.5 font-bold">
+                  Date & Time <span className="text-error">*</span>
+                </label>
                 <input
                   type="datetime-local"
                   value={editValues.scheduled_start}
                   onChange={e => setEditValues(v => ({ ...v, scheduled_start: e.target.value }))}
-                  className={inputClass}
+                  className={`${inputClass} border-primary/40 focus:border-primary`}
                 />
               </div>
 
