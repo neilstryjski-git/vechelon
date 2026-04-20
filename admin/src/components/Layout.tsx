@@ -46,7 +46,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const baseLinks: { to: string; label: string; end?: boolean }[] = [
-    { to: '/', label: 'Dashboard', end: true },
+    { to: '/', label: 'Command Centre', end: true },
     { to: '/calendar', label: 'Calendar' },
     { to: '/routes', label: 'Route Library' },
   ];
