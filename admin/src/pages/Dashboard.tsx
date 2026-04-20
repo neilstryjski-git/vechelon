@@ -240,7 +240,7 @@ const Dashboard: React.FC = () => {
             onClick={() => setIsCreateRideOpen(true)}
             className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold text-base tracking-widest uppercase shadow-lg hover:opacity-90 transition-all active:scale-[0.99] flex items-center justify-center gap-3"
           >
-            <span className="material-symbols-outlined text-xl">add</span>
+            <span className="material-symbols-outlined text-xl">add_circle</span>
             Plan a Ride
           </button>
           <RideFormModal

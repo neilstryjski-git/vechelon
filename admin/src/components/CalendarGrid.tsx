@@ -160,7 +160,7 @@ const CalendarGrid: React.FC = () => {
             className="signature-gradient text-on-primary px-6 py-3 rounded-md font-headline font-semibold flex items-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-95"
           >
             <span className="material-symbols-outlined text-lg">add_circle</span>
-            Create New Ride
+            Plan a Ride
           </button>
         )}
       </PageHeader>
