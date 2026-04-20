@@ -7,6 +7,7 @@ import { fetchGpxPoints, parsePoint } from '../lib/maps';
 import InteractiveMap from '../components/InteractiveMap';
 import EndRideButton from '../components/EndRideButton';
 import PageHeader from '../components/PageHeader';
+import RideFormModal from '../components/RideFormModal';
 
 // ---------------------------------------------------------------------------
 // Stat queries
@@ -56,16 +57,18 @@ function useUpcomingRidesCount() {
   });
 }
 
-function useTotalMembersCount() {
+function useMemberCounts() {
   return useQuery({
-    queryKey: ['stats', 'total-members'],
+    queryKey: ['stats', 'member-counts'],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('account_tenants')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'affiliated');
+        .select('status')
+        .in('status', ['affiliated', 'initiated']);
       if (error) throw error;
-      return count ?? 0;
+      const affiliated = data?.filter(r => r.status === 'affiliated').length ?? 0;
+      const initiated  = data?.filter(r => r.status === 'initiated').length ?? 0;
+      return { affiliated, initiated };
     },
   });
 }
@@ -90,20 +93,39 @@ function useRideParticipants(rideId: string | null) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StatCard({ label, value, isLoading }: {
-  label:     string;
-  value:     number;
-  isLoading: boolean;
+function StatCard({ label, value, isLoading, subCounts, roadmapNote }: {
+  label:        string;
+  value:        number;
+  isLoading:    boolean;
+  subCounts?:   { label: string; value: number; active?: boolean }[];
+  roadmapNote?: string;
 }) {
   return (
-    <div className="bg-surface-container-lowest p-6 rounded-xl shadow-ambient border border-surface-container-low/50">
-      <h3 className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-3">
+    <div className="bg-surface-container-lowest p-6 rounded-xl shadow-ambient border border-surface-container-low/50 flex flex-col gap-3">
+      <h3 className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
         {label}
       </h3>
       {isLoading ? (
         <div className="h-10 w-24 rounded bg-surface-container-high animate-pulse" />
       ) : (
         <p className="font-headline text-4xl font-extrabold text-on-background tracking-tighter">{value}</p>
+      )}
+      {!isLoading && subCounts && (
+        <div className="flex flex-col gap-1 mt-1">
+          {subCounts.map(sc => (
+            <div key={sc.label} className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sc.active ? 'bg-brand-primary' : 'bg-on-surface-variant/30'}`} />
+              <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">
+                {sc.value} {sc.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {roadmapNote && (
+        <div className="mt-auto pt-2 border-t border-surface-container-low">
+          <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant/40">{roadmapNote}</span>
+        </div>
       )}
     </div>
   );
@@ -125,8 +147,10 @@ const Dashboard: React.FC = () => {
   
   const { data: activeRidesCount, isLoading: loadingCount } = useActiveRidesCount();
   const { data: upcomingRides,    isLoading: loadingUpcoming } = useUpcomingRidesCount();
-  const { data: totalMembers,     isLoading: loadingMembers } = useTotalMembersCount();
+  const { data: memberCounts,     isLoading: loadingMembers } = useMemberCounts();
   const { data: activeRidesList } = useActiveRides();
+
+  const [isCreateRideOpen, setIsCreateRideOpen] = useState(false);
 
   const primaryRideId = selectedRideId || activeRidesList?.[0]?.id || null;
   const { data: participants = [] } = useRideParticipants(primaryRideId);
@@ -209,6 +233,24 @@ const Dashboard: React.FC = () => {
         </div>
       </PageHeader>
 
+      {/* Hero CTA — Plan a Ride */}
+      {isAdmin && (
+        <>
+          <button
+            onClick={() => setIsCreateRideOpen(true)}
+            className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold text-base tracking-widest uppercase shadow-lg hover:opacity-90 transition-all active:scale-[0.99] flex items-center justify-center gap-3"
+          >
+            <span className="material-symbols-outlined text-xl">add</span>
+            Plan a Ride
+          </button>
+          <RideFormModal
+            mode="create"
+            isOpen={isCreateRideOpen}
+            onClose={() => setIsCreateRideOpen(false)}
+          />
+        </>
+      )}
+
       {/* Guest Conversion Card */}
       {userTier === 'guest' && isRideGuest && (
         <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-700">
@@ -229,9 +271,26 @@ const Dashboard: React.FC = () => {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard label="Active Rides"       value={activeRidesCount ?? 0} isLoading={loadingCount}   />
-        <StatCard label="Upcoming Scheduled" value={upcomingRides    ?? 0} isLoading={loadingUpcoming} />
-        <StatCard label="Total Members"      value={totalMembers     ?? 0} isLoading={loadingMembers}  />
+        <StatCard
+          label="Active Rides"
+          value={activeRidesCount ?? 0}
+          isLoading={loadingCount}
+          roadmapNote="v2.0 — Live tactical map on mobile"
+        />
+        <StatCard
+          label="Upcoming Scheduled"
+          value={upcomingRides ?? 0}
+          isLoading={loadingUpcoming}
+        />
+        <StatCard
+          label="Members"
+          value={memberCounts?.affiliated ?? 0}
+          isLoading={loadingMembers}
+          subCounts={[
+            { label: 'Affiliated', value: memberCounts?.affiliated ?? 0, active: true },
+            { label: 'Pending',    value: memberCounts?.initiated  ?? 0, active: false },
+          ]}
+        />
       </div>
 
       {/* Tactical Testing Area (Mounting the End Ride Button) */}
