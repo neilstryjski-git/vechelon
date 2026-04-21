@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vechelon — What We're Building</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -24,8 +24,8 @@
       --v6:         #22d3ee;
       --complete:   #4ade80;
       --inbuild:    #facc15;
-      --blocked:    #64748b;
-      --planned:    #475569;
+      --blocked:    #8899aa;
+      --planned:    #7a8499;
       --circ:       339.3;
     }
 
@@ -44,27 +44,28 @@
       content: '';
       position: fixed; inset: 0;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 0;
+      pointer-events: none; z-index: 0;
     }
 
     .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
 
     /* ── Header ── */
     header {
-      padding: 32px 0 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      padding: 28px 0 20px;
+      display: flex; align-items: center; justify-content: space-between;
       border-bottom: 1px solid var(--border);
     }
-    .wordmark {
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 700; font-size: 18px;
-      letter-spacing: -0.04em;
-      color: var(--text); text-decoration: none;
+    .header-logo {
+      display: flex; align-items: center; gap: 12px;
     }
-    .wordmark span { color: var(--v1); }
+    .header-chainring {
+      animation: spin 40s linear infinite;
+      opacity: 0.85;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
     .version-pill {
       font-size: 10px; font-weight: 600;
       letter-spacing: 0.14em; text-transform: uppercase;
@@ -74,34 +75,31 @@
     }
 
     /* ── Hero ── */
-    .hero { padding: 100px 0 80px; text-align: center; }
-    .hero-eyebrow {
-      font-size: 10px; font-weight: 600;
-      letter-spacing: 0.2em; text-transform: uppercase;
-      color: var(--v1); margin-bottom: 24px;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
+    .hero { padding: 80px 0 72px; text-align: center; }
+
+    .hero-ring-wrap {
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 32px;
     }
-    .hero-eyebrow::before, .hero-eyebrow::after {
-      content: ''; display: block;
-      width: 32px; height: 1px;
-      background: var(--v1); opacity: 0.4;
+    .hero-chainring {
+      animation: spin 30s linear infinite;
+      filter: drop-shadow(0 0 32px rgba(184,245,66,0.25));
     }
-    .hero h1 {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(42px, 8vw, 88px);
-      font-weight: 700; letter-spacing: -0.04em;
-      line-height: 1.0; margin-bottom: 28px;
+
+    .hero-wordmark {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: clamp(52px, 10vw, 100px);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      line-height: 1;
+      margin-bottom: 24px;
     }
-    .hero h1 em {
-      font-style: normal;
-      background: linear-gradient(135deg, var(--v1) 0%, #68f5c0 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
+    .wm-bold  { font-weight: 800; color: #fff; }
+    .wm-light { font-weight: 800; color: var(--v1); }
+
     .hero p {
-      font-size: 18px; color: var(--muted);
-      max-width: 560px; margin: 0 auto 48px; line-height: 1.7;
+      font-size: 17px; color: var(--muted);
+      max-width: 500px; margin: 0 auto 48px; line-height: 1.7;
     }
     .hero-stat-row {
       display: flex; align-items: center;
@@ -127,16 +125,14 @@
       color: var(--muted); margin-bottom: 40px;
       display: flex; align-items: center; gap: 12px;
     }
-    .section-label::after {
-      content: ''; flex: 1; height: 1px; background: var(--border);
-    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
     /* ── Rings ── */
-    .rings-section { padding: 80px 0 40px; }
+    .rings-section { padding: 72px 0 40px; }
     .rings-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
+      gap: 20px;
     }
     @media (max-width: 700px) { .rings-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 420px) { .rings-grid { grid-template-columns: 1fr; } }
@@ -152,9 +148,9 @@
       transition: border-color 0.2s, transform 0.2s;
     }
     .ring-card:hover { transform: translateY(-3px); }
-    .ring-card.blocked { opacity: 0.5; }
-    .ring-card.planned { opacity: 0.35; }
-    .ring-card.next-up { opacity: 0.85; border-color: rgba(167,139,250,0.3); }
+    .ring-card.blocked { opacity: 0.55; }
+    .ring-card.planned { opacity: 0.45; }
+    .ring-card.next-up { opacity: 1; border-color: rgba(167,139,250,0.3); }
 
     .ring-card::before {
       content: '';
@@ -178,7 +174,6 @@
     .ring-icon {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 26px;
     }
     .ring-pct {
       position: absolute; bottom: -2px; right: -2px;
@@ -202,24 +197,25 @@
       letter-spacing: -0.02em; color: var(--text); margin-bottom: 10px;
     }
 
-    /* Feature list inside ring card */
-    .ring-features {
-      width: 100%; list-style: none;
-      display: flex; flex-direction: column; gap: 5px;
-      text-align: left;
-    }
+    /* Feature list */
+    .ring-features { width: 100%; list-style: none; display: flex; flex-direction: column; gap: 6px; text-align: left; }
     .ring-features li {
       display: flex; align-items: flex-start; gap: 8px;
-      font-size: 11px; color: var(--muted); line-height: 1.4;
+      font-size: 12px; line-height: 1.4;
     }
-    .ring-features li .fi {
+    .ring-features li.done   { color: #d4d8f0; }
+    .ring-features li.inbuild{ color: #d4d8f0; }
+    .ring-features li.locked { color: #b0b5cc; }
+    .ring-features li.scoped { color: #b0b5cc; }
+
+    .fi {
       flex-shrink: 0; margin-top: 1px;
-      font-size: 10px; width: 14px; text-align: center;
+      font-size: 10px; width: 14px; text-align: center; font-style: normal;
     }
     .fi-check { color: var(--complete); }
     .fi-build { color: var(--inbuild); }
-    .fi-lock  { color: var(--blocked); opacity: 0.7; }
-    .fi-scope { color: var(--planned); opacity: 0.7; }
+    .fi-lock  { color: var(--blocked); }
+    .fi-scope { color: var(--planned); }
 
     .ring-status-badge {
       font-size: 9px; font-weight: 600;
@@ -235,16 +231,12 @@
 
     /* ── Horizon ── */
     .horizon-section { padding: 60px 0 100px; }
-    .horizon-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 16px;
-    }
+    .horizon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
     .horizon-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 16px; padding: 24px; opacity: 0.55;
     }
-    .horizon-card.next { opacity: 0.9; border-color: rgba(167,139,250,0.25); }
+    .horizon-card.next { opacity: 1; border-color: rgba(167,139,250,0.25); }
     .horizon-card h3 {
       font-family: 'Space Grotesk', sans-serif;
       font-size: 16px; font-weight: 700;
@@ -253,8 +245,7 @@
     .horizon-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
     .horizon-tag {
       display: inline-block;
-      font-size: 9px; font-weight: 600;
-      letter-spacing: 0.14em; text-transform: uppercase;
+      font-size: 9px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
       color: var(--muted); background: var(--surface-hi);
       padding: 3px 8px; border-radius: 100px; margin-bottom: 12px;
     }
@@ -276,13 +267,12 @@
 
     .live-dot {
       display: inline-block; width: 6px; height: 6px;
-      background: var(--complete); border-radius: 50%;
-      margin-right: 6px;
+      background: var(--complete); border-radius: 50%; margin-right: 6px;
       animation: pulse 2s ease-in-out infinite;
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
+      50%       { opacity: 0.5; transform: scale(0.8); }
     }
   </style>
 </head>
@@ -291,15 +281,28 @@
 
   <!-- Header -->
   <header>
-    <a href="#" class="wordmark">Vech<span>elon</span></a>
+    <div class="header-logo">
+      <svg class="header-chainring" id="hdr-ring" width="36" height="36" viewBox="-140 -140 280 280">
+        <path id="hdr-path" fill="#b8f542" fill-rule="evenodd" />
+      </svg>
+    </div>
     <span class="version-pill">v1.4.0 — April 2026</span>
   </header>
 
   <!-- Hero -->
   <section class="hero">
-    <p class="hero-eyebrow">Public Roadmap</p>
-    <h1>Club cycling,<br /><em>coordinated.</em></h1>
-    <p>Vechelon is tactical coordination software for cycling clubs — built ride-first, safety-first, and in the open.</p>
+    <div class="hero-ring-wrap">
+      <svg class="hero-chainring" id="hero-ring" width="180" height="180" viewBox="-140 -140 280 280">
+        <path id="hero-path" fill="#b8f542" fill-rule="evenodd" />
+      </svg>
+    </div>
+
+    <div class="hero-wordmark">
+      <span class="wm-bold">VE</span><span class="wm-light">che</span><span class="wm-bold">LO</span><span class="wm-light">n</span>
+    </div>
+
+    <p>Tactical coordination software for cycling clubs — built ride-first, safety-first, and in the open.</p>
+
     <div class="hero-stat-row">
       <div class="hero-stat">
         <div class="hero-stat-value">75%</div>
@@ -323,13 +326,10 @@
     <p class="section-label">Release Themes</p>
     <div class="rings-grid">
 
-      <!-- v1.0 Club Command -->
+      <!-- v1.0 -->
       <div class="ring-card" style="--ring-color: var(--v1);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="75" />
-          </svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="75"/></svg>
           <div class="ring-icon">🖥️</div>
           <div class="ring-pct">75%</div>
         </div>
@@ -337,13 +337,13 @@
           <div class="ring-version">v1.0</div>
           <div class="ring-title">Club Command</div>
           <ul class="ring-features">
-            <li><span class="fi fi-check">✓</span>Calendar & ride management</li>
-            <li><span class="fi fi-check">✓</span>AI ride summaries for WhatsApp</li>
-            <li><span class="fi fi-check">✓</span>Route library & GPX download</li>
-            <li><span class="fi fi-check">✓</span>Rider portal — RSVP & 3-tier access</li>
-            <li><span class="fi fi-check">✓</span>QR join flow — ride-day onboarding</li>
-            <li><span class="fi fi-build">◐</span>Captain & Support designation</li>
-            <li><span class="fi fi-build">◐</span>Automated ride close & data purge</li>
+            <li class="done"><i class="fi fi-check">✓</i>Calendar & ride management</li>
+            <li class="done"><i class="fi fi-check">✓</i>AI ride summaries for WhatsApp</li>
+            <li class="done"><i class="fi fi-check">✓</i>Route library & GPX download</li>
+            <li class="done"><i class="fi fi-check">✓</i>Rider portal — RSVP & tiered access</li>
+            <li class="done"><i class="fi fi-check">✓</i>QR join — ride-day onboarding</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Captain & Support designation</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Automated ride close & data purge</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-live">In Build</span>
@@ -352,14 +352,11 @@
       <!-- v2.0 Android Tactical -->
       <div class="ring-card blocked" style="--ring-color: var(--v2);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0" />
-          </svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
-            <!-- Android robot — CC 3.0 Attribution, Google -->
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="#38c6f5" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zm-2.5-1C3.67 17 3 16.33 3 15.5v-6C3 8.67 3.67 8 4.5 8S6 8.67 6 9.5v6c0 .83-.67 1.5-1.5 1.5zm15 0c-.83 0-1.5-.67-1.5-1.5v-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5zm-1.97-13.21l1.42-1.42c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.62 1.62C15.31 2.49 13.71 2 12 2s-3.31.49-4.62 1.28L5.76 1.66c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.42 1.42C5.01 5.07 4 6.92 4 9h16c0-2.08-1.01-3.93-2.47-5.21zM10 6H9V5h1v1zm5 0h-1V5h1v1z"/>
+            <!-- Android robot — CC 3.0 Attribution, Google Inc. -->
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="#38c6f5" style="transform:rotate(45deg)">
+              <path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zm-2.5-1C2.67 17 2 16.33 2 15.5v-6C2 8.67 2.67 8 3.5 8S5 8.67 5 9.5v6c0 .83-.67 1.5-1.5 1.5zm15 0c-.83 0-1.5-.67-1.5-1.5v-6c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5zm-1.97-13.21l1.42-1.42c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.62 1.62C15.31 2.49 13.71 2 12 2s-3.31.49-4.62 1.28L5.76 1.66c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.42 1.42C4.01 4.07 3 5.92 3 8h18c0-2.08-1.01-3.93-2.47-5.21zM10 6H9V5h1v1zm5 0h-1V5h1v1z"/>
             </svg>
           </div>
           <div class="ring-pct">—</div>
@@ -368,11 +365,11 @@
           <div class="ring-version">v2.0</div>
           <div class="ring-title">Android Tactical</div>
           <ul class="ring-features">
-            <li><span class="fi fi-lock">⊘</span>Live fleet tracking map</li>
-            <li><span class="fi fi-lock">⊘</span>Support Beacon — one tap alert</li>
-            <li><span class="fi fi-lock">⊘</span>Captain mobile controls</li>
-            <li><span class="fi fi-lock">⊘</span>Rider states & edge indicators</li>
-            <li><span class="fi fi-lock">⊘</span>Ad hoc ride creation on road</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Live fleet tracking map</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Support Beacon — one tap alert</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Captain mobile controls</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Rider states & edge indicators</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Ad hoc ride creation on road</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-blocked">Pending Gate</span>
@@ -381,32 +378,33 @@
       <!-- v2.1 iOS -->
       <div class="ring-card blocked" style="--ring-color: var(--v2);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0" />
-          </svg>
-          <div class="ring-icon">🍎</div>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
+          <div class="ring-icon">
+            <!-- Generic smartphone icon — no trademark -->
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38c6f5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/>
+              <circle cx="12" cy="17" r="1" fill="#38c6f5" stroke="none"/>
+              <line x1="9" y1="5" x2="15" y2="5"/>
+            </svg>
+          </div>
           <div class="ring-pct">—</div>
         </div>
         <div class="ring-info">
           <div class="ring-version">v2.1</div>
           <div class="ring-title">iOS Tactical</div>
           <ul class="ring-features">
-            <li><span class="fi fi-lock">⊘</span>Full iOS parity with Android</li>
-            <li><span class="fi fi-lock">⊘</span>App Store submission</li>
-            <li><span class="fi fi-lock">⊘</span>Background GPS validation</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Full iOS parity with Android</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>App Store submission</li>
+            <li class="locked"><i class="fi fi-lock">⊘</i>Background GPS validation</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-blocked">Post Android</span>
       </div>
 
-      <!-- v3.0 Multi-Club — NEXT UP -->
+      <!-- v3.0 Multi-Club — Next Up -->
       <div class="ring-card next-up" style="--ring-color: var(--v3);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0" />
-          </svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">🔗</div>
           <div class="ring-pct">—</div>
         </div>
@@ -414,11 +412,11 @@
           <div class="ring-version">v3.0</div>
           <div class="ring-title">Multi-Club</div>
           <ul class="ring-features">
-            <li><span class="fi fi-scope">·</span>Second club onboarding</li>
-            <li><span class="fi fi-scope">·</span>Club switcher for riders</li>
-            <li><span class="fi fi-scope">·</span>Multi-membership support</li>
-            <li><span class="fi fi-scope">·</span>Self-serve branding portal</li>
-            <li><span class="fi fi-scope">·</span>Independent data isolation</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Second club onboarding</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Club switcher for riders</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Multi-membership support</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Self-serve branding portal</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Independent data isolation</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-next">Next Up</span>
@@ -427,10 +425,7 @@
       <!-- v4.0 Ride Depth -->
       <div class="ring-card planned" style="--ring-color: var(--v4);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0" />
-          </svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">🚴</div>
           <div class="ring-pct">—</div>
         </div>
@@ -438,10 +433,10 @@
           <div class="ring-version">v4.0</div>
           <div class="ring-title">Ride Depth</div>
           <ul class="ring-features">
-            <li><span class="fi fi-scope">·</span>Sub-group Captains</li>
-            <li><span class="fi fi-scope">·</span>Multiple simultaneous rides</li>
-            <li><span class="fi fi-scope">·</span>Advanced scheduling</li>
-            <li><span class="fi fi-scope">·</span>Mid-ride SAG reassignment</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Sub-group Captains</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Multiple simultaneous rides</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Advanced scheduling</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Mid-ride SAG reassignment</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-scoped">Scoped</span>
@@ -450,10 +445,7 @@
       <!-- v5.0 Club Growth -->
       <div class="ring-card planned" style="--ring-color: var(--v5);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="54" />
-            <circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0" />
-          </svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">👥</div>
           <div class="ring-pct">—</div>
         </div>
@@ -461,10 +453,10 @@
           <div class="ring-version">v5.0</div>
           <div class="ring-title">Club Growth</div>
           <ul class="ring-features">
-            <li><span class="fi fi-scope">·</span>Observer role</li>
-            <li><span class="fi fi-scope">·</span>Member GPX uploads</li>
-            <li><span class="fi fi-scope">·</span>Ride history on profiles</li>
-            <li><span class="fi fi-scope">·</span>Voice of Customer</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Observer role</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Member GPX uploads</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Ride history on profiles</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Voice of Customer</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-scoped">Scoped</span>
@@ -477,37 +469,31 @@
   <section class="horizon-section">
     <p class="section-label">On the Horizon</p>
     <div class="horizon-grid">
-
       <div class="horizon-card next">
         <div class="horizon-tag next-tag">v3.0 — Next Up</div>
         <h3>Every club, its own command</h3>
         <p>Second and third clubs onboard independently. Riders carry memberships across clubs. Each club keeps its own data, identity, and branding.</p>
       </div>
-
       <div class="horizon-card">
-        <div class="horizon-tag">v2.0 — Tactical Android</div>
+        <div class="horizon-tag">v2.0 — Android Tactical</div>
         <h3>The live ride goes mobile</h3>
-        <p>A live tactical map showing every rider's position in real time. The Support Beacon puts help one tap away. Captain controls from the road.</p>
+        <p>A live tactical map showing every rider's position in real time. Support Beacon one tap away. Captain controls from the road.</p>
       </div>
-
       <div class="horizon-card">
         <div class="horizon-tag">v4.0 — Ride Depth</div>
         <h3>Complexity without chaos</h3>
-        <p>Sub-group Captains for large pelotons. Multiple simultaneous rides. Mid-ride SAG reassignment. Advanced scheduling for every recurrence pattern.</p>
+        <p>Sub-group Captains for large pelotons. Multiple simultaneous rides. Mid-ride SAG reassignment. Advanced scheduling for every pattern.</p>
       </div>
-
       <div class="horizon-card">
         <div class="horizon-tag">v5.0 — Club Growth</div>
         <h3>The club comes alive</h3>
         <p>Observer role, member-uploaded routes, ride history on every profile, and Voice of Customer built into the product.</p>
       </div>
-
       <div class="horizon-card">
         <div class="horizon-tag">v6.0 — Intelligence</div>
         <h3>Data that works for your club</h3>
         <p>Strava sync, club analytics, advanced scheduling, and Velo Mode.</p>
       </div>
-
     </div>
   </section>
 
@@ -520,22 +506,58 @@
 </div>
 
 <script>
-  const rings = document.querySelectorAll('.ring-progress');
-  const circ = 339.3;
+// ── Chainring geometry (from echelon-logo-v10) ───────────────────────────────
+const toR = d => d * Math.PI / 180;
+const pt  = (cx, cy, r, deg) => [cx + r * Math.cos(toR(deg)), cy + r * Math.sin(toR(deg))];
+const f   = n => parseFloat(n.toFixed(3));
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      const el = entry.target;
-      const pct = parseFloat(el.dataset.pct) / 100;
-      const offset = circ * (1 - pct);
-      const idx = [...rings].indexOf(el);
-      setTimeout(() => { el.style.strokeDashoffset = offset; }, idx * 120);
-      observer.unobserve(el);
-    });
-  }, { threshold: 0.3 });
+function hole(cx, cy, r) {
+  return `M${f(cx+r)},${f(cy)} A${r},${r},0,1,0,${f(cx-r)},${f(cy)} A${r},${r},0,1,0,${f(cx+r)},${f(cy)}Z`;
+}
 
-  rings.forEach(r => observer.observe(r));
+function buildChainring(cx, cy) {
+  const N=40, rT=138, rV=114, rI=51, bR=85, bRad=13;
+  const thW=3.8, thN=2.2;
+  const [sx,sy] = pt(cx,cy,rV,-90-thW);
+  let d = `M${f(sx)},${f(sy)}`;
+  for(let i=0;i<N;i++){
+    const A = -90 + i*(360/N);
+    const th = (i%2===0) ? thW : thN;
+    const vE=A-th, tE=A+th;
+    const[a,b]=pt(cx,cy,rV,vE); d+=` A${rV},${rV},0,0,1,${f(a)},${f(b)}`;
+    const[c,e]=pt(cx,cy,rT,vE); d+=` L${f(c)},${f(e)}`;
+    const[g,h]=pt(cx,cy,rT,tE); d+=` A${rT},${rT},0,0,1,${f(g)},${f(h)}`;
+    const[j,k]=pt(cx,cy,rV,tE); d+=` L${f(j)},${f(k)}`;
+  }
+  d += "Z";
+  d += " " + hole(cx, cy, rI);
+  for(let b=0;b<5;b++){
+    const[bx,by]=pt(cx,cy,bR,-90+b*72);
+    d += " " + hole(bx,by,bRad);
+  }
+  return d;
+}
+
+const gearPath = buildChainring(0, 0);
+document.getElementById('hero-path').setAttribute('d', gearPath);
+document.getElementById('hdr-path').setAttribute('d', gearPath);
+
+// ── Progress ring animation ───────────────────────────────────────────────────
+const rings = document.querySelectorAll('.ring-progress');
+const circ  = 339.3;
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const el  = entry.target;
+    const pct = parseFloat(el.dataset.pct) / 100;
+    const idx = [...rings].indexOf(el);
+    setTimeout(() => { el.style.strokeDashoffset = circ * (1 - pct); }, idx * 120);
+    observer.unobserve(el);
+  });
+}, { threshold: 0.3 });
+
+rings.forEach(r => observer.observe(r));
 </script>
 </body>
 </html>
