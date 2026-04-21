@@ -9,6 +9,35 @@ import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 
 // ---------------------------------------------------------------------------
+// Roster query
+// ---------------------------------------------------------------------------
+
+type ParticipantRole = 'member' | 'captain' | 'support' | 'guest';
+
+interface RosterParticipant {
+  id: string;
+  display_name: string | null;
+  role: ParticipantRole;
+  status: string;
+}
+
+function useRideRoster(rideId: string | undefined) {
+  return useQuery<RosterParticipant[]>({
+    queryKey: ['ride-roster', rideId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ride_participants')
+        .select('id, display_name, role, status')
+        .eq('ride_id', rideId!)
+        .order('display_name');
+      if (error) throw error;
+      return (data || []) as RosterParticipant[];
+    },
+    enabled: !!rideId,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -208,6 +237,27 @@ const RideBuilder: React.FC = () => {
     }
   });
 
+  // Roster
+  const { data: roster = [] } = useRideRoster(rideId);
+  const isRideActive = ride?.status === 'active';
+
+  const roleMutation = useMutation({
+    mutationFn: async ({ participantId, role }: { participantId: string; role: ParticipantRole }) => {
+      const { error } = await supabase
+        .from('ride_participants')
+        .update({ role })
+        .eq('id', participantId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ride-roster', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides-list'] });
+    },
+    onError: (e: Error) => {
+      addToast(`Failed to update role: ${e.message}`, 'error');
+    },
+  });
+
   const handleDelete = async () => {
     const { error } = await supabase.from('rides').delete().eq('id', rideId);
     if (error) { addToast(`Delete failed: ${error.message}`, 'error'); return; }
@@ -293,7 +343,7 @@ const RideBuilder: React.FC = () => {
         </div>
 
         {/* Sidebar Controls */}
-        <aside className="w-80 space-y-6 overflow-y-auto pr-2">
+        <aside className="w-80 space-y-6 overflow-y-auto pr-2 min-h-0">
 
           {/* Ride Details */}
           <section className="space-y-3">
@@ -392,8 +442,8 @@ const RideBuilder: React.FC = () => {
               <div className="bg-surface-container-low p-4 rounded-xl space-y-4">
                 <div>
                   <label className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-1"> Label</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={selectedMarker.label}
                     onChange={(e) => updateWaypointLabel(selectedMarker.id, e.target.value)}
                     className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-md p-2 font-body text-sm outline-none focus:border-brand-primary transition-colors"
@@ -416,9 +466,81 @@ const RideBuilder: React.FC = () => {
               </div>
             </section>
           )}
+
         </aside>
       </div>
     </div>
+
+    {/* Crew Roster — below the map, always visible */}
+    <section className="space-y-4 mt-8">
+      <div className="flex items-center justify-between border-b border-surface-container-low pb-2">
+        <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold">
+          Crew Roster
+        </h3>
+        {roster.length > 0 && !roster.some(p => p.role === 'captain') && (
+          <span className="flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+            <span className="material-symbols-outlined text-[10px]">warning</span>
+            No Captain
+          </span>
+        )}
+      </div>
+
+      {isRideActive && (
+        <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant/50 bg-surface-container-low px-3 py-2 rounded-lg">
+          Roles locked — ride is active
+        </p>
+      )}
+
+      {roster.length === 0 ? (
+        <p className="font-body text-sm text-on-surface-variant/50 italic">
+          No participants have RSVPd yet.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {roster.map((p) => {
+            const initials = (p.display_name ?? '?')
+              .split(' ')
+              .map((w: string) => w[0])
+              .slice(0, 2)
+              .join('')
+              .toUpperCase();
+
+            const roleColors: Record<ParticipantRole, string> = {
+              captain: 'text-brand-primary bg-brand-primary/10',
+              support: 'text-tertiary bg-tertiary/10',
+              member:  'text-on-surface-variant bg-surface-container-high',
+              guest:   'text-on-surface-variant/50 bg-surface-container-low',
+            };
+
+            return (
+              <div key={p.id} className="flex items-center gap-3 bg-surface-container-lowest p-3 rounded-xl border border-outline-variant/10">
+                <div className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
+                  <span className="font-label text-[11px] font-bold text-on-surface-variant">{initials}</span>
+                </div>
+                <span className="font-body text-sm text-on-background flex-1 truncate">{p.display_name ?? 'Unknown'}</span>
+                {isRideActive ? (
+                  <span className={`font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0 ${roleColors[p.role] ?? roleColors.member}`}>
+                    {p.role}
+                  </span>
+                ) : (
+                  <select
+                    value={p.role}
+                    disabled={roleMutation.isPending}
+                    onChange={(e) => roleMutation.mutate({ participantId: p.id, role: e.target.value as ParticipantRole })}
+                    className="font-label text-[9px] uppercase tracking-widest bg-surface-container-high border border-outline-variant/20 rounded-full px-2 py-0.5 outline-none cursor-pointer hover:border-brand-primary/40 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    <option value="member">Member</option>
+                    <option value="captain">Captain</option>
+                    <option value="support">Support</option>
+                    <option value="guest">Guest</option>
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
     </>
   );
 };

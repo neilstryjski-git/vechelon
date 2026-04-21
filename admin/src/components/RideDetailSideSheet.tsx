@@ -466,7 +466,7 @@ const RideDetailSideSheet: React.FC = () => {
                       onClick={() => { close(); navigate(`/builder/${selectedRideId}`); }}
                     >
                       <span className="material-symbols-outlined text-sm">edit_location_alt</span>
-                      Customize Geometry
+                      Edit Geometry & Crew
                     </button>
                     <button
                       className="w-full bg-error/10 text-error py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-error/20 transition-colors"

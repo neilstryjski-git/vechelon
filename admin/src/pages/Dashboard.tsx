@@ -19,11 +19,14 @@ function useActiveRides() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, thumbnail_url, external_url, gpx_path')
+        .select('id, name, thumbnail_url, external_url, gpx_path, ride_participants(role)')
         .eq('status', 'active')
         .limit(5);
       if (error) throw error;
-      return data || [];
+      return (data || []).map((r: any) => ({
+        ...r,
+        hasCaptain: (r.ride_participants as { role: string }[] | null)?.some(p => p.role === 'captain') ?? false,
+      }));
     },
   });
 }
@@ -332,7 +335,7 @@ const Dashboard: React.FC = () => {
                         <div>
                           <h4 className="font-headline font-bold text-lg text-on-background line-clamp-1">{ride.name}</h4>
                           {ride.external_url && (
-                            <a 
+                            <a
                               href={ride.external_url}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -342,7 +345,15 @@ const Dashboard: React.FC = () => {
                             </a>
                           )}
                         </div>
-                        <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Active</span>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="font-label text-[9px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full uppercase tracking-widest">Active</span>
+                          {!ride.hasCaptain && (
+                            <span className="flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              <span className="material-symbols-outlined text-[10px]">warning</span>
+                              No Captain
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <EndRideButton rideId={ride.id} />
                     </div>
