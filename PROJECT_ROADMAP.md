@@ -1,23 +1,44 @@
-# VEcheLOn Project Roadmap
+**Project:** VEcheLOn
+**Current Version:** v1.5.0
+**Last Sync Date:** 2026-04-21
+**Status:** COMMITTED
 
-## Phase 1: Landing Page & Branding (Current)
-- [x] Initial design and logo (echelon-logo-v10.html)
-- [x] \"Coming Soon\" hero section
-- [x] \"Below the Fold\" situational value grid (Task W2)
-- [x] Admin Desktop \"Velo Modern\" Design System (Task W16)
-- [x] Map thumbnails & external activity integration (Task G11)
-- [x] Admin route management / deletion (Task W53)
-- [ ] Responsive navigation menu
+| Version | Date | Time | MACD Action | Decision | Lead |
+|---------|------|------|-------------|----------|------|
+| v1.5.0  | 2026-04-21 | 14:30 | CHANGE | Pivot to Value-Driven Roadmap (Theme Buckets + Active Picks) | PM |
+
+# VEcheLOn Strategic Roadmap
+
+## 🎯 Active Value Set (Next Release)
+*The specific high-impact features currently being pulled from our strategic themes.*
+
+- [ ] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
+- [ ] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
+- [ ] **Advanced Ride Management** (from *Club Command* theme) - Tactical logistics: Captain/Support designations and automated 4-hour data purge.
+
+## 🏗️ Strategic Themes (Value Buckets)
+*Our long-term architectural and market objectives. Features are "picked" from these buckets for each release.*
+
+### Club Command
+- [x] Initial design and logo
+- [x] "Coming Soon" hero section
+- [x] Admin Desktop "Velo Modern" Design System
+- [ ] Captain & Support designation
+- [ ] Automated ride close & data purge
 - [ ] Email signup/waitlist integration
+- [ ] Responsive navigation menu
 
-## Phase 2: Core Features (Pending)
-- [ ] GPX route locking & planning
-- [x] Shared Supabase Backend & RLS Policies (Task W14, W5)
-- [x] Real-time Support Beacon loop (Task W15)
-- [ ] Real-time group persistence (Rollout)
-- [ ] Tactical presence mapping (The Ride)
-- [ ] Support van intercept & communication (Support)
+### Multi-Club (The Tenant Era)
+- [x] Shared Supabase Backend & RLS Policies
+- [ ] Second club onboarding
+- [ ] Club switcher for riders
 
+### Android/iOS Tactical (The Live Ride)
+- [x] Real-time Support Beacon loop
+- [ ] Tactical presence mapping
+- [ ] Support van intercept & communication
 
-## Phase 3: Privacy & Data (Pending)
-- [ ] 4-hour post-ride data scrub (Aftermath)
+### Club Growth & Intelligence
+- [ ] Ride history on profiles
+- [ ] Automated 4-hour post-ride data scrub
+- [ ] Strava sync & club analytics

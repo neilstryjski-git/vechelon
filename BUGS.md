@@ -21,4 +21,6 @@
 | **W61** (GPX Extraction Bridge) | Implemented robust GPX coordinate extraction in RideFormModal, ensured coordinates and labels are passed to and persisted in RideBuilder, and improved map fit-bounds behavior. | 2026-04-14 |
 | **W63** (Resend SMTP Integration) | Wired up Resend as transactional email provider for Edge Functions (e.g. member invitations) to ensure professional branding and deliverability. | 2026-04-15 |
 | **W64** (Anonymous Join) | Enabled unauthenticated "Join as Guest" functionality in `RideLanding` using persisted `sessionCookieId`. | 2026-04-15 |
+| **U3** (Roadmap Polish) | Fixed Android/Apple logo rotations, reoriented hero chainring behind wordmark, and added Irish Green color picker. | 2026-04-21 |
+| **U4** (Roadmap Deploy) | Moved roadmap to `/roadmap` path and added "VIEW ROADMAP" link to marketing page. | 2026-04-21 |
 
