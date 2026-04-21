@@ -12,9 +12,10 @@
 ## 🎯 Active Value Set (Next Release)
 *The specific high-impact features currently being pulled from our strategic themes.*
 
-- [ ] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
-- [ ] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
-- [ ] **Advanced Ride Management** (from *Club Command* theme) - Tactical logistics: Captain/Support designations and automated 4-hour data purge.
+- [x] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
+- [x] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
+- [x] **Advanced Ride Management** (from *Club Command* theme) - Tactical logistics: Captain/Support designations and automated 4-hour data purge.
+- [ ] **UAT Work** (from *Club Command* theme) - User Acceptance Testing and final verification of the command-center workflows.
 
 ## 🏗️ Strategic Themes (Value Buckets)
 *Our long-term architectural and market objectives. Features are "picked" from these buckets for each release.*
@@ -23,10 +24,9 @@
 - [x] Initial design and logo
 - [x] "Coming Soon" hero section
 - [x] Admin Desktop "Velo Modern" Design System
-- [ ] Captain & Support designation
-- [ ] Automated ride close & data purge
-- [ ] Email signup/waitlist integration
-- [ ] Responsive navigation menu
+- [x] Captain & Support designation
+- [x] Automated ride close & data purge
+- [ ] UAT Work
 
 ### Multi-Club (The Tenant Era)
 - [x] Shared Supabase Backend & RLS Policies

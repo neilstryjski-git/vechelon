@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vechelon — What We're Building</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZmlsbD0iIzNCODJGNiIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTQuNzUsNS4wNyBBMTEsMTEsMCwwLDEsMTQuNzUsNS4wNyBMMTQuMzYsMS41OSBBMTQuNSwxNC41LDAsMCwxLDE3LjY0LDEuNTkgTDE3LjI1LDUuMDcgQTExLDExLDAsMCwxLDIwLjc0LDYuMDcgTDIyLjI0LDIuOTEgQTE0LjUsMTQuNSwwLDAsMSwyNC4yMSw0LjA1IEwyMi4yMyw2LjkzIEExMSwxMSwwLDAsMSwyNC44NCw5LjQ2IEwyNy42Niw3LjM4IEExNC41LDE0LjUsMCwwLDEsMjkuMzAsMTAuMjIgTDI2LjA5LDExLjYxIEExMSwxMSwwLDAsMSwyNi45NywxNS4xNCBMMzAuNDYsMTQuODYgQTE0LjUsMTQuNSwwLDAsMSwzMC40NiwxNy4xNCBMMjYuOTcsMTYuODYgQTExLDExLDAsMCwxLDI2LjA5LDIwLjM5IEwyOS4zMCwyMS43OCBBMTQuNSwxNC41LDAsMCwxLDI3LjY2LDI0LjYyIEwyNC44NCwyMi41NCBBMTEsMTEsMCwwLDEsMjIuMjMsMjUuMDcgTDI0LjIxLDI3Ljk1IEExNC41LDE0LjUsMCwwLDEsMjIuMjQsMjkuMDkgTDIwLjc0LDI1LjkzIEExMSwxMSwwLDAsMSwxNy4yNSwyNi45MyBMMTcuNjQsMzAuNDEgQTE0LjUsMTQuNSwwLDAsMSwxNC4zNiwzMC40MSBMMTQuNzUsMjYuOTMgQTExLDExLDAsMCwxLDExLjI2LDI1LjkzIEw5Ljc2LDI5LjA5IEExNC41LDE0LjUsMCwwLDEsNy43OSwyNy45NSBMOS43NywyNS4wNyBBMTEsMTEsMCwwLDEsNy4xNiwyMi41NCBMNC4zNCwyNC42MiBBMTQuNSwxNC41LDAsMCwxLDIuNzAsMjEuNzggTDUuOTEsMjAuMzkgQTExLDExLDAsMCwxLDUuMDMsMTYuODYgTDEuNTQsMTcuMTQgQTE0LjUsMTQuNSwwLDAsMSwxLjU0LDE0Ljg2IEw1LjAzLDE1LjE0IEExMSwxMSwwLDAsMSw1LjkxLDExLjYxIEwyLjcwLDEwLjIyIEExNC41LDE0LjUsMCwwLDEsNC4zNCw3LjM4IEw3LjE2LDkuNDYgQTExLDExLDAsMCwxLDkuNzcsNi45MyBMNy43OSw0LjA1IEExNC41LDE0LjUsMCwwLDEsOS43NiwyLjkxIEwxMS4yNiw2LjA3WiBNMjAuMDAsMTYuMDAgQTQsNCwwLDEsMCwxMi4wMCwxNi4wMCBBNCw0LDAsMSwwLDIwLjAwLDE2LjAwWiBNMTcuMDUsOC4xNSBBMS4wNSwxLjA1LDAsMSwwLDE0Ljk1LDguMTUgQTEuMDUsMS4wNSwwLDEsMCwxNy4wNSw4LjE1WiBNMjQuNTIsMTMuNTcgQTEuMDUsMS4wNSwwLDEsMCwyMi40MiwxMy41NyBBMS4wNSwxLjA1LDAsMSwwLDI0LjUyLDEzLjU3WiBNMjEuNjYsMjIuMzUgQTEuMDUsMS4wNSwwLDEsMCwxOS41NiwyMi4zNSBBMS4wNSwxLjA1LDAsMSwwLDIxLjY2LDIyLjM1WiBNMTIuNDQsMjIuMzUgQTEuMDUsMS4wNSwwLDEsMCwxMC4zNCwyMi4zNSBBMS4wNSwxLjA1LDAsMSwwLDEyLjQ0LDIyLjM1WiBNOS41OCwxMy41NyBBMS4wNSwxLjA1LDAsMSwwLDcuNDgsMTMuNTcgQTEuMDUsMS4wNSwwLDEsMCw5LjU4LDEzLjU3WiIvPjwvc3ZnPg==" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;400;600;700;800&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
@@ -121,11 +122,21 @@
     .wm-bold  { font-weight: 800; color: #fff; }
     .wm-light { font-weight: 800; color: var(--primary-color); }
 
+    .tagline {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5em;
+      text-transform: uppercase;
+      color: var(--primary-color);
+      margin: 12px 0 0 0.5em; 
+      text-align: center;
+      opacity: 0.85;
+    }
+
     .swatch-wrap {
       display: flex;
-      align-items: center;
-      gap: 10px;
-      margin: 24px 0 40px;
+      align-items: center; gap: 10px;
+      margin: 24px 0 24px;
     }
     .sw {
       width: 24px; height: 24px;
@@ -318,7 +329,14 @@
     .badge-scoped  { color: var(--planned); }
     .badge-next    { color: var(--v3); }
 
-    /* ── Footer ── */
+    .ring-rail {
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--muted); opacity: 0.5;
+      margin-bottom: -4px;
+    }
+
+    /* ── Horizon ── */
     footer {
       border-top: 1px solid var(--border);
       padding: 32px 0;
@@ -368,6 +386,7 @@
       <div class="hero-wordmark">
         <span class="wm-bold">VE</span><span class="wm-light">che</span><span class="wm-bold">LO</span><span class="wm-light">n</span>
       </div>
+      <div class="tagline">R · O · A · D · M · A · P</div>
     </div>
 
     <div class="swatch-wrap" id="swatches"></div>
@@ -376,7 +395,7 @@
 
     <div class="hero-stat-row">
       <div class="hero-stat">
-        <div class="hero-stat-value">75%</div>
+        <div class="hero-stat-value">88%</div>
         <div class="hero-stat-label">Initial Launch</div>
       </div>
       <div class="hero-stat-divider"></div>
@@ -399,18 +418,23 @@
       <div class="value-grid">
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v3)">Multi-Club Theme</div>
-          <div class="pick-title">Multitenancy Core</div>
+          <div class="pick-title">✓ Multitenancy Core</div>
           <div class="pick-desc">Backend and database isolation to support independent clubs on the same infrastructure.</div>
         </div>
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v5)">Club Growth Theme</div>
-          <div class="pick-title">Voice of Customer (VoC)</div>
+          <div class="pick-title">✓ Voice of Customer (VoC)</div>
           <div class="pick-desc">Real-time feedback loop allowing riders to shape the club's direction directly from the portal.</div>
         </div>
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v1)">Club Command Theme</div>
-          <div class="pick-title">Advanced Ride Management</div>
+          <div class="pick-title">✓ Advanced Ride Management</div>
           <div class="pick-desc">Finalizing tactical logistics: Captain & Support designations and automated 4-hour post-ride data purge.</div>
+        </div>
+        <div class="value-pick">
+          <div class="pick-tag" style="--tag-color: var(--v1)">Club Command Theme</div>
+          <div class="pick-title">UAT Work</div>
+          <div class="pick-desc">User Acceptance Testing and final verification of the command-center workflows with lead clubs.</div>
         </div>
       </div>
     </div>
@@ -423,8 +447,9 @@
 
       <!-- v1.0 -->
       <div class="ring-card" style="--ring-color: var(--v1);">
+        <div class="ring-rail">Rails 1 & 2</div>
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="75"/></svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="88"/></svg>
           <div class="ring-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ring-color)">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -432,7 +457,7 @@
               <line x1="12" y1="17" x2="12" y2="21"></line>
             </svg>
           </div>
-          <div class="ring-pct">75%</div>
+          <div class="ring-pct">88%</div>
         </div>
         <div class="ring-info">
           <div class="ring-version">v1.0</div>
@@ -445,8 +470,9 @@
             <li class="done"><i class="fi fi-check">✓</i>Route library & GPX download</li>
             <li class="done"><i class="fi fi-check">✓</i>Rider portal — RSVP & tiered access</li>
             <li class="done"><i class="fi fi-check">✓</i>QR join — ride-day onboarding</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Captain & Support designation</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Automated ride close & data purge</li>
+            <li class="done"><i class="fi fi-check">✓</i>Captain & Support designation</li>
+            <li class="done"><i class="fi fi-check">✓</i>Automated ride close & data purge</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>UAT Work</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-live">In Build</span>
@@ -454,6 +480,7 @@
 
       <!-- v2.0 Android Tactical -->
       <div class="ring-card blocked" style="--ring-color: var(--v2);">
+        <div class="ring-rail">Rail 3a</div>
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
@@ -491,6 +518,7 @@
 
       <!-- v2.1 iOS -->
       <div class="ring-card blocked" style="--ring-color: var(--v2);">
+        <div class="ring-rail">Rail 3b</div>
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
@@ -516,7 +544,7 @@
       </div>
 
       <!-- v3.0 Multi-Club — Next Up -->
-      <div class="ring-card next-up" style="--ring-color: var(--v3);">
+      <div class="ring-card build" style="--ring-color: var(--v3);">
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
@@ -539,10 +567,10 @@
             <li class="scoped"><i class="fi fi-scope">·</i>Club switcher for riders</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Multi-membership support</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Self-serve branding portal</li>
-            <li class="scoped"><i class="fi fi-scope">·</i>Independent data isolation</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Independent data isolation</li>
           </ul>
         </div>
-        <span class="ring-status-badge badge-next">Next Up</span>
+        <span class="ring-status-badge badge-build">In Build</span>
       </div>
 
       <!-- v4.0 Ride Depth -->
@@ -574,7 +602,7 @@
       </div>
 
       <!-- v5.0 Club Growth -->
-      <div class="ring-card planned" style="--ring-color: var(--v5);">
+      <div class="ring-card build" style="--ring-color: var(--v5);">
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
@@ -594,10 +622,10 @@
             <li class="scoped"><i class="fi fi-scope">·</i>Observer role</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Member GPX uploads</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Ride history on profiles</li>
-            <li class="scoped"><i class="fi fi-scope">·</i>Voice of Customer</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Voice of Customer</li>
           </ul>
         </div>
-        <span class="ring-status-badge badge-scoped">Scoped</span>
+        <span class="ring-status-badge badge-build">In Build</span>
       </div>
 
       <!-- v6.0 Intelligence -->
