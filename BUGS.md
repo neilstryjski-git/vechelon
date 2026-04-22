@@ -23,4 +23,5 @@
 | **W64** (Anonymous Join) | Enabled unauthenticated "Join as Guest" functionality in `RideLanding` using persisted `sessionCookieId`. | 2026-04-15 |
 | **U3** (Roadmap Polish) | Fixed Android/Apple logo rotations, reoriented hero chainring behind wordmark, and added Irish Green color picker. | 2026-04-21 |
 | **U4** (Roadmap Deploy) | Moved roadmap to `/roadmap` path and added "VIEW ROADMAP" link to marketing page. | 2026-04-21 |
+| **S1** (RLS Security) | Hardened database security by explicitly enabling RLS on all public tables and dropping stray "dev bypass" policies identified by Supabase Linter. | 2026-04-21 |
 

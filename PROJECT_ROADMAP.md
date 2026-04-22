@@ -12,9 +12,8 @@
 ## 🎯 Active Value Set (Next Release)
 *The specific high-impact features currently being pulled from our strategic themes.*
 
-- [x] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
-- [x] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
-- [x] **Advanced Ride Management** (from *Club Command* theme) - Tactical logistics: Captain/Support designations and automated 4-hour data purge.
+- [ ] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
+- [ ] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
 - [ ] **UAT Work** (from *Club Command* theme) - User Acceptance Testing and final verification of the command-center workflows.
 
 ## 🏗️ Strategic Themes (Value Buckets)
