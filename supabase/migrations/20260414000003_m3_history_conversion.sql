@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION ensure_account_exists(p_session_cookie_id TEXT DEFAUL
 RETURNS void AS $$
 DECLARE
   v_tenant_id UUID;
+  v_enroll_mode public.enrollment_mode;
   v_uid UUID;
   v_email TEXT;
 BEGIN
@@ -18,7 +19,8 @@ BEGIN
   END IF;
 
   -- Resolve tenant (dev: first tenant)
-  SELECT id INTO v_tenant_id FROM public.tenants LIMIT 1;
+  -- Also resolve enrollment mode to determine initial status
+  SELECT id, enrollment_mode INTO v_tenant_id, v_enroll_mode FROM public.tenants LIMIT 1;
 
   -- Upsert account row (and sync session cookie if provided)
   INSERT INTO public.accounts (id, email, name, phone, session_cookie_id)
@@ -27,12 +29,18 @@ BEGIN
   SET session_cookie_id = COALESCE(public.accounts.session_cookie_id, p_session_cookie_id);
 
   -- Create tenant membership if not already present
+  -- Scenario G2 + MVE Phase II: Use enrollment_mode to decide initial status
   IF NOT EXISTS (
     SELECT 1 FROM public.account_tenants
     WHERE account_id = v_uid AND tenant_id = v_tenant_id
   ) THEN
     INSERT INTO public.account_tenants (account_id, tenant_id, role, status)
-    VALUES (v_uid, v_tenant_id, 'member', 'initiated');
+    VALUES (
+      v_uid, 
+      v_tenant_id, 
+      'member', 
+      CASE WHEN v_enroll_mode = 'open' THEN 'affiliated'::account_status ELSE 'initiated'::account_status END
+    );
   END IF;
 
   -- Scenario G2: Link history from session cookie
