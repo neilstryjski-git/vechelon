@@ -12,6 +12,12 @@
 ## 🎯 Active Value Set (Next Release)
 *The specific high-impact features currently being pulled from our strategic themes.*
 
+- [ ] **MVE Phase II: Rider Experience**
+    - [ ] Silent Token Exchange (Remove click-through button)
+    - [ ] Branded Auth Surface (Dynamic login/dispatch)
+    - [ ] Emergency Contact Schema & UI
+    - [ ] Rider Side Sheet Restoration
+    - [ ] RSVP Tier Integrity
 - [ ] **Multitenancy Core** (from *Multi-Club* theme) - Shared backend logic to support independent clubs.
 - [ ] **Voice of Customer (VoC)** (from *Club Growth* theme) - Direct feedback loops built into the rider portal.
 - [ ] **UAT Work** (from *Club Command* theme) - User Acceptance Testing and final verification of the command-center workflows.

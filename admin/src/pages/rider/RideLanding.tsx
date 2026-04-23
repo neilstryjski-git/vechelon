@@ -138,6 +138,8 @@ const RideLanding: React.FC = () => {
   const userTier = useAppStore((s) => s.userTier);
   const joinRide = useAppStore((s) => s.joinRide);
 
+  const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string }>(['tenant-config']);
+
   const [isJoining, setIsJoining] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -250,7 +252,11 @@ const RideLanding: React.FC = () => {
   // -------------------------------------------------------------------------
 
   if (isLoading) return (
-    <div className="space-y-12 py-8">
+    <div className="space-y-12 py-12 animate-in fade-in duration-500">
+      <div className="max-w-lg mx-auto text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-brand-primary/10 border-t-brand-primary rounded-full animate-spin mx-auto" />
+        <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant animate-pulse">Establishing Tactical Link...</p>
+      </div>
       <RideCardSkeleton />
     </div>
   );
@@ -276,52 +282,70 @@ const RideLanding: React.FC = () => {
 
   if (ride.status === 'saved') {
     return (
-      <div className="space-y-12 py-8">
-        <div className="max-w-lg mx-auto space-y-6">
+      <div className="space-y-12 py-8 animate-in fade-in duration-700">
+        <div className="max-w-lg mx-auto space-y-8">
 
-          {/* Header */}
-          <div>
-            <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant mb-2">
-              Ride Complete
-            </p>
-            <h2 className="font-headline font-extrabold text-3xl tracking-tighter text-on-background">
-              {ride.name}
-            </h2>
-            {ride.actual_end && (
-              <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
-                {formatDate(ride.actual_end)}
-              </p>
+          {/* Dynamic Branding Header */}
+          <div className="flex items-center gap-4 border-b border-outline-variant/10 pb-6">
+            {tenant?.logo_url ? (
+              <img src={tenant.logo_url} alt={tenant.name} className="h-10 w-auto object-contain" />
+            ) : (
+              <div className="w-10 h-10 bg-brand-logo bg-contain bg-no-repeat bg-center grayscale contrast-125 opacity-30" />
             )}
-            {participantCount !== undefined && (
-              <p className="font-body text-sm text-on-surface-variant mt-1">
-                <span className="material-symbols-outlined text-[13px] align-middle mr-1">group</span>
-                {participantCount} rider{participantCount !== 1 ? 's' : ''} participated
+            <div>
+              <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant">
+                Tactical Mission Summary
               </p>
-            )}
+              <h2 className="font-headline font-extrabold text-2xl tracking-tighter text-on-background uppercase italic">
+                {tenant?.name || 'VECHELON'}
+              </h2>
+            </div>
           </div>
 
-          {/* AI Summary */}
-          {summary?.post_ride_summary ? (
-            <div className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/10 space-y-3">
-              <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">
-                Pro-Tour Summary
-              </p>
-              <p className="font-body text-sm text-on-background leading-relaxed whitespace-pre-line">
-                {summary.post_ride_summary}
-              </p>
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-headline font-bold text-2xl text-on-background tracking-tight">
+                {ride.name}
+              </h3>
+              {ride.actual_end && (
+                <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+                  Completed on {formatDate(ride.actual_end)}
+                </p>
+              )}
+              {participantCount !== undefined && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="font-label text-[9px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
+                    {participantCount} Operators
+                  </span>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="bg-surface-container-lowest rounded-2xl p-6 border border-dashed border-outline-variant/20 text-center">
-              <p className="font-label text-xs text-on-surface-variant/60">— Summary generating —</p>
-            </div>
-          )}
 
-          <button
-            onClick={() => navigate('/')}
-            className="font-label text-[10px] uppercase tracking-widest text-primary hover:opacity-70 transition-opacity"
-          >
-            ← Back to Portal
-          </button>
+            {/* AI Summary */}
+            {summary?.post_ride_summary ? (
+              <div className="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/10 space-y-4 shadow-ambient">
+                <p className="font-label text-[10px] uppercase tracking-widest text-brand-primary font-bold">
+                  After-Action Report
+                </p>
+                <p className="font-body text-sm text-on-background leading-relaxed whitespace-pre-line italic">
+                  "{summary.post_ride_summary}"
+                </p>
+              </div>
+            ) : (
+              <div className="bg-surface-container-low/50 rounded-2xl p-12 border border-dashed border-outline-variant/20 text-center">
+                <span className="material-symbols-outlined text-on-surface-variant/20 text-4xl mb-3 animate-pulse">psychology</span>
+                <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/40">— AI Intelligence Processing —</p>
+              </div>
+            )}
+
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant hover:text-brand-primary transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              Return to Command Centre
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -334,46 +358,62 @@ const RideLanding: React.FC = () => {
   const isActive = ride.status === 'active';
 
   return (
-    <div className="space-y-12 py-8">
+    <div className="space-y-12 py-8 animate-in fade-in duration-700">
 
-      {/* Back nav */}
-      <div className="max-w-lg mx-auto">
+      {/* Dynamic Branding Header */}
+      <div className="max-w-lg mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {tenant?.logo_url ? (
+            <img src={tenant.logo_url} alt={tenant.name} className="h-8 w-auto object-contain" />
+          ) : (
+            <div className="w-8 h-8 bg-brand-logo bg-contain bg-no-repeat bg-center grayscale contrast-125 opacity-30" />
+          )}
+          <span className="font-headline text-lg font-black tracking-tighter text-on-background uppercase italic">
+            {tenant?.name || 'VECHELON'}
+          </span>
+        </div>
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors"
+          className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
         >
-          <span className="material-symbols-outlined text-sm">arrow_back</span>
-          Back to Portal
+          Dashboard
         </button>
       </div>
 
-      {/* Page label */}
-      <div className="max-w-lg mx-auto">
-        <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant mb-4">
-          {isActive ? 'Ride in Progress' : 'Upcoming Ride'}
-        </p>
-
-        {/* Ride card */}
+      {/* Ride card */}
+      <div className="max-w-lg mx-auto space-y-6">
         <div className="bg-surface-container-lowest rounded-2xl shadow-ambient overflow-hidden border border-outline-variant/10">
           {ride.thumbnail_url && (
-            <div className="h-40 w-full overflow-hidden">
+            <div className="h-56 w-full overflow-hidden relative">
               <img src={ride.thumbnail_url} alt={ride.name} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <div className="absolute bottom-6 left-6 right-6 text-white">
+                <h3 className="font-headline font-bold text-2xl tracking-tight">{ride.name}</h3>
+                <p className="font-label text-[10px] uppercase tracking-widest opacity-80 mt-1">
+                  {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!ride.thumbnail_url && (
+            <div className="p-8 border-b border-outline-variant/10">
+              <h3 className="font-headline font-bold text-2xl tracking-tight text-on-background">{ride.name}</h3>
+              <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+                {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
+              </p>
             </div>
           )}
 
           {isActive && (
-            <div className="flex items-center gap-2 px-6 pt-4">
-              <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
-              <span className="font-label text-[9px] uppercase tracking-widest text-tertiary">Live Now</span>
+            <div className="flex items-center gap-2 px-8 pt-6">
+              <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-pulse shadow-[0_0_10px_rgba(0,110,53,0.5)]" />
+              <span className="font-label text-[10px] uppercase tracking-[0.2em] text-tertiary font-bold">Tactical Session Active</span>
             </div>
           )}
 
-          <div className="p-6 space-y-4">
-            <div>
-              <h3 className="font-headline font-bold text-xl text-on-background">{ride.name}</h3>
-              <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
-                {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
-              </p>
+          <div className="p-8 space-y-8">
+            <div className="grid grid-cols-1 gap-4">
               {ride.start_label && (() => {
                 const coords = parsePoint(ride.start_coords);
                 const mapsUrl = coords
@@ -384,113 +424,150 @@ const RideLanding: React.FC = () => {
                     href={mapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
+                    className="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
                   >
-                    <span className="material-symbols-outlined text-[12px]">location_on</span>
-                    {ride.start_label}
+                    <div className="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-brand-primary">location_on</span>
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-0.5">Start Point</span>
+                      <span className="font-body text-sm font-semibold text-on-background block truncate group-hover:text-brand-primary transition-colors">
+                        {ride.start_label}
+                      </span>
+                    </div>
                   </a>
                 );
               })()}
-              {ride.external_url && (
-                <a
-                  href={ride.external_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[12px]">route</span>
-                  Route
-                </a>
-              )}
-              {ride.gpx_path && (
-                <button
-                  onClick={() => downloadGpx(ride.gpx_path!, ride.name)}
-                  className="font-body text-xs text-primary hover:underline mt-1 flex items-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[12px]">download</span>
-                  Download GPX
-                </button>
-              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                {ride.external_url && (
+                  <a
+                    href={ride.external_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
+                  >
+                    <span className="material-symbols-outlined text-brand-primary text-xl">route</span>
+                    <span className="font-label text-[10px] uppercase tracking-widest font-bold group-hover:text-brand-primary transition-colors">Route</span>
+                  </a>
+                )}
+                {ride.gpx_path && (
+                  <button
+                    onClick={() => downloadGpx(ride.gpx_path!, ride.name)}
+                    className="flex items-center gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
+                  >
+                    <span className="material-symbols-outlined text-brand-primary text-xl">download</span>
+                    <span className="font-label text-[10px] uppercase tracking-widest font-bold group-hover:text-brand-primary transition-colors">GPX</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Action area — branches on tier */}
-            {isGuest && (
-              !participation ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="Your name *"
-                    className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
-                  />
-                  <input
-                    type="email"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="Email (optional)"
-                    className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
-                  />
-                  <button
-                    onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
-                    disabled={isJoining || !guestName.trim()}
-                    className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      {isActive ? 'play_circle' : 'event_available'}
-                    </span>
-                    {isJoining ? 'Joining…' : (isActive ? 'Join Ride' : 'RSVP Now')}
-                  </button>
-                  <p className="text-center font-label text-[9px] text-on-surface-variant/60">
-                    Already a member? <button onClick={() => navigate('/auth')} className="underline font-bold">Sign in</button>
+            <div className="pt-2 border-t border-outline-variant/10">
+              {isGuest && (
+                !participation ? (
+                  <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+                    <div>
+                      <h4 className="font-headline font-bold text-sm text-on-background mb-1">Guest RSVP</h4>
+                      <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">Identify for the ride roster</p>
+                    </div>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder="Operator Name *"
+                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+                      />
+                      <input
+                        type="email"
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        placeholder="Email (for history synchronization)"
+                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+                      />
+                      <button
+                        onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
+                        disabled={isJoining || !guestName.trim()}
+                        className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
+                      >
+                        <span className="material-symbols-outlined">
+                          {isActive ? 'play_circle' : 'event_available'}
+                        </span>
+                        {isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
+                      </button>
+                      <div className="pt-2 text-center">
+                        <button 
+                          onClick={() => {
+                            const baseUrl = window.location.origin + window.location.pathname;
+                            const redirectUrl = `${baseUrl}`;
+                            navigate(`/auth?redirectTo=${encodeURIComponent(redirectUrl)}`);
+                          }} 
+                          className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
+                        >
+                          Already an operator? <span className="font-bold underline">Sign in</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4 animate-in zoom-in-95 duration-500">
+                    <div className="flex items-center justify-center gap-3 py-5 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 shadow-sm">
+                      <span className="material-symbols-outlined text-2xl">check_circle</span>
+                      <span className="font-headline font-bold uppercase tracking-[0.2em] text-xs">
+                        {isActive ? 'Operator Active' : 'RSVP Synchronized'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const baseUrl = window.location.origin + window.location.pathname;
+                        navigate(`/auth?redirectTo=${encodeURIComponent(baseUrl)}`);
+                      }}
+                      className="w-full bg-surface-container-high text-on-surface py-4 rounded-xl font-label text-[10px] uppercase tracking-[0.2em] font-bold flex items-center justify-center gap-3 hover:bg-surface-container-highest transition-all border border-outline-variant/20 shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-lg">login</span>
+                      Authorize Account to Link History
+                    </button>
+                  </div>
+                )
+              )}
+
+              {isInitiated && (
+                <div className="space-y-4 p-6 bg-primary/5 rounded-2xl border border-primary/10">
+                  <div className="flex items-center gap-3 text-primary">
+                    <span className="material-symbols-outlined text-xl animate-pulse">pending</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-xs italic">Affiliation Pending</span>
+                  </div>
+                  <p className="font-body text-sm text-on-surface-variant leading-relaxed">
+                    Your operator status is currently awaiting command validation. 
+                    Tactical RSVP access will unlock once your membership is activated.
                   </p>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
-                    <span className="material-symbols-outlined text-lg">check_circle</span>
-                    <span className="font-headline font-bold uppercase tracking-widest text-[10px]">
-                      {isActive ? 'You\'re on the ride' : 'RSVP Confirmed'}
+              )}
+
+              {!isGuest && !isInitiated && (
+                participation ? (
+                  <div className="flex items-center justify-center gap-3 py-5 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 shadow-sm animate-in zoom-in-95 duration-500">
+                    <span className="material-symbols-outlined text-2xl">check_circle</span>
+                    <span className="font-headline font-bold uppercase tracking-[0.2em] text-xs">
+                      {isActive ? 'Tactical Session Active' : 'RSVP Confirmed'}
                     </span>
                   </div>
+                ) : (
                   <button
-                    onClick={() => navigate('/auth')}
-                    className="w-full bg-surface-container-high text-on-surface py-2.5 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-all"
+                    onClick={() => handleJoin()}
+                    disabled={isJoining}
+                    className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient animate-in slide-in-from-bottom-2 duration-500"
                   >
-                    <span className="material-symbols-outlined text-sm">login</span>
-                    Sign In to Claim History
+                    <span className="material-symbols-outlined">
+                      {isActive ? 'play_circle' : 'event_available'}
+                    </span>
+                    {isJoining ? 'Establishing Link…' : (isActive ? 'Join Mission' : 'Commit RSVP')}
                   </button>
-                </div>
-              )
-            )}
-
-            {isInitiated && (
-              <p className="font-label text-[10px] text-on-surface-variant/60 italic">
-                Full access available once your membership is confirmed.
-              </p>
-            )}
-
-            {!isGuest && !isInitiated && (
-              participation ? (
-                <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
-                  <span className="material-symbols-outlined text-lg">check_circle</span>
-                  <span className="font-headline font-bold uppercase tracking-widest text-[10px]">
-                    {isActive ? 'Joined' : 'RSVP Confirmed'}
-                  </span>
-                </div>
-              ) : (
-                <button
-                  onClick={() => handleJoin()}
-                  disabled={isJoining}
-                  className="w-full signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-lg">
-                    {isActive ? 'play_circle' : 'event_available'}
-                  </span>
-                  {isJoining ? 'Processing…' : (isActive ? 'Join Ride' : 'RSVP Now')}
-                </button>
-              )
-            )}
+                )
+              )}
+            </div>
           </div>
         </div>
       </div>

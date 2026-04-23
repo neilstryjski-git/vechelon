@@ -40,6 +40,8 @@ const RiderHome: React.FC = () => {
   const joinRide = useAppStore((s) => s.joinRide);
   const { data: nextRide, isLoading } = useNextRide();
 
+  const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string }>(['tenant-config']);
+
   const [isJoining, setIsJoining] = useState(false);
 
   // Check if already joined
@@ -47,16 +49,24 @@ const RiderHome: React.FC = () => {
     queryKey: ['my-participation', nextRide?.id],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !nextRide?.id) return null;
-      const { data } = await supabase
+      const sessionCookieId = useAppStore.getState().sessionCookieId;
+      if (!nextRide?.id) return null;
+
+      const query = supabase
         .from('ride_participants')
         .select('id')
-        .eq('ride_id', nextRide.id)
-        .eq('account_id', user.id)
-        .maybeSingle();
+        .eq('ride_id', nextRide.id);
+
+      if (user) {
+        query.eq('account_id', user.id);
+      } else {
+        query.eq('session_cookie_id', sessionCookieId).is('account_id', null);
+      }
+
+      const { data } = await query.maybeSingle();
       return data;
     },
-    enabled: !!nextRide?.id && userTier === 'affiliated',
+    enabled: !!nextRide?.id,
   });
 
   const handleJoin = async () => {
@@ -86,18 +96,18 @@ const RiderHome: React.FC = () => {
     new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="space-y-16">
+    <div className="space-y-16 animate-in fade-in duration-700">
 
-      {/* Hero */}
+      {/* Hero - Dynamic Branding */}
       <section className="text-center space-y-4 pt-8">
         <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant">
-          Welcome to
+          Welcome to the Portal
         </p>
-        <h1 className="font-headline font-extrabold text-5xl md:text-7xl tracking-tighter italic text-on-background">
-          RACER SPORTIF
+        <h1 className="font-headline font-extrabold text-5xl md:text-7xl tracking-tighter italic text-on-background uppercase">
+          {tenant?.name || 'VECHELON'}
         </h1>
         <p className="font-body text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
-          Your club's tactical command portal. Track rides, connect with the peloton, and stay mission-ready.
+          Tactical command for the {tenant?.name || 'club'} peloton. Coordinate rides, track your history, and stay mission-ready.
         </p>
       </section>
 
@@ -132,25 +142,36 @@ const RiderHome: React.FC = () => {
                 </div>
 
                 {isInitiated ? (
-                  <p className="font-label text-[10px] text-on-surface-variant/60 italic">
-                    Full RSVP access available once your membership is confirmed.
-                  </p>
+                  <div className="space-y-4 pt-2">
+                    <p className="font-label text-[10px] text-on-surface-variant/60 italic leading-relaxed uppercase tracking-wide">
+                      Your membership is pending tactical activation. 
+                      Full RSVP access will unlock once command validates your status.
+                    </p>
+                    <button
+                      disabled
+                      className="w-full bg-surface-container-high text-on-surface-variant/40 py-3 rounded-xl font-headline font-bold uppercase tracking-widest text-[10px] cursor-not-allowed border border-outline-variant/10"
+                    >
+                      Awaiting Activation
+                    </button>
+                  </div>
                 ) : participation ? (
                   <div className="flex items-center justify-center gap-2 py-3 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
                     <span className="material-symbols-outlined text-lg">check_circle</span>
-                    <span className="font-headline font-bold uppercase tracking-widest text-[10px]">Already Joined</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-[10px]">
+                      {nextRide.status === 'active' ? 'Joined' : 'RSVP Confirmed'}
+                    </span>
                   </div>
                 ) : (
                   <div className="flex gap-3">
                     <button
                       onClick={handleJoin}
                       disabled={isJoining}
-                      className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+                      className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
                     >
                       <span className="material-symbols-outlined text-lg">
                         {nextRide.status === 'active' ? 'play_circle' : 'event_available'}
                       </span>
-                      {isJoining ? 'Processing...' : (nextRide.status === 'active' ? 'Join Ride' : 'RSVP Now')}
+                      {isJoining ? 'Synchronizing…' : (nextRide.status === 'active' ? 'Join Ride' : 'RSVP Now')}
                     </button>
                     <button
                       onClick={() => navigate('/calendar')}
@@ -164,16 +185,16 @@ const RiderHome: React.FC = () => {
 
                 <button
                   onClick={() => navigate(`/ride/${nextRide.id}`)}
-                  className="w-full flex items-center justify-center gap-1.5 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-background transition-colors pt-1"
+                  className="w-full flex items-center justify-center gap-1.5 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors pt-1"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                  View Ride Details
+                  View Tactical Details
                 </button>
               </div>
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-2xl p-8 text-center border border-dashed border-outline-variant/30">
-              <p className="font-label text-xs text-on-surface-variant opacity-60">— No upcoming rides scheduled —</p>
+              <p className="font-label text-xs text-on-surface-variant opacity-60">— No upcoming missions scheduled —</p>
             </div>
           )}
         </section>
