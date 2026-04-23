@@ -24,6 +24,8 @@ interface MemberRow {
     email:      string;
     phone:      string;
     avatar_url: string | null;
+    emergency_contact_name: string | null;
+    emergency_contact_phone: string | null;
   };
 }
 
@@ -413,7 +415,9 @@ const Members: React.FC = () => {
             name,
             email,
             phone,
-            avatar_url
+            avatar_url,
+            emergency_contact_name,
+            emergency_contact_phone
           )
         `)
         .not('status', 'in', '("deleted")')
@@ -751,6 +755,14 @@ const Members: React.FC = () => {
                 <p className="font-label text-xs text-on-surface-variant tracking-wider">
                   {m.accounts?.phone ?? '—'}
                 </p>
+                {(m.accounts?.emergency_contact_name || m.accounts?.emergency_contact_phone) && (
+                  <div className="mt-1 flex items-center gap-1.5 opacity-50">
+                    <span className="material-symbols-outlined text-[10px] text-error">emergency</span>
+                    <span className="font-label text-[9px] uppercase tracking-tighter truncate max-w-[120px]">
+                      {m.accounts?.emergency_contact_name || 'Contact'} · {m.accounts?.emergency_contact_phone || '—'}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">

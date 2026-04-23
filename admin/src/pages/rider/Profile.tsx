@@ -51,39 +51,76 @@ interface AccountProfile {
   name: string | null;
   phone: string | null;
   avatar_url: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+}
+
+interface AffiliationInfo {
+  status: string;
+  role: string;
+  joined_at: string;
+  tenants: { name: string; logo_url: string | null };
 }
 
 function useProfile() {
-  return useQuery<AccountProfile | null>({
+  return useQuery<{ account: AccountProfile; affiliation: AffiliationInfo | null } | null>({
     queryKey: ['my-profile'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
 
-      const { data, error } = await supabase
+      const { data: account, error: accountErr } = await supabase
         .from('accounts')
-        .select('id, email, name, phone, avatar_url')
+        .select('id, email, name, phone, avatar_url, emergency_contact_name, emergency_contact_phone')
         .eq('id', session.user.id)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (accountErr) throw accountErr;
+
+      const { data: affiliation, error: affErr } = await supabase
+        .from('account_tenants')
+        .select(`
+          status,
+          role,
+          joined_at,
+          tenants (
+            name,
+            logo_url
+          )
+        `)
+        .eq('account_id', session.user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (affErr) throw affErr;
+
+      return { 
+        account: account as AccountProfile, 
+        affiliation: affiliation as unknown as AffiliationInfo 
+      };
     },
   });
 }
 
 const Profile: React.FC = () => {
-  const { data: profile, isLoading } = useProfile();
+  const { data, isLoading } = useProfile();
+  const profile = data?.account;
+  const affiliation = data?.affiliation;
+  
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const avatarRef = useRef<HTMLInputElement>(null);
 
   const [name, setName]   = useState('');
   const [phone, setPhone] = useState('');
+  const [emergencyName, setEmergencyName]   = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
 
   useEffect(() => {
     if (profile) {
       setName(profile.name ?? '');
       setPhone(profile.phone ?? '');
+      setEmergencyName(profile.emergency_contact_name ?? '');
+      setEmergencyPhone(profile.emergency_contact_phone ?? '');
     }
   }, [profile]);
 
@@ -95,7 +132,12 @@ const Profile: React.FC = () => {
 
       const { error } = await supabase
         .from('accounts')
-        .update({ name: name.trim() || null, phone: phone.trim() || null })
+        .update({ 
+          name: name.trim() || null, 
+          phone: phone.trim() || null,
+          emergency_contact_name: emergencyName.trim() || null,
+          emergency_contact_phone: emergencyPhone.trim() || null
+        })
         .eq('id', session.user.id);
       if (error) throw error;
     },
@@ -175,22 +217,55 @@ const Profile: React.FC = () => {
     : (profile.email?.[0] ?? '?').toUpperCase();
 
   return (
-    <div className="max-w-lg mx-auto space-y-10">
+    <div className="max-w-lg mx-auto space-y-10 pb-20">
 
       {/* Page label */}
-      <div>
+      <div className="pt-8">
         <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant">Rider Profile</p>
-        <h1 className="font-headline font-bold text-3xl text-on-background tracking-tight mt-1">
+        <h1 className="font-headline font-bold text-3xl text-on-background tracking-tighter mt-1 uppercase italic">
           {profile.name || 'Your Account'}
         </h1>
       </div>
+
+      {/* Affiliation Info Card - Pillar II Section 4.3 */}
+      {affiliation && (
+        <div className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              {affiliation.tenants.logo_url ? (
+                <img src={affiliation.tenants.logo_url} className="w-8 h-8 object-contain" alt="" />
+              ) : (
+                <span className="material-symbols-outlined text-primary">groups</span>
+              )}
+              <span className="font-headline font-bold text-sm text-on-background">{affiliation.tenants.name}</span>
+            </div>
+            <span className={`font-label text-[9px] px-2 py-0.5 rounded-full uppercase tracking-widest ${
+              affiliation.status === 'affiliated' ? 'bg-tertiary/10 text-tertiary border border-tertiary/20' : 'bg-primary/10 text-primary border border-primary/20'
+            }`}>
+              {affiliation.status}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-outline-variant/10">
+            <div>
+              <span className="font-label text-[8px] uppercase tracking-tighter text-on-surface-variant block mb-0.5">Role</span>
+              <p className="font-body text-xs font-semibold text-on-background uppercase tracking-wider">{affiliation.role}</p>
+            </div>
+            <div>
+              <span className="font-label text-[8px] uppercase tracking-tighter text-on-surface-variant block mb-0.5">Joined</span>
+              <p className="font-body text-xs font-semibold text-on-background uppercase tracking-wider">
+                {new Date(affiliation.joined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Avatar */}
       <div className="flex flex-col items-center gap-4">
         <button
           onClick={() => avatarRef.current?.click()}
           disabled={isUploading}
-          className="relative group"
+          className="relative group shadow-ambient rounded-full"
         >
           <div className="w-24 h-24 rounded-full overflow-hidden bg-surface-container-high border-2 border-outline-variant/20">
             {profile.avatar_url ? (
@@ -222,54 +297,93 @@ const Profile: React.FC = () => {
       </div>
 
       {/* Profile form */}
-      <div className="space-y-5">
-        <div>
-          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-            Email
-          </label>
-          <input
-            type="email"
-            value={profile.email ?? ''}
-            disabled
-            className="w-full bg-surface-container-low/50 border border-outline-variant/20 rounded-lg px-4 py-3 font-body text-sm text-on-surface-variant/60 cursor-not-allowed"
-          />
+      <div className="space-y-8">
+        
+        <div className="space-y-5">
+          <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant border-b border-outline-variant/10 pb-2">
+            Identity & Contact
+          </h3>
+          
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={profile.email ?? ''}
+              disabled
+              className="w-full bg-surface-container-low/50 border border-outline-variant/20 rounded-lg px-4 py-3 font-body text-sm text-on-surface-variant/60 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Full Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-brand-primary transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Phone
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 555 000 0000"
+              className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-brand-primary transition-colors"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-            Full Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
+        <div className="space-y-5">
+          <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-error border-b border-error/10 pb-2">
+            Emergency Protocols
+          </h3>
+          
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Emergency Contact Name
+            </label>
+            <input
+              type="text"
+              value={emergencyName}
+              onChange={(e) => setEmergencyName(e.target.value)}
+              placeholder="First Last"
+              className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-brand-primary transition-colors"
+            />
+          </div>
 
-        <div>
-          <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
-            Phone
-          </label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+44 7700 000000"
-            className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-colors"
-          />
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+              Emergency Contact Phone
+            </label>
+            <input
+              type="tel"
+              value={emergencyPhone}
+              onChange={(e) => setEmergencyPhone(e.target.value)}
+              placeholder="+1 555 000 0000"
+              className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 font-body text-sm text-on-background placeholder:text-on-surface-variant/40 focus:outline-none focus:border-brand-primary transition-colors"
+            />
+          </div>
         </div>
 
         <button
           onClick={() => saveProfile()}
           disabled={isSaving}
-          className="w-full signature-gradient text-on-primary py-3.5 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+          className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
         >
           {isSaving ? (
-            <><span className="material-symbols-outlined text-lg animate-spin">sync</span> Saving…</>
+            <><span className="material-symbols-outlined text-lg animate-spin">sync</span> Synchronizing…</>
           ) : (
-            <><span className="material-symbols-outlined text-lg">save</span> Save Changes</>
+            <><span className="material-symbols-outlined text-lg">save</span> Commit Changes</>
           )}
         </button>
       </div>
