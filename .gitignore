@@ -24,3 +24,4 @@ package-lock.json
 dist/
 dist_production/
 public/portal/
+.vercel

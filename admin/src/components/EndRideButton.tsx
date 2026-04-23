@@ -23,11 +23,16 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
     setIsEnding(true);
     try {
       const data = await endRide(rideId);
-      setSummary(data.summary);
-      addToast('Ride finalized and summary generated.', 'success');
-    } catch (error) {
-      console.error('Failed to end ride', error);
-      addToast('Error finalizing ride metadata.', 'error');
+      if (data?.summary) {
+        setSummary(data.summary);
+        addToast('Ride finalized and summary generated.', 'success');
+      } else {
+        addToast('Ride ended, but summary generation failed.', 'info');
+      }
+    } catch (error: any) {
+      console.error('[EndRide] Failed to finalize:', error);
+      const msg = error.message || 'Unknown error';
+      addToast(`Error: ${msg}`, 'error');
     } finally {
       setIsEnding(false);
     }

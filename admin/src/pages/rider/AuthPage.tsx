@@ -93,9 +93,21 @@ const AuthPage: React.FC = () => {
       },
     });
 
-    if (error || (data && data.error)) {
+    if (error) {
       setStage('error');
-      setErrorMsg(error?.message || data.error);
+      let msg = error.message;
+      try {
+        const body = await (error as any).context?.json();
+        if (body?.error) msg = body.error;
+        else if (body?.message) msg = body.message;
+      } catch (e) {
+        console.warn('[Auth] Error parsing context:', e);
+      }
+      setErrorMsg(msg);
+      console.error('[Auth] Magic link error:', error, msg);
+    } else if (data && data.error) {
+      setStage('error');
+      setErrorMsg(data.error);
     } else {
       setStage('sent');
     }
@@ -227,7 +239,5 @@ const AuthPage: React.FC = () => {
     </div>
   );
 };
-
-export default AuthPage;
 
 export default AuthPage;

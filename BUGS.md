@@ -8,6 +8,7 @@
 | Bug / Task | Fix Summary | Date |
 |---|---|---|
 | **W95-W101** (MVE Phase II) | Hardened the Rider Experience: Silent Magic Links, Deep-Linking, Emergency Safety Schema, and Viral Guest visibility. | 2026-04-23 |
+| **E1** (Edge Function Robustness) | Fixed missing `getAIProvider` export in `_shared/ai-provider.ts`, added CORS methods to `generate-ride-summary`, and improved error diagnostic reporting in the Admin/Rider portals. | 2026-04-23 |
 | **W2** (Polished Situational Grid) | Updated \"EXPLORE THE TACTICAL LOGIC\" link, added 
  \"VISUAL\" header, and set divider opacity to 0.4. | 2026-03-29 |
 | **W16** (Velo Modern Design System) | Implemented full design system in Admin Desktop, including Tailwind v4 theme, Tonal Layering, Calendar Grid, and Dashboard. | 2026-04-11 |

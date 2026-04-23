@@ -476,7 +476,17 @@ const Members: React.FC = () => {
         body: { account_id: accountId, email },
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        let msg = error.message;
+        try {
+          const body = await (error as any).context?.json();
+          if (body?.error) msg = body.error;
+          else if (body?.message) msg = body.message;
+        } catch (e) {
+          console.warn('[Members] Failed to parse error body:', e);
+        }
+        throw new Error(msg);
+      }
     },
     onSuccess: (_, { email }) => {
       addToast(`Email updated to ${email}`, 'success');
@@ -504,7 +514,9 @@ const Members: React.FC = () => {
         try {
           const body = await (error as any).context?.json?.();
           if (body?.error) msg = body.error;
-        } catch {}
+        } catch (e) {
+          console.warn('[Members] Failed to parse error body:', e);
+        }
         throw new Error(msg);
       }
     },

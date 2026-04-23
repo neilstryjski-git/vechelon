@@ -96,3 +96,29 @@ export const getAIService = (provider: AIProviderType): AIService => {
     default: throw new Error(`Unsupported AI provider: ${provider}`);
   }
 };
+
+/**
+ * getAIProvider
+ * Higher-level factory that returns an object with a simplified generateSummary method.
+ * Extracted from tenant configuration.
+ */
+export const getAIProvider = (tenant: any) => {
+  const providerType = tenant.ai_provider || 'gemini';
+  const apiKey = tenant.ai_api_key;
+  
+  if (!apiKey) {
+    throw new Error(`AI API Key not configured for tenant: ${tenant.name}`);
+  }
+
+  const service = getAIService(providerType);
+
+  return {
+    generateSummary: async (prompt: string) => {
+      const res = await service.generateText(prompt, apiKey);
+      if (res.status === 'success') {
+        return res.content;
+      }
+      throw new Error(res.error || `AI Generation failed with status: ${res.status}`);
+    }
+  };
+};

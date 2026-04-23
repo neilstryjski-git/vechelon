@@ -34,7 +34,8 @@ export const sendResendEmail = async (params: {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || 'Failed to send email via Resend');
+      console.error('Resend API Error:', JSON.stringify(data));
+      throw new Error(data.message || data.error?.message || 'Failed to send email via Resend');
     }
 
     return { data };
