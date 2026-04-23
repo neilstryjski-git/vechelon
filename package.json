@@ -6,7 +6,7 @@
     "admin"
   ],
   "scripts": {
-    "build": "npm run build --prefix admin && rm -rf public && mkdir -p public/portal && cp -r admin/dist/. public/portal/ && cp index.html prototype.html roadmap.html echelon-logo-v10.html public/ && cp -r admin/public/. public/portal/ || true"
+    "build": "npm run build --prefix admin && rm -rf public dist_production && mkdir -p public/portal dist_production/portal && cp -r admin/dist/. public/portal/ && cp -r admin/dist/. dist_production/portal/ && cp index.html prototype.html roadmap.html echelon-logo-v10.html public/ && cp index.html prototype.html roadmap.html echelon-logo-v10.html dist_production/ && cp -r admin/public/. public/portal/ && cp -r admin/public/. dist_production/portal/ || true"
   },
   "devDependencies": {
     "supabase": "^2.89.1"
