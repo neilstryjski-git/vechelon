@@ -37,28 +37,16 @@ serve(async (req) => {
     const clubLogo = tenant?.logo_url || ''
     const brandColor = tenant?.primary_color || '#1c1c1c'
 
-    // 2. Resolve canonical email — find existing user whose dot-normalised local part
-    //    and domain match the submitted address. Prevents duplicate accounts when a
-    //    member types "neil.stryjski@rogers.com" vs "neilstryjski@rogers.com".
     const inputEmail = email.trim().toLowerCase()
-    const [inputLocal, inputDomain] = inputEmail.split('@')
-    const normalizedLocal = inputLocal.replace(/\./g, '')
 
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
-    const match = existingUsers?.users?.find(u => {
-      const [uLocal, uDomain] = (u.email ?? '').toLowerCase().split('@')
-      return uDomain === inputDomain && uLocal.replace(/\./g, '') === normalizedLocal
-    })
-    const canonicalEmail = match?.email ?? inputEmail
-
-    // 3. Generate the Magic Link (OTP)
+    // 2. Generate the Magic Link (OTP)
     // redirect_to must be the exact URL in the Supabase allow-list (no query params).
     // The click-through ?c= mechanism handles routing back to the portal.
     const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
 
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: 'magiclink',
-      email: canonicalEmail,
+      email: inputEmail,
       options: { redirectTo: portalAuthBase }
     })
 
