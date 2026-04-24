@@ -407,3 +407,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.invite-member]
 verify_jwt = false
+
+[functions.send-magic-link]
+verify_jwt = false
