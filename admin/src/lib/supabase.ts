@@ -49,8 +49,11 @@ function createSafeProxy(): any {
   return new Proxy(Object.assign(noop, {}), handler)
 }
 
-// Admin-generated magic links always produce implicit (hash-based) tokens,
-// so we must use implicit flow to detect #access_token= on redirect.
+// detectSessionInUrl: false — we handle URL params manually in AuthPage so the client
+// doesn't auto-detect and fail (admin-generated codes bypass PKCE, but the auto-detector
+// requires a stored code verifier that is never created by the server-side flow).
+// flowType: 'pkce' — ensures code exchange requests are made correctly when we call
+// exchangeCodeForSession() manually. The legacy #access_token= path still works via setSession().
 export const supabase: SupabaseClient = isConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, { auth: { flowType: 'implicit' } })
+  ? createClient(supabaseUrl, supabaseAnonKey, { auth: { flowType: 'pkce', detectSessionInUrl: false } })
   : createSafeProxy();

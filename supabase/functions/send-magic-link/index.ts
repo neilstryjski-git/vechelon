@@ -38,12 +38,14 @@ serve(async (req) => {
     const brandColor = tenant?.primary_color || '#1c1c1c'
 
     // 2. Generate the Magic Link (OTP)
-    const finalRedirect = redirectTo || (Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth')
-    
+    // redirect_to must be the exact URL in the Supabase allow-list (no query params).
+    // The click-through ?c= mechanism handles routing back to the portal.
+    const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
+
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: 'magiclink',
       email: email.trim().toLowerCase(),
-      options: { redirectTo: finalRedirect }
+      options: { redirectTo: portalAuthBase }
     })
 
     if (linkError) throw linkError
@@ -54,7 +56,6 @@ serve(async (req) => {
     // (Gmail, Outlook SafeLinks, etc.) cannot consume the one-time token by
     // pre-fetching the link. Scanners follow the portal URL but don't execute JS;
     // the portal JS auto-redirects the real user's browser to the OTP link instantly.
-    const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
     const clickThroughUrl = `${portalAuthBase}?c=${encodeURIComponent(btoa(magicLink))}`
 
     // 3. Send via Resend with dynamic branding

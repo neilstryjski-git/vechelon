@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
@@ -83,6 +83,19 @@ const RiderHome: React.FC = () => {
       setIsJoining(false);
     }
   };
+
+  // Confirm there is no active session before showing "Sign In / Register".
+  // Without this, the brief guest-tier flash on mount causes an infinite loop:
+  // authenticated users see the button, click it, AuthPage detects the session
+  // and bounces them straight back, repeating forever.
+  const [sessionConfirmed, setSessionConfirmed] = useState(false);
+  const [sessionExists, setSessionExists] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSessionExists(!!data.session);
+      setSessionConfirmed(true);
+    });
+  }, []);
 
   const isGuest = userTier === 'guest';
   const isInitiated = userTier === 'initiated';
@@ -200,8 +213,25 @@ const RiderHome: React.FC = () => {
         </section>
       )}
 
-      {/* Guest conversion CTA */}
-      {isGuest && (
+      {/* Authenticated but no club record yet — prompt a page reload to re-check */}
+      {isGuest && sessionConfirmed && sessionExists && (
+        <section className="max-w-lg mx-auto">
+          <div className="bg-surface-container-low rounded-2xl p-8 space-y-4 border border-outline-variant/10 text-center">
+            <span className="material-symbols-outlined text-on-surface-variant text-3xl">refresh</span>
+            <p className="font-headline font-bold text-on-background">Setting up your account…</p>
+            <p className="font-body text-sm text-on-surface-variant">Your session is active but your membership record is still initializing.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="signature-gradient text-on-primary px-6 py-3 rounded-xl font-headline font-bold uppercase tracking-widest text-sm hover:opacity-90 transition-all"
+            >
+              Reload
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Guest conversion CTA — only shown after confirming no active session */}
+      {isGuest && sessionConfirmed && !sessionExists && (
         <section className="max-w-lg mx-auto">
           <div className="bg-surface-container-low rounded-2xl p-8 space-y-6 border border-outline-variant/10">
             <div className="flex items-center gap-4">

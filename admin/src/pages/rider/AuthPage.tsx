@@ -32,8 +32,41 @@ const AuthPage: React.FC = () => {
     }
   }, [encodedLink]);
 
-  // 1. SILENT TOKEN EXCHANGE: Handle inbound email link tokens
+  // 1. SILENT TOKEN EXCHANGE: Handle inbound email link tokens (PKCE ?code= or legacy #access_token=)
   useEffect(() => {
+    // Log the current URL for diagnostics
+    console.log('[Auth] Page mounted. URL:', window.location.href);
+
+    const finishSession = (_session: unknown) => {
+      console.log('[Auth] Session active. Ensuring account and redirecting to:', redirectTo);
+      const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
+      supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
+        .then(() => {
+          setIsRideGuest(false);
+          queryClient.invalidateQueries();
+          navigate(redirectTo, { replace: true });
+        });
+    };
+
+    // PKCE flow: Supabase 2.x redirects with ?code= after processing the OTP
+    const codeParam = new URLSearchParams(window.location.search).get('code');
+    if (codeParam && !encodedLink) {
+      setStage('verifying');
+      console.log('[Auth] Detected PKCE code. Exchanging for session...');
+      supabase.auth.exchangeCodeForSession(codeParam)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[Auth] PKCE exchange failed:', error);
+            setStage('error');
+            setErrorMsg(error.message);
+          } else if (data.session) {
+            finishSession(data.session);
+          }
+        });
+      return;
+    }
+
+    // Implicit flow fallback: legacy #access_token= hash
     const hash = window.location.hash;
     const params = new URLSearchParams(hash.substring(1));
     const accessToken = params.get('access_token');
@@ -42,33 +75,26 @@ const AuthPage: React.FC = () => {
 
     if (accessToken && refreshToken && (type === 'magiclink' || type === 'signup')) {
       setStage('verifying');
-      console.log('[Auth] Detected inbound magic link token. Synchronizing session...');
-      
+      console.log('[Auth] Detected implicit hash token. Synchronizing session...');
       supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
         .then(({ data, error }) => {
           if (error) {
-            console.error('[Auth] Session sync failed:', error);
+            console.error('[Auth] Session sync failed:', error, '| access_token prefix:', accessToken.substring(0, 20));
             setStage('error');
             setErrorMsg(error.message);
           } else if (data.session) {
-            console.log('[Auth] Session active. Ensuring account and redirecting to:', redirectTo);
-            const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
-            
-            supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
-              .then(() => {
-                setIsRideGuest(false);
-                // Clear query cache to force fresh tier detection
-                queryClient.invalidateQueries();
-                navigate(redirectTo, { replace: true });
-              });
+            finishSession(data.session);
           }
         });
     }
-  }, [navigate, redirectTo, queryClient]);
+  }, [navigate, redirectTo, queryClient, encodedLink]);
 
   // 2. STANDARD AUTH STATE LISTENER
+  // Handles PKCE automatic code exchange fired by the Supabase client before our effect 1 runs,
+  // and also handles sign-ins from other sources. Skipped if effect 1 is mid-exchange (verifying).
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[Auth] onAuthStateChange:', event, 'stage:', stage);
       if (event === 'SIGNED_IN' && session && stage !== 'verifying') {
         const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
         supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId }).then(() => {
@@ -78,10 +104,22 @@ const AuthPage: React.FC = () => {
       }
     });
 
-    // If already authenticated and not in the middle of a token exchange, just go home
-    if (stage === 'idle') {
+    // If already authenticated and NOT mid-exchange, ensure the account record exists
+    // then go home. This handles re-visits where the user bypasses the magic link click
+    // (e.g. direct navigation to /auth while already logged in) — without this call the
+    // account_tenants row is never created and tier detection returns guest forever.
+    if (stage === 'idle' && !window.location.hash.includes('access_token=')) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) navigate(redirectTo, { replace: true });
+        if (!session) return;
+        const { sessionCookieId } = useAppStore.getState();
+        supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
+          .then(() => {
+            queryClient.invalidateQueries();
+            navigate(redirectTo, { replace: true });
+          }, () => {
+            // navigate regardless on RPC error
+            navigate(redirectTo, { replace: true });
+          });
       });
     }
 
