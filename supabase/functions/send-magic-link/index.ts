@@ -50,19 +50,26 @@ serve(async (req) => {
 
     const magicLink = linkData.properties.action_link
 
+    // Wrap the raw OTP link behind a portal click-through URL so email scanners
+    // (Gmail, Outlook SafeLinks, etc.) cannot consume the one-time token by
+    // pre-fetching the link. Scanners follow the portal URL but don't execute JS;
+    // the portal JS auto-redirects the real user's browser to the OTP link instantly.
+    const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
+    const clickThroughUrl = `${portalAuthBase}?c=${btoa(magicLink)}`
+
     // 3. Send via Resend with dynamic branding
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1c1c1c; background-color: #f9f9f9;">
         <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee;">
           ${clubLogo ? `<img src="${clubLogo}" alt="${clubName}" style="height: 40px; margin-bottom: 24px;">` : `<h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 24px 0;">${clubName.toUpperCase()}</h1>`}
-          
+
           <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Authorization Required</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #444; margin-bottom: 32px;">
             Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.
           </p>
-          
+
           <div style="margin-bottom: 32px;">
-            <a href="${magicLink}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
+            <a href="${clickThroughUrl}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
               Authorize Session
             </a>
           </div>

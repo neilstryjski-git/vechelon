@@ -19,6 +19,19 @@ const AuthPage: React.FC = () => {
   // Contextual Deep-Linking: Capture where the user wanted to go
   const redirectTo = searchParams.get('redirectTo') || '/';
 
+  // 0. CLICK-THROUGH REDIRECT: Auto-forward to Supabase OTP URL.
+  // Email scanners follow HTML links but don't execute JS, so the OTP is safe
+  // until the real user's browser runs this effect and redirects them instantly.
+  const encodedLink = searchParams.get('c');
+  useEffect(() => {
+    if (!encodedLink) return;
+    try {
+      window.location.replace(atob(encodedLink));
+    } catch {
+      // malformed base64 — fall through to normal auth form
+    }
+  }, [encodedLink]);
+
   // 1. SILENT TOKEN EXCHANGE: Handle inbound email link tokens
   useEffect(() => {
     const hash = window.location.hash;
@@ -113,8 +126,8 @@ const AuthPage: React.FC = () => {
     }
   };
 
-  // SILENT EXCHANGE SPLASH SCREEN
-  if (stage === 'verifying') {
+  // CLICK-THROUGH or SILENT EXCHANGE SPLASH SCREEN
+  if (encodedLink || stage === 'verifying') {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6 animate-in fade-in duration-500">
         <div className="w-full max-w-sm text-center space-y-8">
