@@ -95,10 +95,6 @@ const AuthPage: React.FC = () => {
     setStage('sending');
     setErrorMsg('');
 
-    // Clear any stale/corrupted session before invoking — a bad stored JWT
-    // causes Supabase to reject the function call before it runs.
-    await supabase.auth.signOut();
-
     // Construct the redirect URL for deep-linking
     const baseUrl = window.location.origin + window.location.pathname;
     const redirectUrl = `${baseUrl}?redirectTo=${encodeURIComponent(redirectTo)}`;
