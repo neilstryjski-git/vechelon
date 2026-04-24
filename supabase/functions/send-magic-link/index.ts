@@ -55,7 +55,7 @@ serve(async (req) => {
     // pre-fetching the link. Scanners follow the portal URL but don't execute JS;
     // the portal JS auto-redirects the real user's browser to the OTP link instantly.
     const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
-    const clickThroughUrl = `${portalAuthBase}?c=${btoa(magicLink)}`
+    const clickThroughUrl = `${portalAuthBase}?c=${encodeURIComponent(btoa(magicLink))}`
 
     // 3. Send via Resend with dynamic branding
     const emailHtml = `
