@@ -419,8 +419,7 @@ const RideDetailSideSheet: React.FC = () => {
                   ) : participants.length > 0 ? (
                     <>
                       {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => {
-                        const isSelf = !!p.account_id && p.account_id === currentUser?.id;
-                        const canRemove = isAdmin && !isSelf;
+                        const canRemove = isAdmin;
                         return (
                           <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
                             <div className="flex items-center gap-3">
