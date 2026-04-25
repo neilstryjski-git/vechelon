@@ -65,6 +65,7 @@ const RideDetailSideSheet: React.FC = () => {
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
   const rideSheetVisible = useAppStore((state) => state.rideSheetVisible);
   const closeSheet = useAppStore((state) => state.closeSheet);
+  const setSelectedParticipantId = useAppStore((state) => state.setSelectedParticipantId);
   const isAdmin = useAppStore((state) => state.isAdmin);
   const userTier = useAppStore((state) => state.userTier);
   const joinRide = useAppStore((state) => state.joinRide);
@@ -249,11 +250,12 @@ const RideDetailSideSheet: React.FC = () => {
 
   const handleDelete = async () => {
     if (!selectedRideId) return;
+    const deletedRideId = selectedRideId;
     setShowDeleteConfirm(false);
     const { data, error } = await supabase
       .from('rides')
       .delete()
-      .eq('id', selectedRideId)
+      .eq('id', deletedRideId)
       .select();
     if (error) { addToast(`Delete failed: ${error.message}`, 'error'); return; }
     if (!data || data.length === 0) {
@@ -261,7 +263,16 @@ const RideDetailSideSheet: React.FC = () => {
       return;
     }
     addToast('Ride deleted.', 'success');
+    // Close every overlay related to the ride context
     close();
+    closeSheet();
+    setSelectedParticipantId(null);
+    // Drop cached entries that key off the deleted ride id
+    queryClient.removeQueries({ queryKey: ['ride-detail', deletedRideId] });
+    queryClient.removeQueries({ queryKey: ['ride-gpx-path', deletedRideId] });
+    queryClient.removeQueries({ queryKey: ['ride-participants', deletedRideId] });
+    queryClient.removeQueries({ queryKey: ['ride-route-stats'] });
+    // Invalidate list queries so the ride disappears from calendar / dashboard
     queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
     queryClient.invalidateQueries({ queryKey: ['next-ride'] });
     queryClient.invalidateQueries({ queryKey: ['upcoming-rides'] });
