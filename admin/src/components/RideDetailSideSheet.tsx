@@ -265,6 +265,9 @@ const RideDetailSideSheet: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
     queryClient.invalidateQueries({ queryKey: ['next-ride'] });
     queryClient.invalidateQueries({ queryKey: ['upcoming-rides'] });
+    queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides'] });
+    queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides-list'] });
+    queryClient.invalidateQueries({ queryKey: ['stats', 'upcoming-rides'] });
     navigate('/');
   };
 
