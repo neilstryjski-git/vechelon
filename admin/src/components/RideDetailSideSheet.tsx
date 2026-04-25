@@ -24,6 +24,7 @@ interface ParticipantDetail {
 interface RideDetail {
   id: string;
   name: string;
+  type: 'route' | 'meetup' | 'adhoc';
   status: string;
   thumbnail_url: string | null;
   scheduled_start: string;
@@ -34,6 +35,22 @@ interface RideDetail {
   start_coords: string | null;
   meetup_coords: string | null;
   meetup_label: string | null;
+}
+
+function resolveFinishLabel(finishLabel: string | null, type: 'route' | 'meetup' | 'adhoc') {
+  if (finishLabel) return finishLabel;
+  if (type === 'meetup') return 'Loop';
+  return null;
+}
+
+function formatRideDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+}
+
+function formatRideTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +140,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null as any;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label')
+        .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label')
         .eq('id', selectedRideId)
         .single();
       if (error) throw error;
@@ -178,11 +195,14 @@ const RideDetailSideSheet: React.FC = () => {
       ? `${meetupName} — ${mapsUrl}`
       : meetupName ?? '—';
 
+    const finishValue = resolveFinishLabel(ride.finish_label, ride.type);
+
     return [
       `*${ride.name}*`,
       `Date/Time: ${dateStr} · ${timeStr}`,
       ...(ride.external_url ? [`Route: ${ride.external_url}`] : []),
       `Meetup: ${meetupValue}`,
+      ...(finishValue ? [`Finish: ${finishValue}`] : []),
       `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/portal/ride/${ride.id}`,
       '',
     ].join('\n');
@@ -274,6 +294,11 @@ const RideDetailSideSheet: React.FC = () => {
             <h2 className="font-headline font-bold text-xl text-on-background">
               {loadingRide ? 'Loading Ride...' : ride?.name || 'Ride Details'}
             </h2>
+            {ride?.scheduled_start && (
+              <p className="font-body text-xs text-on-surface-variant mt-1">
+                {formatRideDate(ride.scheduled_start)} · {formatRideTime(ride.scheduled_start)}
+              </p>
+            )}
           </div>
           <button 
             onClick={close}
@@ -319,7 +344,7 @@ const RideDetailSideSheet: React.FC = () => {
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Start Point</span>
                     <p className="font-body text-sm font-medium text-on-background truncate">
-                      {ride.start_label || 'Default Start'}
+                      {ride.start_label || '—'}
                     </p>
                     {ride.meetup_label && ride.meetup_label !== ride.start_label && (
                       <div className="mt-2">
@@ -331,7 +356,7 @@ const RideDetailSideSheet: React.FC = () => {
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Finish Point</span>
                     <p className="font-body text-sm font-medium text-on-background truncate">
-                      {ride.finish_label || 'Default Finish'}
+                      {resolveFinishLabel(ride.finish_label, ride.type) ?? '—'}
                     </p>
                   </div>
                 </div>

@@ -56,9 +56,12 @@ import { useToast } from '../../store/useToast';
 interface RideRow {
   id: string;
   name: string;
+  type: 'route' | 'meetup' | 'adhoc';
   scheduled_start: string;
   start_label: string | null;
   start_coords: string | null;
+  finish_label: string | null;
+  finish_coords: string | null;
   external_url: string | null;
   gpx_path:     string | null;
   thumbnail_url: string | null;
@@ -163,7 +166,7 @@ const RideLanding: React.FC = () => {
       if (!rideId) return null;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, start_coords, external_url, gpx_path, thumbnail_url, status, actual_end')
+        .select('id, name, type, scheduled_start, start_label, start_coords, finish_label, finish_coords, external_url, gpx_path, thumbnail_url, status, actual_end')
         .eq('id', rideId)
         .maybeSingle();
       if (error) throw error;
@@ -398,7 +401,7 @@ const RideLanding: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
               <div className="absolute bottom-6 left-6 right-6 text-white">
                 <h3 className="font-headline font-bold text-2xl tracking-tight">{ride.name}</h3>
-                <p className="font-label text-[10px] uppercase tracking-widest opacity-80 mt-1">
+                <p className="font-body text-sm opacity-90 mt-1">
                   {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
                 </p>
               </div>
@@ -408,7 +411,7 @@ const RideLanding: React.FC = () => {
           {!ride.thumbnail_url && (
             <div className="p-8 border-b border-outline-variant/10">
               <h3 className="font-headline font-bold text-2xl tracking-tight text-on-background">{ride.name}</h3>
-              <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+              <p className="font-body text-sm text-on-surface-variant mt-1">
                 {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
               </p>
             </div>
@@ -447,7 +450,48 @@ const RideLanding: React.FC = () => {
                   </a>
                 );
               })()}
-              
+
+              {(() => {
+                const finishValue = ride.finish_label
+                  ? ride.finish_label
+                  : (ride.type === 'meetup' ? 'Loop' : null);
+                if (!finishValue) return null;
+                const isLoop = !ride.finish_label;
+                const finishCoords = parsePoint(ride.finish_coords);
+                const finishMapsUrl = ride.finish_label
+                  ? (finishCoords
+                      ? `https://maps.google.com/?q=${finishCoords.lat},${finishCoords.lng}`
+                      : `https://maps.google.com/?q=${encodeURIComponent(ride.finish_label)}`)
+                  : null;
+                const Inner = (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-brand-primary">{isLoop ? 'loop' : 'flag'}</span>
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-0.5">Finish Point</span>
+                      <span className="font-body text-sm font-semibold text-on-background block truncate group-hover:text-brand-primary transition-colors">
+                        {finishValue}
+                      </span>
+                    </div>
+                  </>
+                );
+                return finishMapsUrl ? (
+                  <a
+                    href={finishMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
+                  >
+                    {Inner}
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5">
+                    {Inner}
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-2 gap-4">
                 {ride.external_url && (
                   <a
