@@ -109,19 +109,6 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
 }
 
 function AppContent() {
-  // Explicitly process #access_token= hash from admin-generated magic links.
-  // The SDK's implicit-flow detection can miss it if the hash fires before initialization.
-  React.useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.includes('access_token=')) return;
-    const params = new URLSearchParams(hash.substring(1));
-    const access_token = params.get('access_token');
-    const refresh_token = params.get('refresh_token');
-    if (access_token && refresh_token) {
-      supabase.auth.setSession({ access_token, refresh_token });
-    }
-  }, []);
-
   // Dynamic branding fetch from Supabase with a 5s timeout for offline resilience
   const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant-config'],

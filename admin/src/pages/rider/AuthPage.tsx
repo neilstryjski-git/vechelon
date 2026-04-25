@@ -43,7 +43,8 @@ const AuthPage: React.FC = () => {
       supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
         .then(() => {
           setIsRideGuest(false);
-          queryClient.invalidateQueries();
+          queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+          queryClient.invalidateQueries({ queryKey: ['user-tier'] });
           navigate(redirectTo, { replace: true });
         });
     };
@@ -114,7 +115,8 @@ const AuthPage: React.FC = () => {
         const { sessionCookieId } = useAppStore.getState();
         supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
           .then(() => {
-            queryClient.invalidateQueries();
+            queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+            queryClient.invalidateQueries({ queryKey: ['user-tier'] });
             navigate(redirectTo, { replace: true });
           }, () => {
             // navigate regardless on RPC error

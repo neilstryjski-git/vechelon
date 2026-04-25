@@ -136,7 +136,16 @@ const RideLanding: React.FC = () => {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const userTier = useAppStore((s) => s.userTier);
+  const setSelectedRideId = useAppStore((s) => s.setSelectedRideId);
   const joinRide = useAppStore((s) => s.joinRide);
+
+  // Affiliated members use the ride card side sheet — redirect them to the calendar
+  React.useEffect(() => {
+    if (userTier === 'affiliated' && rideId) {
+      setSelectedRideId(rideId);
+      navigate('/calendar', { replace: true });
+    }
+  }, [userTier, rideId, setSelectedRideId, navigate]);
 
   const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string }>(['tenant-config']);
 

@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
 import ToastContainer from './ToastContainer';
+import RideDetailSideSheet from './RideDetailSideSheet';
 
 function useCurrentAvatar() {
   return useQuery<{ name: string | null; avatar_url: string | null } | null>({
@@ -141,6 +142,7 @@ const RiderLayout: React.FC = () => {
       </main>
 
       <ToastContainer />
+      <RideDetailSideSheet />
 
       {/* Global Footer */}
       <footer className="mt-20 border-t border-surface-container-low px-6 py-8">
