@@ -188,22 +188,36 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
         </button>
       )}
 
-      {/* Thumbnail */}
-      {route.thumbnail_url ? (
-        <div className="h-40 w-full bg-surface-container-high overflow-hidden">
-          <img 
-            src={route.thumbnail_url} 
-            alt={route.name} 
-            className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-all duration-500"
+      {/* Thumbnail — clickable when external_url is set */}
+      {(() => {
+        const inner = route.thumbnail_url ? (
+          <img
+            src={route.thumbnail_url}
+            alt={route.name}
+            className="w-full h-full object-cover opacity-90 group-hover/thumb:opacity-100 transition-all duration-500"
           />
-        </div>
-      ) : (
-        <div className="h-40 w-full bg-surface-container-high flex items-center justify-center">
-          <span className="material-symbols-outlined text-on-surface-variant/30 text-4xl">
-            map
-          </span>
-        </div>
-      )}
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="material-symbols-outlined text-on-surface-variant/30 text-4xl">map</span>
+          </div>
+        );
+        return route.external_url ? (
+          <a
+            href={route.external_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${route.name} on Garmin / Strava`}
+            className="h-40 w-full bg-surface-container-high overflow-hidden block relative group/thumb"
+          >
+            {inner}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/thumb:bg-black/30 transition-colors pointer-events-none">
+              <span className="material-symbols-outlined text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity">open_in_new</span>
+            </div>
+          </a>
+        ) : (
+          <div className="h-40 w-full bg-surface-container-high overflow-hidden">{inner}</div>
+        );
+      })()}
 
       <div className="p-6">
         <div className="flex justify-between items-start mb-4">
