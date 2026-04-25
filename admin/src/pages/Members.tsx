@@ -10,19 +10,21 @@ import { useToast } from '../store/useToast';
 
 type AccountRole   = 'admin' | 'member' | 'guest';
 type AccountStatus = 'initiated' | 'affiliated' | 'suspended' | 'archived' | 'deleted';
-type ActiveTab     = 'all' | 'validated' | 'pending' | 'suspended' | 'archived';
+// 'rsvpd' is a synthetic display status for guest RSVPs — not present in account_tenants.
+type DisplayStatus = AccountStatus | 'rsvpd';
+type ActiveTab     = 'all' | 'validated' | 'pending' | 'suspended' | 'archived' | 'rsvpd';
 
 type ConfirmActionType = 'suspend' | 'unsuspend' | 'archive' | 'reactivate';
 
 interface MemberRow {
   account_id: string;
   role:       AccountRole;
-  status:     AccountStatus;
+  status:     DisplayStatus;
   joined_at:  string;
   accounts: {
     name:       string | null;
     email:      string;
-    phone:      string;
+    phone:      string | null;
     avatar_url: string | null;
     emergency_contact_name: string | null;
     emergency_contact_phone: string | null;
@@ -115,10 +117,11 @@ function tierLabel(role: AccountRole): string {
   return { admin: 'Admin', member: 'Member', guest: 'Guest' }[role];
 }
 
-const statusConfig = (status: AccountStatus) => {
+const statusConfig = (status: DisplayStatus) => {
   if (status === 'affiliated') return { dot: 'bg-tertiary rounded-full',        label: 'Validated'  };
   if (status === 'suspended')  return { dot: 'bg-amber-500 rounded-full',       label: 'Suspended'  };
   if (status === 'archived')   return { dot: 'bg-outline-variant rounded-none', label: 'Archived'   };
+  if (status === 'rsvpd')      return { dot: 'bg-primary rounded-full',         label: "RSVP'd"     };
   return                              { dot: 'bg-error rounded-none',           label: 'Pending'    };
 };
 
@@ -369,6 +372,7 @@ const TABS: { key: ActiveTab; label: string }[] = [
   { key: 'all',       label: 'All'       },
   { key: 'validated', label: 'Validated' },
   { key: 'pending',   label: 'Pending'   },
+  { key: 'rsvpd',     label: "RSVP'd"    },
   { key: 'suspended', label: 'Suspended' },
   { key: 'archived',  label: 'Archived'  },
 ];
@@ -425,6 +429,45 @@ const Members: React.FC = () => {
 
       if (error) throw error;
       return (data ?? []) as unknown as MemberRow[];
+    },
+  });
+
+  // Guest RSVPs — participants who supplied an email but have no linked account_tenants row.
+  // Deduped by email, keeping the most recent RSVP. Tenant-scoped via the rides RLS join.
+  const { data: rsvpd = [], isLoading: isLoadingRsvpd } = useQuery<MemberRow[]>({
+    queryKey: ['members', 'rsvpd'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ride_participants')
+        .select('id, display_name, email, joined_at')
+        .is('account_id', null)
+        .not('email', 'is', null)
+        .order('joined_at', { ascending: false });
+
+      if (error) throw error;
+
+      const seen = new Set<string>();
+      const unique: MemberRow[] = [];
+      for (const p of (data ?? []) as Array<{ id: string; display_name: string | null; email: string; joined_at: string }>) {
+        const key = p.email.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push({
+          account_id: p.id,
+          role:       'guest',
+          status:     'rsvpd',
+          joined_at:  p.joined_at,
+          accounts: {
+            name:       p.display_name,
+            email:      p.email,
+            phone:      null,
+            avatar_url: null,
+            emergency_contact_name:  null,
+            emergency_contact_phone: null,
+          },
+        });
+      }
+      return unique;
     },
   });
 
@@ -542,6 +585,16 @@ const Members: React.FC = () => {
   // Confirm action handler
   // -------------------------------------------------------------------------
 
+  const copyEmail = async (email: string | undefined) => {
+    if (!email) return;
+    try {
+      await navigator.clipboard.writeText(email);
+      addToast('Email copied', 'success');
+    } catch {
+      addToast('Could not access clipboard', 'error');
+    }
+  };
+
   const handleConfirm = () => {
     if (!confirmAction) return;
     const { type, member } = confirmAction;
@@ -568,6 +621,7 @@ const Members: React.FC = () => {
     activeTab === 'pending'   ? pending   :
     activeTab === 'suspended' ? suspended :
     activeTab === 'archived'  ? archived  :
+    activeTab === 'rsvpd'     ? rsvpd     :
     rows;
 
   const handleTabClick = (key: ActiveTab) =>
@@ -705,6 +759,11 @@ const Members: React.FC = () => {
                 {pending.length}
               </span>
             )}
+            {key === 'rsvpd' && !isLoadingRsvpd && rsvpd.length > 0 && (
+              <span className="ml-2 font-label text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {rsvpd.length}
+              </span>
+            )}
             {key === 'suspended' && suspended.length > 0 && (
               <span className="ml-2 font-label text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
                 {suspended.length}
@@ -739,7 +798,9 @@ const Members: React.FC = () => {
           <p className="font-label text-sm text-on-surface-variant text-center py-12">
             {activeTab === 'pending'
               ? '— No pending applications —'
-              : '— No members to display —'}
+              : activeTab === 'rsvpd'
+                ? '— No guest RSVPs —'
+                : '— No members to display —'}
           </p>
         )}
 
@@ -758,9 +819,21 @@ const Members: React.FC = () => {
                   <h5 className="font-headline font-bold text-sm text-on-background">
                     {m.accounts?.name ?? m.accounts?.email ?? '—'}
                   </h5>
-                  <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
-                    {m.accounts?.email}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest truncate">
+                      {m.accounts?.email}
+                    </span>
+                    {m.accounts?.email && (
+                      <button
+                        onClick={() => copyEmail(m.accounts?.email)}
+                        aria-label={`Copy ${m.accounts.email}`}
+                        title="Copy email"
+                        className="p-0.5 rounded text-on-surface-variant/50 hover:text-on-background hover:bg-surface-container-high transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[14px] leading-none">content_copy</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="col-span-3">
@@ -799,15 +872,17 @@ const Members: React.FC = () => {
                     Affiliate
                   </button>
                 )}
-                <ActionMenu
-                  member={m}
-                  isSelf={isSelf}
-                  onSuspend={()    => setConfirmAction({ type: 'suspend',    member: m })}
-                  onUnsuspend={()  => setConfirmAction({ type: 'unsuspend',  member: m })}
-                  onArchive={()    => setConfirmAction({ type: 'archive',    member: m })}
-                  onReactivate={() => setConfirmAction({ type: 'reactivate', member: m })}
-                  onChangeEmail={()=> setChangeEmailTarget(m)}
-                />
+                {m.status !== 'rsvpd' && (
+                  <ActionMenu
+                    member={m}
+                    isSelf={isSelf}
+                    onSuspend={()    => setConfirmAction({ type: 'suspend',    member: m })}
+                    onUnsuspend={()  => setConfirmAction({ type: 'unsuspend',  member: m })}
+                    onArchive={()    => setConfirmAction({ type: 'archive',    member: m })}
+                    onReactivate={() => setConfirmAction({ type: 'reactivate', member: m })}
+                    onChangeEmail={()=> setChangeEmailTarget(m)}
+                  />
+                )}
               </div>
             </div>
           );

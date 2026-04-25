@@ -75,6 +75,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAllParticipants, setShowAllParticipants] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
   const ROSTER_LIMIT = 8;
 
   const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
@@ -241,6 +242,22 @@ const RideDetailSideSheet: React.FC = () => {
     navigate('/');
   };
 
+  const handleRemoveParticipant = async () => {
+    if (!removeTarget) return;
+    const target = removeTarget;
+    setRemoveTarget(null);
+    const { error } = await supabase
+      .from('ride_participants')
+      .delete()
+      .eq('id', target.id);
+    if (error) {
+      addToast(`Could not remove ${target.display_name}: ${error.message}`, 'error');
+      return;
+    }
+    addToast(`${target.display_name} removed from roster.`, 'success');
+    queryClient.invalidateQueries({ queryKey: ['ride-participants', selectedRideId] });
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -258,6 +275,16 @@ const RideDetailSideSheet: React.FC = () => {
         title="Delete Ride"
         message={`Are you sure you want to delete "${ride?.name}"? This cannot be undone.`}
         confirmLabel="Delete"
+        type="danger"
+      />
+
+      <Modal
+        isOpen={!!removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={handleRemoveParticipant}
+        title="Remove from Roster"
+        message={`Remove ${removeTarget?.display_name ?? 'this rider'} from the roster? They will need to RSVP again to rejoin.`}
+        confirmLabel="Remove"
         type="danger"
       />
 
@@ -391,24 +418,39 @@ const RideDetailSideSheet: React.FC = () => {
                     ))
                   ) : participants.length > 0 ? (
                     <>
-                      {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => (
-                        <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                              p.role === 'captain' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
-                            }`}>
-                              {(p.display_name ?? '?').charAt(0).toUpperCase()}
+                      {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => {
+                        const isSelf = !!p.account_id && p.account_id === currentUser?.id;
+                        const canRemove = isAdmin && !isSelf;
+                        return (
+                          <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                                p.role === 'captain' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+                              }`}>
+                                {(p.display_name ?? '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
+                                <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
+                                  {!p.account_id ? 'Guest' : p.role.charAt(0).toUpperCase() + p.role.slice(1)}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
-                              <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
-                                {!p.account_id ? 'Guest' : p.role.charAt(0).toUpperCase() + p.role.slice(1)}
-                              </p>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
+                              {canRemove && (
+                                <button
+                                  onClick={() => setRemoveTarget(p)}
+                                  aria-label={`Remove ${p.display_name} from roster`}
+                                  className="p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-base">person_remove</span>
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
-                        </div>
-                      ))}
+                        );
+                      })}
                       {participants.length > ROSTER_LIMIT && (
                         <button
                           onClick={() => setShowAllParticipants(v => !v)}
