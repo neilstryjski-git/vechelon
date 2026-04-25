@@ -249,6 +249,7 @@ const RideDetailSideSheet: React.FC = () => {
 
   const handleDelete = async () => {
     if (!selectedRideId) return;
+    setShowDeleteConfirm(false);
     const { data, error } = await supabase
       .from('rides')
       .delete()
