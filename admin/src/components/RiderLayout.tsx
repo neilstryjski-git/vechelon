@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -41,8 +41,31 @@ const RiderLayout: React.FC = () => {
   const isOnline = useAppStore((state) => state.isOnline);
   const userTier = useAppStore((state) => state.userTier);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const { data: currentUser } = useCurrentAvatar();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAvatarMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target as Node)) {
+        setIsAvatarMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsAvatarMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isAvatarMenuOpen]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut({ scope: 'local' });
+    window.location.href = '/portal/auth';
+  };
 
   const riderLinks = [
     { to: '/', label: 'Home', end: true },
@@ -108,21 +131,48 @@ const RiderLayout: React.FC = () => {
                 OFFLINE
               </span>
             )}
-            <button
-              onClick={() => navigate('/profile')}
-              className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95 hidden sm:block"
-              title="Edit Profile"
-            >
-              {currentUser?.avatar_url ? (
-                <img src={currentUser.avatar_url} alt={currentUser.name ?? 'Avatar'} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-surface-container-highest flex items-center justify-center">
-                  <span className="font-label text-[8px] text-on-surface-variant">
-                    {currentUser?.name?.charAt(0).toUpperCase() ?? ''}
-                  </span>
+            <div className="relative hidden sm:block" ref={avatarMenuRef}>
+              <button
+                onClick={() => setIsAvatarMenuOpen(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={isAvatarMenuOpen}
+                className="w-8 h-8 rounded-full bg-surface-container-high border border-surface-container-highest overflow-hidden transition-transform hover:scale-105 active:scale-95"
+                title="Account"
+              >
+                {currentUser?.avatar_url ? (
+                  <img src={currentUser.avatar_url} alt={currentUser.name ?? 'Avatar'} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-surface-container-highest flex items-center justify-center">
+                    <span className="font-label text-[8px] text-on-surface-variant">
+                      {currentUser?.name?.charAt(0).toUpperCase() ?? ''}
+                    </span>
+                  </div>
+                )}
+              </button>
+              {isAvatarMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-48 bg-surface-container-lowest border border-outline-variant/15 rounded-xl shadow-ambient overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-base text-on-surface-variant">person</span>
+                    Update Profile
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { setIsAvatarMenuOpen(false); handleSignOut(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors border-t border-outline-variant/10"
+                  >
+                    <span className="material-symbols-outlined text-base text-on-surface-variant">logout</span>
+                    Log out
+                  </button>
                 </div>
               )}
-            </button>
+            </div>
 
             {/* Mobile Menu Trigger */}
             <button 

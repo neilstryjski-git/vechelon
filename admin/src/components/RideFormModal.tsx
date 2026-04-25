@@ -1107,18 +1107,21 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 <label className={labelClass}>
                   Meetup Location{rideType === 'meetup' ? ' *' : ' (optional override)'}
                 </label>
-                <input
-                  type="text"
-                  value={meetupLabel}
-                  onChange={e => setMeetupLabel(e.target.value)}
-                  placeholder="e.g. Snug Harbour, 2214 Bloor St W"
-                  className={`${inputClass} mb-2`}
-                />
                 <MeetupLocationPicker
                   coords={meetupCoords}
                   label={meetupLabel}
                   onCoordsChange={setMeetupCoords}
                   onLabelChange={setMeetupLabel}
+                />
+                <label className={`${labelClass} mt-3`}>
+                  Display Name (optional)
+                </label>
+                <input
+                  type="text"
+                  value={meetupLabel}
+                  onChange={e => setMeetupLabel(e.target.value)}
+                  placeholder="e.g. Snug Harbour"
+                  className={inputClass}
                 />
                 {rideType === 'route' && !meetupCoords && (
                   <p className="font-body text-xs text-on-surface-variant/60 mt-1.5">

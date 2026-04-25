@@ -616,13 +616,17 @@ const Members: React.FC = () => {
   const suspended = rows.filter((r) => r.status === 'suspended');
   const archived  = rows.filter((r) => r.status === 'archived');
 
+  const allRows = [...rows, ...rsvpd].sort((a, b) =>
+    a.joined_at < b.joined_at ? 1 : a.joined_at > b.joined_at ? -1 : 0
+  );
+
   const visibleRows =
     activeTab === 'validated' ? validated :
     activeTab === 'pending'   ? pending   :
     activeTab === 'suspended' ? suspended :
     activeTab === 'archived'  ? archived  :
     activeTab === 'rsvpd'     ? rsvpd     :
-    rows;
+    allRows;
 
   const handleTabClick = (key: ActiveTab) =>
     setActiveTab(activeTab === key && key !== 'all' ? 'all' : key);
@@ -751,7 +755,7 @@ const Members: React.FC = () => {
             {label}
             {key === 'all' && !isLoading && (
               <span className="ml-2 font-label text-[10px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full">
-                {rows.length}
+                {rows.length + rsvpd.length}
               </span>
             )}
             {key === 'pending' && pending.length > 0 && (

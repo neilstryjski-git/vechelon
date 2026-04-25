@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
@@ -44,6 +44,30 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   });
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAvatarMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target as Node)) {
+        setIsAvatarMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsAvatarMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isAvatarMenuOpen]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut({ scope: 'local' });
+    window.location.href = '/portal/auth';
+  };
 
   const baseLinks: { to: string; label: string; end?: boolean }[] = [
     { to: '/', label: 'Command Centre', end: true },
@@ -144,21 +168,49 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
             >
               <span className="material-symbols-outlined text-on-surface">menu</span>
             </button>
-            <NavLink
-              to="/profile"
-              className="w-10 h-10 rounded-full bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-all overflow-hidden"
-            >
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              ) : (
-                <span className="material-symbols-outlined text-on-surface-variant">person</span>
+            <div className="relative" ref={avatarMenuRef}>
+              <button
+                onClick={() => setIsAvatarMenuOpen(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={isAvatarMenuOpen}
+                className="w-10 h-10 rounded-full bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center hover:scale-105 active:scale-95 transition-all overflow-hidden"
+                title="Account"
+              >
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="material-symbols-outlined text-on-surface-variant">person</span>
+                )}
+              </button>
+              {isAvatarMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-48 bg-surface-container-lowest border border-outline-variant/15 rounded-xl shadow-ambient overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-base text-on-surface-variant">person</span>
+                    Update Profile
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { setIsAvatarMenuOpen(false); handleSignOut(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors border-t border-outline-variant/10"
+                  >
+                    <span className="material-symbols-outlined text-base text-on-surface-variant">logout</span>
+                    Log out
+                  </button>
+                </div>
               )}
-            </NavLink>
+            </div>
           </div>
 
         </nav>

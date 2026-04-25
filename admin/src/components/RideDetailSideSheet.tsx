@@ -135,15 +135,15 @@ const RideDetailSideSheet: React.FC = () => {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isOpen]);
 
-  const { data: ride, isLoading: loadingRide } = useQuery<RideDetail>({
+  const { data: ride, isLoading: loadingRide } = useQuery<RideDetail | null>({
     queryKey: ['ride-detail', selectedRideId],
     queryFn: async () => {
-      if (!selectedRideId) return null as any;
+      if (!selectedRideId) return null;
       const { data, error } = await supabase
         .from('rides')
         .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label')
         .eq('id', selectedRideId)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -162,6 +162,22 @@ const RideDetailSideSheet: React.FC = () => {
       return data || [];
     },
     enabled: !!selectedRideId,
+  });
+
+  // If the ride was built from a library route (gpx_path == route_library.file_path),
+  // pull the route's distance/elevation stats. One-off GPX uploads won't match.
+  const { data: routeStats } = useQuery<{ distance_km: number | null; elevation_gain_m: number | null } | null>({
+    queryKey: ['ride-route-stats', ride?.gpx_path],
+    queryFn: async () => {
+      if (!ride?.gpx_path) return null;
+      const { data } = await supabase
+        .from('route_library')
+        .select('distance_km, elevation_gain_m')
+        .eq('file_path', ride.gpx_path)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!ride?.gpx_path,
   });
 
   const hasJoined = participants.some(p => p.id === currentUser?.id);
@@ -233,12 +249,21 @@ const RideDetailSideSheet: React.FC = () => {
 
   const handleDelete = async () => {
     if (!selectedRideId) return;
-    const { error } = await supabase.from('rides').delete().eq('id', selectedRideId);
+    const { data, error } = await supabase
+      .from('rides')
+      .delete()
+      .eq('id', selectedRideId)
+      .select();
     if (error) { addToast(`Delete failed: ${error.message}`, 'error'); return; }
+    if (!data || data.length === 0) {
+      addToast('Could not delete this ride. You may not have permission.', 'error');
+      return;
+    }
     addToast('Ride deleted.', 'success');
     close();
-    queryClient.invalidateQueries({ queryKey: ['rides'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-rides'] });
+    queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
+    queryClient.invalidateQueries({ queryKey: ['next-ride'] });
+    queryClient.invalidateQueries({ queryKey: ['upcoming-rides'] });
     navigate('/');
   };
 
@@ -344,6 +369,24 @@ const RideDetailSideSheet: React.FC = () => {
               <div className="h-4 w-3/4 bg-surface-container-high rounded" />
               <div className="h-4 w-1/2 bg-surface-container-high rounded" />
             </div>
+          ) : !ride ? (
+            <div className="text-center space-y-6 pt-12">
+              <div className="w-14 h-14 rounded-full bg-surface-container-high flex items-center justify-center mx-auto">
+                <span className="material-symbols-outlined text-on-surface-variant text-2xl">search_off</span>
+              </div>
+              <div>
+                <h3 className="font-headline font-bold text-lg text-on-background">This ride no longer exists</h3>
+                <p className="font-body text-sm text-on-surface-variant mt-2">
+                  It may have been deleted or the link is outdated.
+                </p>
+              </div>
+              <button
+                onClick={close}
+                className="font-label text-[10px] uppercase tracking-widest text-primary hover:opacity-70 transition-opacity"
+              >
+                Close
+              </button>
+            </div>
           ) : ride && (
             <>
               {/* Visual & Core Stats */}
@@ -387,6 +430,23 @@ const RideDetailSideSheet: React.FC = () => {
                     </p>
                   </div>
                 </div>
+
+                {(routeStats?.distance_km != null || routeStats?.elevation_gain_m != null) && (
+                  <div className="flex gap-6 px-1">
+                    {routeStats?.distance_km != null && (
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-on-surface-variant text-base">straighten</span>
+                        <span className="font-label text-xs text-on-surface-variant">{routeStats.distance_km.toFixed(1)} km</span>
+                      </div>
+                    )}
+                    {routeStats?.elevation_gain_m != null && (
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-on-surface-variant text-base">landscape</span>
+                        <span className="font-label text-xs text-on-surface-variant">{routeStats.elevation_gain_m} m gain</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* QR Code */}

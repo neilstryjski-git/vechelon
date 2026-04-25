@@ -72,7 +72,7 @@ const RideBuilder: React.FC = () => {
         .from('rides')
         .select('*, waypoints(*)')
         .eq('id', rideId)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -268,6 +268,26 @@ const RideBuilder: React.FC = () => {
   };
 
   if (isLoading) return <div className="p-12 animate-pulse text-center font-label uppercase">Initializing Tactical Builder...</div>;
+
+  if (!ride) return (
+    <div className="max-w-lg mx-auto text-center space-y-6 pt-16">
+      <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto">
+        <span className="material-symbols-outlined text-on-surface-variant text-3xl">search_off</span>
+      </div>
+      <div>
+        <h2 className="font-headline font-bold text-xl text-on-background">This ride no longer exists</h2>
+        <p className="font-body text-sm text-on-surface-variant mt-2">
+          It may have been deleted or the link is outdated.
+        </p>
+      </div>
+      <button
+        onClick={() => navigate('/')}
+        className="font-label text-[10px] uppercase tracking-widest text-primary hover:opacity-70 transition-opacity"
+      >
+        ← Return to Dashboard
+      </button>
+    </div>
+  );
 
   const selectedMarker = markers.find(m => m.id === selectedMarkerId);
 

@@ -176,6 +176,24 @@ const RideLanding: React.FC = () => {
   });
 
   // -------------------------------------------------------------------------
+  // Route stats — present when ride.gpx_path matches a route_library file_path
+  // -------------------------------------------------------------------------
+
+  const { data: routeStats } = useQuery<{ distance_km: number | null; elevation_gain_m: number | null } | null>({
+    queryKey: ['ride-route-stats', ride?.gpx_path],
+    queryFn: async () => {
+      if (!ride?.gpx_path) return null;
+      const { data } = await supabase
+        .from('route_library')
+        .select('distance_km, elevation_gain_m')
+        .eq('file_path', ride.gpx_path)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!ride?.gpx_path,
+  });
+
+  // -------------------------------------------------------------------------
   // Fetch summary (saved rides only)
   // -------------------------------------------------------------------------
 
@@ -491,6 +509,23 @@ const RideLanding: React.FC = () => {
                   </div>
                 );
               })()}
+
+              {(routeStats?.distance_km != null || routeStats?.elevation_gain_m != null) && (
+                <div className="flex gap-6 px-1 py-2">
+                  {routeStats?.distance_km != null && (
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">straighten</span>
+                      <span className="font-label text-xs text-on-surface-variant">{routeStats.distance_km.toFixed(1)} km</span>
+                    </div>
+                  )}
+                  {routeStats?.elevation_gain_m != null && (
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">landscape</span>
+                      <span className="font-label text-xs text-on-surface-variant">{routeStats.elevation_gain_m} m gain</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 {ride.external_url && (
