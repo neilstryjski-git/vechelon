@@ -100,41 +100,7 @@ const RiderHome: React.FC = () => {
   const rideIds = upcomingRides.map(r => r.id);
   const { data: myParticipations = new Set<string>() } = useMyParticipations(rideIds);
 
-  // Initiated: single participation check
-  const { data: singleParticipation } = useQuery({
-    queryKey: ['my-participation', nextRide?.id],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const sessionCookieId = useAppStore.getState().sessionCookieId;
-      if (!nextRide?.id) return null;
-      const query = supabase.from('ride_participants').select('id').eq('ride_id', nextRide.id);
-      if (user) {
-        query.eq('account_id', user.id);
-      } else {
-        query.eq('session_cookie_id', sessionCookieId).is('account_id', null);
-      }
-      const { data } = await query.maybeSingle();
-      return data;
-    },
-    enabled: !!nextRide?.id && isInitiated,
-  });
-
-  const [isJoining, setIsJoining] = useState(false);
   const [joiningRides, setJoiningRides] = useState<Set<string>>(new Set());
-
-  const handleJoinNext = async () => {
-    if (!nextRide) return;
-    setIsJoining(true);
-    try {
-      await joinRide(nextRide.id);
-      addToast(nextRide.status === 'active' ? 'You have joined the ride!' : 'RSVP confirmed.', 'success');
-      queryClient.invalidateQueries({ queryKey: ['my-participation', nextRide.id] });
-    } catch (e: any) {
-      addToast(`Failed to join: ${e.message}`, 'error');
-    } finally {
-      setIsJoining(false);
-    }
-  };
 
   const handleJoin = async (ride: RideRow) => {
     setJoiningRides(prev => new Set(prev).add(ride.id));
