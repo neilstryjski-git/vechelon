@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { parsePoint, downloadGpx } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
+import { fireBroadcastCopy } from '../lib/analyticsEvents';
 import Modal from './Modal';
 import RideFormModal from './RideFormModal';
 
@@ -35,6 +36,7 @@ interface RideDetail {
   start_coords: string | null;
   meetup_coords: string | null;
   meetup_label: string | null;
+  created_at: string;
 }
 
 function resolveFinishLabel(finishLabel: string | null, type: 'route' | 'meetup' | 'adhoc') {
@@ -142,7 +144,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label')
+        .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label, created_at')
         .eq('id', selectedRideId)
         .maybeSingle();
       if (error) throw error;
@@ -232,6 +234,27 @@ const RideDetailSideSheet: React.FC = () => {
       addToast('Copied!', 'success');
     } catch {
       addToast('Could not access clipboard', 'error');
+    }
+    // W132 / IA-S0-04: broadcast_copy fires regardless of clipboard outcome —
+    // the admin clicked the button, which is the H1 signal. Fire-and-forget.
+    // Skip if currentTenantId still holds the placeholder UUID (W131 lesson)
+    // to avoid FK violations and misattribution.
+    if (ride) {
+      const tenantId = useAppStore.getState().currentTenantId;
+      const { data: authData } = await supabase.auth.getUser();
+      const adminUserId = authData.user?.id;
+      if (
+        tenantId &&
+        tenantId !== '00000000-0000-0000-0000-000000000001' &&
+        adminUserId
+      ) {
+        void fireBroadcastCopy({
+          tenantId,
+          rideId: ride.id,
+          rideCreatedAt: ride.created_at,
+          adminUserId,
+        });
+      }
     }
   };
 
