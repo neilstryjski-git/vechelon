@@ -432,7 +432,9 @@ const Members: React.FC = () => {
     },
   });
 
-  // Guest RSVPs — participants who supplied an email but have no linked account_tenants row.
+  // Guest RSVPs — rows with no linked account (account_id IS NULL).
+  // After D37, members also store their email on ride_participants, so the
+  // account_id NULL filter is the load-bearing semantic — NOT email presence.
   // Deduped by email, keeping the most recent RSVP. Tenant-scoped via the rides RLS join.
   const { data: rsvpd = [], isLoading: isLoadingRsvpd } = useQuery<MemberRow[]>({
     queryKey: ['members', 'rsvpd'],

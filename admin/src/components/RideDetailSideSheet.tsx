@@ -20,6 +20,7 @@ interface ParticipantDetail {
   role: 'member' | 'captain' | 'support' | 'guest';
   status: string;
   account_id: string | null;
+  email: string | null;
 }
 
 interface RideDetail {
@@ -159,7 +160,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return [];
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('id, display_name, role, status, account_id')
+        .select('id, display_name, role, status, account_id, email')
         .eq('ride_id', selectedRideId);
       if (error) throw error;
       return data || [];
@@ -528,6 +529,12 @@ const RideDetailSideSheet: React.FC = () => {
                               </div>
                               <div>
                                 <p className="font-body text-sm font-semibold text-on-background">{p.display_name}</p>
+                                {/* D38: admins see the rider's email under display_name */}
+                                {isAdmin && p.email && (
+                                  <p className="font-body text-[11px] text-on-surface-variant opacity-70 truncate max-w-[200px]" title={p.email}>
+                                    {p.email}
+                                  </p>
+                                )}
                                 <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant opacity-60">
                                   {!p.account_id ? 'Guest' : p.role.charAt(0).toUpperCase() + p.role.slice(1)}
                                 </p>

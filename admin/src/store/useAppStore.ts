@@ -172,6 +172,12 @@ export const useAppStore = create<AppState>()(
       joinRide: async (rideId, guestName?: string, guestEmail?: string) => {
         const { data: { user } } = await supabase.auth.getUser();
         const sessionCookieId = useAppStore.getState().sessionCookieId;
+        // D37: email uniqueness per ride must hold across auth state.
+        // Always store an email when one is available — auth user's email for
+        // members, form email for guests. Lowercased so the (ride_id, email)
+        // unique index treats case variations as duplicates.
+        const normalisedGuestEmail = guestEmail?.trim().toLowerCase() || null;
+        const effectiveEmail = user?.email?.toLowerCase() || normalisedGuestEmail;
 
         let accountId = user?.id || null;
         let displayName = guestName ?? 'Guest Rider';
@@ -191,6 +197,22 @@ export const useAppStore = create<AppState>()(
           set({ isRideGuest: true });
         }
 
+        // D37: upsert against partial UNIQUE indexes added in
+        // 20260428000007_ride_participants_dedupe_and_uniqueness.sql.
+        // Authenticated users → conflict on (ride_id, account_id);
+        // guest email → conflict on (ride_id, lower(email)).
+        // ON CONFLICT DO NOTHING — re-RSVPs are no-ops; existing rows
+        // (including their role) are preserved. Role transitions are
+        // handled via the admin role-assignment flow, not joinRide.
+        // D37: simple INSERT + catch unique_violation (23505) as a no-op.
+        // We use plain INSERT instead of upsert because supabase-js's
+        // onConflict cannot target partial unique indexes (PostgreSQL
+        // requires the index predicate in ON CONFLICT, which the JS client
+        // can't send). The DB-side partial unique indexes
+        // (uniq_ride_participants_ride_email, uniq_ride_participants_ride_account_no_email)
+        // still enforce integrity. A duplicate RSVP triggers 23505 here,
+        // which we treat as success — the row already exists with the
+        // existing role, which is the desired no-op behavior.
         const { error } = await supabase
           .from('ride_participants')
           .insert({
@@ -198,13 +220,17 @@ export const useAppStore = create<AppState>()(
             account_id: accountId,
             display_name: displayName,
             phone: phone,
-            email: user ? null : (guestEmail || null),
+            email: effectiveEmail,
             role: user ? 'member' : 'guest',
             status: 'rsvpd',
             session_cookie_id: sessionCookieId
           });
 
-        if (error) throw error;
+        // 23505 = unique_violation — duplicate RSVP, treat as no-op so role
+        // transitions handled by admin role-assignment UI are preserved.
+        if (error && (error as { code?: string }).code !== '23505') {
+          throw error;
+        }
       },
 
       /**
