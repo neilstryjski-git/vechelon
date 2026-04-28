@@ -65,7 +65,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   }, [isAvatarMenuOpen]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut({ scope: 'local' });
+    await supabase.auth.signOut({ scope: 'global' });
     window.location.href = '/portal/auth';
   };
 
