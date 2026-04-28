@@ -184,7 +184,10 @@ const RideDetailSideSheet: React.FC = () => {
     enabled: !!ride?.gpx_path,
   });
 
-  const hasJoined = participants.some(p => p.id === currentUser?.id);
+  // D39: compare account_id (auth user) not p.id (ride_participants row UUID).
+  // The previous comparison was always false, so the "RSVP Confirmed" green
+  // check state never rendered after a successful RSVP.
+  const hasJoined = participants.some(p => p.account_id === currentUser?.id);
 
   const handleJoin = async () => {
     if (!selectedRideId) return;
