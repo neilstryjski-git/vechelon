@@ -5,6 +5,11 @@ import { supabase } from '../../lib/supabase';
 import { parsePoint, downloadGpx } from '../../lib/maps';
 import { useAppStore } from '../../store/useAppStore';
 import { useToast } from '../../store/useToast';
+import {
+  firePortalRsvp,
+  firePortalGpxDownload,
+  firePortalNavExternal,
+} from '../../lib/analyticsEvents';
 
 // ---------------------------------------------------------------------------
 // BDD Scenarios (living documentation)
@@ -270,10 +275,49 @@ const RideLanding: React.FC = () => {
         'success',
       );
       queryClient.invalidateQueries({ queryKey: ['my-participation', ride.id] });
+      // W131 / IA-S0-03: portal_rsvp fires after a successful RSVP. rider_type
+      // is 'member' for affiliated, 'guest' for everyone else. Session ref hash
+      // (if present) carries through automatically via attributionFromSession.
+      const tenantId = useAppStore.getState().currentTenantId;
+      const tier = useAppStore.getState().userTier;
+      if (tenantId) {
+        void firePortalRsvp({
+          tenantId,
+          rideId: ride.id,
+          riderType: tier === 'affiliated' ? 'member' : 'guest',
+        });
+      }
     } catch (e: any) {
       addToast(`Failed: ${e.message}`, 'error');
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  // W131 / IA-S0-03: portal_gpx_download for the rider download path.
+  // download_source is 'broadcast' here because GPX downloads from the rider
+  // landing originate from a broadcast/share link (vs the route library which
+  // is admin-curated).
+  const handleGpxDownload = () => {
+    if (!ride?.gpx_path) return;
+    downloadGpx(ride.gpx_path, ride.name);
+    const tenantId = useAppStore.getState().currentTenantId;
+    if (tenantId) {
+      void firePortalGpxDownload({
+        tenantId,
+        rideId: ride.id,
+        downloadSource: 'broadcast',
+      });
+    }
+  };
+
+  // W131 / IA-S0-03: portal_nav_external for clicks on external nav links
+  // (Google Maps for meetup/finish, Garmin/Strava for the route).
+  const handleNavExternal = (navType: 'google_maps' | 'garmin' | 'other') => {
+    if (!ride) return;
+    const tenantId = useAppStore.getState().currentTenantId;
+    if (tenantId) {
+      void firePortalNavExternal({ tenantId, rideId: ride.id, navType });
     }
   };
 
@@ -454,6 +498,7 @@ const RideLanding: React.FC = () => {
                     href={mapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => handleNavExternal('google_maps')}
                     className="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
                   >
                     <div className="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center shrink-0">
@@ -499,6 +544,7 @@ const RideLanding: React.FC = () => {
                     href={finishMapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => handleNavExternal('google_maps')}
                     className="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
                   >
                     {Inner}
@@ -533,6 +579,7 @@ const RideLanding: React.FC = () => {
                     href={ride.external_url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => handleNavExternal(ride.external_url!.includes('garmin.com') ? 'garmin' : 'other')}
                     className="flex items-center gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
                   >
                     <span className="material-symbols-outlined text-brand-primary text-xl">route</span>
@@ -541,7 +588,7 @@ const RideLanding: React.FC = () => {
                 )}
                 {ride.gpx_path && (
                   <button
-                    onClick={() => downloadGpx(ride.gpx_path!, ride.name)}
+                    onClick={handleGpxDownload}
                     className="flex items-center gap-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant/5 hover:border-brand-primary/30 transition-colors group"
                   >
                     <span className="material-symbols-outlined text-brand-primary text-xl">download</span>

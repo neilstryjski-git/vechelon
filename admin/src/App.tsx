@@ -18,6 +18,13 @@ import { useBranding } from './hooks/useBranding';
 import { useTierDetection } from './hooks/useTierDetection';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
+import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
+
+// Placeholder tenant UUID seeded in useAppStore until the real tenant id
+// resolves from the tenants query. The IA portal_visit effect must not fire
+// against this UUID — it would either FK-violate the analytics_events insert
+// or attribute the very first event of each session to a non-existent tenant.
+const PLACEHOLDER_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 // Simple Error Boundary for UX stability
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
@@ -100,6 +107,33 @@ function SmartMembers() {
 function AdaptiveLayout({ tenant }: { tenant: any }) {
   useTierDetection();
   const isAdmin = useAppStore((s) => s.isAdmin);
+  const userTier = useAppStore((s) => s.userTier);
+  const currentTenantId = useAppStore((s) => s.currentTenantId);
+
+  // W131 / IA-S0-03: fire portal_visit ONCE per session arrival per VMT-D-42.
+  // Idempotent within a session via the sessionStorage guard inside
+  // firePortalVisitOnce. We wait for the REAL tenant id (not the store's
+  // placeholder seed) before firing — otherwise the first event of every
+  // session attributes to a tenant that may not exist, causing FK violations
+  // on insert. The setTenantId effect in AppContent overwrites the seed once
+  // the tenant query resolves.
+  React.useEffect(() => {
+    if (!currentTenantId) return;
+    if (currentTenantId === PLACEHOLDER_TENANT_ID) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      let riderType: RiderType = 'unknown';
+      if (data.user) {
+        riderType = userTier === 'affiliated' ? 'member' : 'guest';
+      }
+      void firePortalVisitOnce({ tenantId: currentTenantId, riderType });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTenantId, userTier]);
 
   if (isAdmin) {
     return <Layout tenant={tenant || {}} />;
@@ -117,7 +151,7 @@ function AppContent() {
       
       const fetchPromise = supabase
         .from('tenants')
-        .select('primary_color, accent_color, logo_url, name')
+        .select('id, primary_color, accent_color, logo_url, name')
         .limit(1)
         .maybeSingle();
 
@@ -142,6 +176,15 @@ function AppContent() {
 
   // Update tab title to tenant name
   if (tenant?.name) document.title = tenant.name;
+
+  // W131 / IA-S0-03: keep store tenant_id in sync with the resolved tenant
+  // so analytics_events inserts attribute correctly. The store's hardcoded
+  // placeholder UUID is left in place as a fallback for now; once subdomain
+  // routing (MT-S0-03 / W124) lands, this set is the single source of truth.
+  const setTenantId = useAppStore((s) => s.setTenantId);
+  React.useEffect(() => {
+    if (tenant?.id) setTenantId(tenant.id);
+  }, [tenant?.id, setTenantId]);
 
   // Fallback to Velo Modern defaults
   useBranding(tenant && tenant.primary_color ? {

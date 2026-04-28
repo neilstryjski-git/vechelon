@@ -303,7 +303,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       // Build all rows (generating a QR per instance)
       const rows = await Promise.all(dates.map(async (date, i) => {
         const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
-        const joinUrl = `${JOIN_BASE}/portal/ride/${rideId}`;
+        const joinUrl = `${JOIN_BASE}/portal/ride/${rideId}?source=ridecard`;
         const qrCode  = await generateQRWithLogo(joinUrl);
         return {
           id:              rideId,
@@ -926,7 +926,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
           `Date/Time: ${dateStr} · ${timeStr}`,
           ...(externalUrl.trim() ? [`Route: ${externalUrl.trim()}`] : []),
           `Meetup: ${meetupValue}`,
-          `Details: ${JOIN_BASE}/portal/ride/${singleRideId}`,
+          `Details: ${JOIN_BASE}/portal/ride/${singleRideId}?source=broadcast`,
           '',
         ].join('\n');
         navigator.clipboard.writeText(broadcast).catch(() => {});
