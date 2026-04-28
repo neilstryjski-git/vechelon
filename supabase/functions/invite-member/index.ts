@@ -53,17 +53,61 @@ serve(async (req) => {
     const { email, role } = await req.json()
     if (!email || typeof email !== 'string') throw new Error('email is required')
     const inviteRole: 'admin' | 'member' = role === 'admin' ? 'admin' : 'member'
+    const normalizedEmail = email.trim().toLowerCase()
 
-    // ── 4. Generate Invite Link & Send via Resend ─────────────────────────
+    // ── 3a. Cross-club email validation (W127 / Pillar II §2.3) ──────────
+    // Reject emails already registered to a different tenant. Each club requires
+    // a dedicated email per VMT-D-33. Error must NOT reveal the source club —
+    // data sovereignty applies to error messages (CP-MT-06).
+    //
+    // Fires BEFORE invite link generation so no partial accounts row is created
+    // on rejection. Uses service role for the lookup (must read accounts +
+    // account_tenants across tenant boundaries to detect the cross-tenant case).
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    const { data: existingAccount, error: lookupError } = await adminClient
+      .from('accounts')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+
+    if (lookupError) throw lookupError
+
+    if (existingAccount) {
+      // Account exists — check if it has an account_tenants record at THIS tenant.
+      const { data: currentTenantLink, error: linkError } = await adminClient
+        .from('account_tenants')
+        .select('account_id')
+        .eq('account_id', existingAccount.id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+
+      if (linkError) throw linkError
+
+      if (!currentTenantLink) {
+        // Email is registered to another tenant — reject with the verbatim
+        // error string from Pillar II §2.3. Do NOT name the source club.
+        return new Response(
+          JSON.stringify({
+            error:
+              'This email is already registered on the Vechelon platform. Please use a dedicated email for this club.',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 409,
+          }
+        )
+      }
+      // else: account already affiliated with this tenant — proceed to
+      // re-issue invite/magic link (existing idempotent re-invite behaviour).
+    }
+
+    // ── 4. Generate Invite Link & Send via Resend ─────────────────────────
     const origin = req.headers.get('origin') ?? req.headers.get('referer')?.split('/portal')[0]
     const portalUrl = origin ? `${origin}/portal` : (Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal')
-
-    const normalizedEmail = email.trim().toLowerCase()
 
     let inviteLink: string
     let invitedUserId: string
