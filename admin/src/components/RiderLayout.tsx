@@ -83,6 +83,8 @@ const RiderLayout: React.FC = () => {
         onClose={() => setIsMenuOpen(false)}
         links={riderLinks}
         title="RIDER PORTAL"
+        currentUser={currentUser ? { name: currentUser.name, avatarUrl: currentUser.avatar_url } : null}
+        onSignOut={handleSignOut}
       />
 
       {/* Pending Affiliation HUD — Tier 2 (initiated) only */}
