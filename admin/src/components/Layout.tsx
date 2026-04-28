@@ -28,14 +28,14 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   const isAdmin = useAppStore((state) => state.isAdmin);
   useOfflineStatus();
 
-  const { data: profile } = useQuery({
+  const { data: profile } = useQuery<{ name: string | null; avatar_url: string | null } | null>({
     queryKey: ['my-avatar'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
       const { data } = await supabase
         .from('accounts')
-        .select('avatar_url')
+        .select('name, avatar_url')
         .eq('id', session.user.id)
         .maybeSingle();
       return data;
@@ -225,10 +225,12 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
       <ParticipantDetailSheet />
       <ToastContainer />
 
-      <MobileMenu 
-        isOpen={isMobileMenuOpen} 
-        onClose={() => setIsMobileMenuOpen(false)} 
-        links={activeLinks} 
+      <MobileMenu
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        links={activeLinks}
+        currentUser={profile ? { name: profile.name, avatarUrl: profile.avatar_url } : null}
+        onSignOut={handleSignOut}
       />
 
     </div>
