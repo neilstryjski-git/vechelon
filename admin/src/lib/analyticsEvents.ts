@@ -115,6 +115,29 @@ export async function firePortalNavExternal(opts: {
   });
 }
 
+/**
+ * W132 / IA-S0-04: broadcast_copy fires when an admin clicks Copy Broadcast.
+ * Drives H1 (Admin Adoption — time-to-broadcast) and H4 (Information Diversion
+ * — attendance vs broadcast click ratio). Does NOT use session attribution —
+ * broadcast_copy is admin-fired, not rider-fired.
+ *
+ * minutes_since_ride_created is computed at fire time and rounded to 1 decimal
+ * to match the H1 SQL view (ia_h1_time_to_broadcast).
+ */
+export async function fireBroadcastCopy(opts: {
+  tenantId: string;
+  rideId: string;
+  rideCreatedAt: string;
+  adminUserId: string;
+}): Promise<void> {
+  const ageMs = Date.now() - new Date(opts.rideCreatedAt).getTime();
+  const minutesSinceRideCreated = Math.round((ageMs / 60_000) * 10) / 10;
+  await insertEvent('broadcast_copy', opts.tenantId, {
+    ride_id: opts.rideId,
+    minutes_since_ride_created: minutesSinceRideCreated,
+  }, opts.adminUserId);
+}
+
 function attributionFromSession(): Record<string, string> {
   const out: Record<string, string> = {};
   const ref = readSession(SESSION_KEY_REF);
@@ -124,10 +147,18 @@ function attributionFromSession(): Record<string, string> {
   return out;
 }
 
-async function insertEvent(eventType: string, tenantId: string, metadata: Record<string, unknown>): Promise<void> {
+async function insertEvent(
+  eventType: string,
+  tenantId: string,
+  metadata: Record<string, unknown>,
+  userIdOverride?: string,
+): Promise<void> {
   try {
-    const { data } = await supabase.auth.getUser();
-    const userId = data.user?.id ?? null;
+    let userId: string | null = userIdOverride ?? null;
+    if (!userIdOverride) {
+      const { data } = await supabase.auth.getUser();
+      userId = data.user?.id ?? null;
+    }
     await supabase.from('analytics_events').insert({
       event_type: eventType,
       user_id: userId,

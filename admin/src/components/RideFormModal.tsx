@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import { formatPoint, getStaticMapUrl, getStaticMapPinUrl } from '../lib/maps';
 import { parseGPXCoords } from '../lib/validation';
 import { useToast } from '../store/useToast';
-import type { RideType } from '../store/useAppStore';
+import { useAppStore, type RideType } from '../store/useAppStore';
+import { fireBroadcastCopy } from '../lib/analyticsEvents';
 import { importLibrary } from '../lib/mapsLoader';
 
 
@@ -932,6 +933,26 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
         navigator.clipboard.writeText(broadcast).catch(() => {});
       } catch {
         // clipboard failure is non-fatal
+      }
+
+      // W132 / IA-S0-04: broadcast_copy fires on the pre-save broadcast for
+      // single (non-recurring) rides. The ride is being created right now, so
+      // minutes_since_ride_created ≈ 0. Skip if the store still holds the
+      // placeholder UUID (W131 lesson) — the real tenant id resolves shortly
+      // after via App.tsx setTenantId effect.
+      const tenantId = useAppStore.getState().currentTenantId;
+      if (tenantId && tenantId !== '00000000-0000-0000-0000-000000000001') {
+        void supabase.auth.getUser().then(({ data: authData }) => {
+          const adminUserId = authData.user?.id;
+          if (adminUserId && singleRideId) {
+            void fireBroadcastCopy({
+              tenantId,
+              rideId: singleRideId,
+              rideCreatedAt: new Date().toISOString(),
+              adminUserId,
+            });
+          }
+        });
       }
     }
 
