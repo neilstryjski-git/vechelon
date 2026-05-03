@@ -84,6 +84,32 @@
       text-align: center;
     }
 
+    .hero-subtext {
+      max-width: 720px;
+      margin: 28px auto 0;
+      padding: 0 24px;
+      font-size: 17px;
+      font-weight: 400;
+      line-height: 1.5;
+      color: #A0aec0;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+
+    .section-header {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--primary-color);
+      text-align: center;
+      margin: 0 auto 30px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 800px;
+    }
+
     .swatch-wrap {
       display: flex;
       align-items: center;
@@ -431,24 +457,41 @@
     </div>
 
     <div class="wordmark">
-      <span class="bold-letter">VE</span><span class="accent-letter">che</span><span class="bold-letter">LO</span><span class="accent-letter">n</span>
+      <span class="bold-letter">Vechelon</span>
     </div>
 
     <div class="tagline">Club Command</div>
 
+    <p class="hero-subtext">The complete digital infrastructure for cycling clubs — from ride planning and member management to real-time tactical coordination on the road.</p>
+
     <div class="swatch-wrap" id="swatches"></div>
 
-    <a href="#logic" class="explore-link">EXPLORE THE TACTICAL LOGIC ↓</a>
-    <a href="/prototype" class="explore-link" style="margin-top:14px;">VIEW PROTOTYPE →</a>
+    <a href="#whats-live" class="explore-link">WHAT'S LIVE ↓</a>
     <a href="/roadmap" class="explore-link" style="margin-top:14px;">VIEW ROADMAP →</a>
+    <a href="/prototype" class="explore-link" style="margin-top:14px;">VIEW PROTOTYPE →</a>
+  </section>
+
+  <section id="whats-live" class="cap-section">
+    <div class="scan-line"></div>
+
+    <div class="section-header">WHAT'S LIVE</div>
+
+    <div class="intro-block" style="margin-bottom: 0;">
+      <p class="intro-text">
+        Vechelon is in active trial with <em>Racer Sportif</em>, a Toronto cycling club founded in 1978. <em>Club Command v1.0</em> — the core digital infrastructure for club admins and members — is live and in use.
+      </p>
+      <a href="/roadmap" class="explore-link" style="margin-top: 32px; display: inline-block;">VIEW THE ROADMAP →</a>
+    </div>
   </section>
 
   <section id="logic" class="cap-section">
     <div class="scan-line"></div>
-    
+
+    <div class="section-header">THE TACTICAL VISION — COMING IN V2.0</div>
+
     <div class="intro-block">
         <p class="intro-text">
-            VEcheLOn transforms the group ride from a series of individual GPS tracks into a <em>unified tactical unit</em>. Our logic focuses on the distance between the lead rider and the support van.
+            Vechelon transforms the group ride from a series of individual GPS tracks into a <em>unified tactical unit</em>.
         </p>
     </div>
 
@@ -476,16 +519,13 @@
           </div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Ad-hoc Routes</div>
           <div class="item-copy">Newer riders are often unfamiliar with the course, leading to fragmentation and uncertainty during the ride.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Official Route Locking</div>
-          <div class="item-copy">Admins pin a GPX route and communicate clear start/stop points to build group confidence.</div>
+          <div class="item-copy">Admins pin a GPX route and communicate clear meetup, start/stop points to build group confidence.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Consistent Group Rides</div>
-          <div class="item-copy">A pre-defined tactical map ensures every rider knows the plan, regardless of experience level.</div>
+          <div class="item-copy">Consistent group rides with shared spatial awareness.</div>
         </div>
         <div class="row-divider-container">
             <div class="row-divider"></div>
@@ -508,16 +548,13 @@
           </div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Natural Fragmentation</div>
-          <div class="item-copy">This happens instantly in mixed-ability groups, where pace differences can swallow riders and make it hard to maintain the club unit.</div>
+          <div class="item-copy">Pace differences fragment the group instantly in mixed-ability rides.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Group Persistence</div>
-          <div class="item-copy">A single-tap "Start" keeps every member on the tactical roster, no matter their speed.</div>
+          <div class="item-copy">Single-tap join keeps every rider on the tactical roster regardless of speed.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Unified Group Presence</div>
-          <div class="item-copy">Real-time reconciliation of the active roster ensures no rider is left behind or lost in the crowd.</div>
+          <div class="item-copy">Unified group presence from the first pedal stroke.</div>
         </div>
         <div class="row-divider-container">
             <div class="row-divider"></div>
@@ -540,16 +577,13 @@
           </div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Loss of Contact</div>
-          <div class="item-copy">High-speed pace changes and third-party event traffic make it impossible to gauge the group’s relative position—especially in Gran Fondos where thousands of riders can swallow the club unit.</div>
+          <div class="item-copy">High-speed pace changes make group position impossible to gauge.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Tactical Presence</div>
-          <div class="item-copy">Real-time state mapping: Moving, Stopped (5-min Halo), or Inactive (15-min Fade).</div>
+          <div class="item-copy">Real-time state mapping: Active, Stopped (2-min), Inactive (5-min), Dark (15-min).</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Relative Positioning</div>
-          <div class="item-copy">Maintain a distinct club identity and visual awareness even in a crowd of thousands.</div>
+          <div class="item-copy">Relative positioning maintained even in mass-participation events.</div>
         </div>
         <div class="row-divider-container">
             <div class="row-divider"></div>
@@ -572,16 +606,13 @@
           </div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Off-the-Pack Fragmentation</div>
-          <div class="item-copy">Support vans cannot efficiently locate or contact riders who have dropped off or had an incident away from the main group.</div>
+          <div class="item-copy">Support vans cannot efficiently locate dropped or distressed riders.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Direct Communication</div>
-          <div class="item-copy">Real-time tactical icons for isolated riders include one-click calling and pre-populated contact info for the support team.</div>
+          <div class="item-copy">Real-time tactical icons, Support Beacon toggle, one-tap native dial.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Informed Intercept</div>
-          <div class="item-copy">Rapid, targeted assistance via one-tap phone links and precise situational mapping.</div>
+          <div class="item-copy">Rapid targeted assistance with precise situational mapping.</div>
         </div>
         <div class="row-divider-container">
             <div class="row-divider"></div>
@@ -603,23 +634,20 @@
           </div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Responsible Data</div>
-          <div class="item-copy">Privacy risks from long-term storage of sensitive GPS breadcrumbs.</div>
+          <div class="item-copy">Long-term GPS storage creates privacy risk.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Responsible Data Hygiene</div>
-          <div class="item-copy">Automated scrub of tactical data exactly 4 hours post-ride.</div>
+          <div class="item-copy">Automated purge of all tactical data 4 hours post-ride.</div>
         </div>
         <div class="grid-item">
-          <div class="item-title">Zero-Footprint Safety</div>
-          <div class="item-copy">Club history is preserved; sensitive tracks are erased forever.</div>
+          <div class="item-copy">Zero-Footprint Safety — club history preserved, sensitive tracks erased.</div>
         </div>
       </div>
     </div>
   </section>
 
   <footer class="footer">
-    VEcheLOn Privacy Protocol: GPS breadcrumbs and guest contact data are purged 4 hours post-ride. Names are archived for club records only.
+    Vechelon Privacy Protocol: GPS breadcrumbs and guest contact data are purged 4 hours post-ride. Names are archived for club records only.
   </footer>
 
   <script>
