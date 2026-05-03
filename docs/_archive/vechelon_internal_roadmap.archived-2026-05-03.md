@@ -1,6 +1,6 @@
-# Vechelon | Internal Roadmap (v1.5.0)
+# Vechelon | Internal Roadmap (v1.3.0)
 
-Project: Vechelon | Current Version: v1.5.0 | Last Sync Date: 2026-05-03 | Status: COMMITTED
+Project: Vechelon | Current Version: v1.3.0 | Last Sync Date: 2026-05-03 | Status: COMMITTED
 
 **Source of truth for all roadmap decisions. The public roadmap is a rendered view of this document.
 If it is not here, it is not on the public roadmap. Changes via MACD only.**
@@ -31,24 +31,23 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 |---|---|---|---|---|
 | 1.01 | Calendar view — monthly grid, ride management | Admin Portal | 🟢 Complete | Admin Pillar II §10.6 |
 | 1.02 | Ride creation — GPX upload and manual path | Admin Portal | 🟢 Complete ✓ demo | Admin Pillar II §7 |
-| 1.03 | Series creator — recurring ride scheduling | Admin Portal | 🟢 Complete | Admin Pillar II §7 |
-| 1.04 | Route library — upload and management | Admin Portal | 🟢 Complete | Admin Pillar II §7 |
-| 1.05 | Member directory — full contact details | Admin Portal | 🟢 Complete | Admin Pillar II §10.6 |
+| 1.03 | Series creator — recurring ride scheduling | Admin Portal | 🟡 In Build | Admin Pillar II §7 |
+| 1.04 | Route library — upload and management | Admin Portal | 🟡 In Build | Admin Pillar II §7 |
+| 1.05 | Member directory — full contact details | Admin Portal | 🟡 In Build | Admin Pillar II §10.6 |
 | 1.06 | Pre-ride WhatsApp summary — AI generated, copy to clipboard | Admin Portal | 🟢 Complete ✓ demo | Admin Pillar II §9 |
-| 1.07 | Post-ride WhatsApp summary — AI generated, copy to clipboard | Admin Portal | 🟢 Complete | Admin Pillar II §9 |
+| 1.07 | Post-ride WhatsApp summary — AI generated, copy to clipboard | Admin Portal | 🟡 In Build | Admin Pillar II §9 |
 | 1.08 | Rider Desktop Portal — profile management | Rider Portal | 🟢 Complete | Rider Pillar II §4.2 |
 | 1.09 | Rider Desktop Portal — RSVP for rides | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.6 |
 | 1.10 | Rider Desktop Portal — calendar view (read-only) | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.4 |
 | 1.11 | Rider Desktop Portal — route library browse and download | Rider Portal | 🟢 Complete ✓ demo | Rider Pillar II §4.7 |
-| 1.11a | Rider Desktop Portal — route library access expanded to Tier 2 (initiated) | Rider Portal | 🟡 In Build | Access previously restricted to Tier 3 only; RLS and nav updated April 2026 |
-| 1.12 | Rider Desktop Portal — member directory (names only) | Rider Portal | 🟡 In Build | MemberDirectory page, RLS policy, and nav link implemented April 2026 — awaiting UAT validation |
+| 1.12 | Rider Desktop Portal — member directory (names only) | Rider Portal | 🟡 In Build | Rider Pillar II §4.8 |
 | 1.13 | Rider Desktop Portal — three-tier access model | Rider Portal | 🟢 Complete | Rider Pillar I §4 |
 | 1.14 | Rider Desktop Portal — club-contextual account creation | Rider Portal | 🟢 Complete | Rider Pillar III RP-04 |
 | 1.15 | QR join flow — guest and member | Both | 🟢 Complete ✓ demo | Admin Pillar II §10.5 |
-| 1.16 | Hard purge — 4-hour automated deletion | Backend | 🟡 In Build | Edge function deployed; cron schedule not confirmed active in Supabase — `cron_verification.sql` still commented out |
-| 1.17 | Midnight UTC auto-close | Backend | 🟡 In Build | Edge function deployed; cron schedule not confirmed active in Supabase — `cron_verification.sql` still commented out |
+| 1.16 | Hard purge — 4-hour automated deletion | Backend | 🟡 In Build | Admin Pillar II §12 |
+| 1.17 | Midnight UTC auto-close | Backend | 🟡 In Build | Admin Pillar II §8 |
 | 1.18 | Multi-tenancy foundation — single tenant, Racer Sportif | Backend | 🟢 Complete ✓ demo | Admin Pillar II §11 |
-| 1.19 | Iterative development from customer feedback — post-MVE defect loop | Both | 🟡 In Build | Five live defects shipped May 2026 (sign-out scope, mobile menu, RSVP roster integrity, RSVP button state). Loop is the new normal, not a one-off. |
+| 1.19 | Iterative development from customer feedback — post-MVE defect loop | Both | 🟡 In Build | Five live defects shipped May 2026 (sign-out scope, mobile menu, RSVP roster integrity, RSVP button state) |
 
 ### Foundations
 
@@ -57,15 +56,15 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | F1.01 | Supabase project initialisation — auth, realtime, storage, edge functions | 🟢 Complete | |
 | F1.02 | React web app scaffolding — Admin Portal | 🟢 Complete | |
 | F1.03 | React web app scaffolding — Rider Desktop Portal | 🟢 Complete | |
-| F1.04 | Google Maps API integration — map rendering and geocoding | 🟡 In Build | Integration complete; $150 GCP billing alert cannot be verified from codebase — manual GCP console check required |
-| F1.05 | Open-Meteo integration — weather at ride close | 🟢 Complete | Fetched in `generate-ride-summary` edge function at ride close |
+| F1.04 | Google Maps API integration — map rendering and geocoding | 🟡 In Build | $150 billing alert — confirm configured |
+| F1.05 | Open-Meteo integration — weather at ride close | 🟡 In Build | |
 | F1.06 | License Bringer AI abstraction layer — multi-provider | 🟢 Complete ✓ demo | WhatsApp summary generated in demo |
 | F1.07 | CSS custom properties — tenant branding injection | 🟢 Complete ✓ demo | Racer Sportif branding live |
-| F1.08 | RLS policies — full suite for MVP tables | 🟢 Complete | Full suite confirmed across tenants, accounts, rides, route_library, ride_participants, waypoints, ride_summaries, ride_support; dev bypasses removed April 2026 |
-| F1.09 | Supabase Edge Functions — midnight auto-close cron | 🟡 In Build | Function deployed; cron schedule not confirmed active — `cron_verification.sql` is commented out, manual Supabase SQL editor step required |
-| F1.10 | Supabase Edge Functions — 4-hour purge cron | 🟡 In Build | Function deployed; cron schedule not confirmed active — `cron_verification.sql` is commented out, manual Supabase SQL editor step required |
+| F1.08 | RLS policies — full suite for MVP tables | 🟡 In Build | The Hands to confirm coverage |
+| F1.09 | Supabase Edge Functions — midnight auto-close cron | 🟡 In Build | |
+| F1.10 | Supabase Edge Functions — 4-hour purge cron | 🟡 In Build | |
 | F1.11 | Hosting — Admin and Rider Portal deployment | 🟢 Complete | Live at vechelon.productdelivered.ca/portal |
-| F1.12 | Error monitoring — Sentry free tier | 🔴 Not Started | No Sentry SDK or configuration found anywhere in the codebase |
+| F1.12 | Error monitoring — Sentry free tier | 🟡 In Build | |
 | F1.13 | Racer Sportif DB seed — brand assets, tenant config | 🟢 Complete ✓ demo | |
 
 ---
@@ -261,6 +260,4 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | v1.0.0 | 2026-04-19 | 12:00 | ADD | Internal roadmap initialised — 7 releases, feature-level status tracking, foundations per release. | TPM |
 | v1.1.0 | 2026-04-19 | 13:00 | CHANGE | v1.0 status updated — MVE validated with Racer Sportif demo April 2026. Confirmed complete items marked ✓ demo. Items requiring PM confirmation marked 🟡 Confirm?. | TPM |
 | v1.2.0 | 2026-04-19 | 14:00 | CHANGE | v1.0 overall status corrected to In Build — Complete requires Hands assessment and UAT closure. Confirm? items relabelled to In Build. UAT note added to v1.0 status line. | TPM |
-| v1.3.0 | 2026-04-20 | 00:00 | CHANGE | The Hands codebase assessment of all v1.0 In Build items. 1.03/1.04/1.05/1.07 confirmed Complete. 1.12 downgraded to Not Started — no rider-facing member directory page exists. F1.05/F1.08 confirmed Complete. 1.16/1.17/F1.09/F1.10 remain In Build — cron schedules unconfirmed. F1.04 remains In Build — GCP billing alert unverifiable from code. F1.12 downgraded to Not Started — no Sentry integration in codebase. | The Hands |
-| v1.4.0 | 2026-04-20 | 10:00 | ADD | Two rider access milestones in build: 1.11a route library expanded to Tier 2 (initiated); 1.12 member directory (names only) implemented for Tier 3 (affiliated). RLS migrations applied, nav updated, MemberDirectory page created. | The Hands |
-| v1.5.0 | 2026-05-03 | 12:00 | CHANGE | VoC/MT/IA Sprint 0 (Pillar set v1.3.2) dispersed across themes. v3.0 Multi-Club: status Scoped → In Build, added 3.06 Platform Admin role, 3.07 Bikes & Beers test tenant, 3.08 cross-club email validation, 3.09 subdomain routing; foundations F3.01/F3.02/F3.05/F3.06 marked complete. v5.0 Club Growth: status Scoped → In Build, 5.03 VoC marked In Build (Phase 1 schema + labels + Edge Function shipped), added 5.08 Rider Share, foundation F5.03 marked complete + F5.05 rider_hash added. v6.0 Intelligence: status Scoped → In Build, added 6.07 Innovation Accounting (H1–H5 instrumented, Phase 1 complete), added 6.08 IA dashboard UI (deferred), foundations F6.05/F6.06/F6.07 added and marked complete. v1.0 Club Command: added 1.19 Iterative development from customer feedback (post-MVE defect loop). Webpage and document versions locked at v1.5.0 going forward. Stale productdocuments/ duplicate moved to docs/_archive/. | TPM |
+| v1.3.0 | 2026-05-03 | 12:00 | CHANGE | VoC/MT/IA Sprint 0 (Pillar set v1.3.2) dispersed across themes. v3.0 Multi-Club: status Scoped → In Build, added 3.06 Platform Admin role, 3.07 Bikes & Beers test tenant, 3.08 cross-club email validation, 3.09 subdomain routing; foundations F3.01/F3.02/F3.05/F3.06 marked complete. v5.0 Club Growth: status Scoped → In Build, 5.03 VoC marked In Build (Phase 1 schema + labels + Edge Function shipped), added 5.08 Rider Share, foundation F5.03 marked complete + F5.05 rider_hash added. v6.0 Intelligence: status Scoped → In Build, added 6.07 Innovation Accounting (H1–H5 instrumented, Phase 1 complete), added 6.08 IA dashboard UI (deferred), foundations F6.05/F6.06/F6.07 added and marked complete. v1.0 Club Command: added 1.19 Iterative development from customer feedback (post-MVE defect loop). Webpage and document versions locked at v1.3.0 going forward. | TPM |

@@ -368,7 +368,7 @@
         <path id="hdr-path" fill="var(--primary-color)" fill-rule="evenodd" />
       </svg>
     </div>
-    <span class="version-pill">v1.4.0 — April 2026</span>
+    <span class="version-pill">v1.5.0 — May 2026</span>
   </header>
 
   <!-- Hero -->
@@ -418,18 +418,18 @@
       <div class="value-grid">
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v3)">Multi-Club Theme</div>
-          <div class="pick-title">Multitenancy Core</div>
-          <div class="pick-desc">Backend and database isolation to support independent clubs on the same infrastructure.</div>
+          <div class="pick-title">Multi-Club Foundations</div>
+          <div class="pick-desc">Phase 1 shipped — Platform Admin role, RLS isolation, cross-club email validation, and the Bikes &amp; Beers test tenant. Subdomain routing and admin.vechelon.ca surface next.</div>
         </div>
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v5)">Club Growth Theme</div>
-          <div class="pick-title">Voice of Customer (VoC)</div>
-          <div class="pick-desc">Real-time feedback loop allowing riders to shape the club's direction directly from the portal.</div>
+          <div class="pick-title">Voice of Customer</div>
+          <div class="pick-desc">Schema, GitHub Issues integration, and label set shipped. In-app feedback modal lands next, gated only on the GitHub PAT in Vault.</div>
         </div>
         <div class="value-pick">
-          <div class="pick-tag" style="--tag-color: var(--v1)">Club Command Theme</div>
-          <div class="pick-title">UAT Work</div>
-          <div class="pick-desc">User Acceptance Testing and final verification of the command-center workflows with lead clubs.</div>
+          <div class="pick-tag" style="--tag-color: var(--v6)">Intelligence Theme</div>
+          <div class="pick-title">Innovation Accounting</div>
+          <div class="pick-desc">Five adoption hypotheses (H1–H5) instrumented end-to-end. Internal data layer for product decisions — Sr PM-only via Supabase service role.</div>
         </div>
       </div>
     </div>
@@ -467,8 +467,11 @@
             <li class="done"><i class="fi fi-check">✓</i>QR join — ride-day onboarding</li>
             <li class="done"><i class="fi fi-check">✓</i>Captain & Support designation</li>
             <li class="done"><i class="fi fi-check">✓</i>Automated ride close & data purge</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>UAT Work</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Iterative development from customer feedback</li>
           </ul>
+          <div class="ring-footnote" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); line-height: 1.5;">
+            UAT with Racer Sportif ongoing alongside the live defect loop. Five live defects shipped May 2026 (sign-out scope, mobile menu, RSVP roster integrity, RSVP button state) — the iterative loop is the new normal, not a one-off.
+          </div>
         </div>
         <span class="ring-status-badge badge-live">In Build</span>
       </div>
@@ -555,14 +558,17 @@
         <div class="ring-info">
           <div class="ring-version">v3.0</div>
           <div class="ring-title">Multi-Club</div>
-          <div class="ring-subtitle">Every club, its own command</div>
-          <div class="ring-desc">Second and third clubs onboard independently. Riders carry memberships across clubs. Each club keeps its own data, identity, and branding.</div>
+          <div class="ring-subtitle">Phase 1 foundations live</div>
+          <div class="ring-desc">Multi-tenancy turned on. A second test tenant runs alongside Racer Sportif on the same infrastructure with full data sovereignty. Self-serve onboarding and multi-membership scoped for the full release.</div>
           <ul class="ring-features">
-            <li class="scoped"><i class="fi fi-scope">·</i>Second club onboarding</li>
-            <li class="scoped"><i class="fi fi-scope">·</i>Club switcher for riders</li>
-            <li class="scoped"><i class="fi fi-scope">·</i>Multi-membership support</li>
-            <li class="scoped"><i class="fi fi-scope">·</i>Self-serve branding portal</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Independent data isolation</li>
+            <li class="done"><i class="fi fi-check">✓</i>Independent data isolation per club</li>
+            <li class="done"><i class="fi fi-check">✓</i>Cross-club email validation</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Platform Admin role (admin.vechelon.ca)</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Bikes &amp; Beers test tenant</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Subdomain routing (clubname.vechelon.ca)</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Self-serve onboarding (Phase 2)</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Multi-membership support (Phase 2)</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Self-serve branding portal (Phase 2)</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-build">In Build</span>
@@ -611,20 +617,21 @@
         <div class="ring-info">
           <div class="ring-version">v5.0</div>
           <div class="ring-title">Club Growth</div>
-          <div class="ring-subtitle">The club comes alive</div>
-          <div class="ring-desc">Observer role, member-uploaded routes, ride history on every profile, and Voice of Customer built into the product.</div>
+          <div class="ring-subtitle">Riders shape the club</div>
+          <div class="ring-desc">Voice of Customer feedback loop, organic-reach Rider Share, member-uploaded routes, ride history on every profile.</div>
           <ul class="ring-features">
+            <li class="inbuild"><i class="fi fi-build">◐</i>Voice of Customer (Phase 1 shipped)</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Rider Share — viral growth loop</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Observer role</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Member GPX uploads</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Ride history on profiles</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Voice of Customer</li>
           </ul>
         </div>
         <span class="ring-status-badge badge-build">In Build</span>
       </div>
 
       <!-- v6.0 Intelligence -->
-      <div class="ring-card planned" style="--ring-color: var(--v6);">
+      <div class="ring-card build" style="--ring-color: var(--v6);">
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
           <div class="ring-icon">
@@ -640,15 +647,16 @@
           <div class="ring-version">v6.0</div>
           <div class="ring-title">Intelligence</div>
           <div class="ring-subtitle">Data that works for your club</div>
-          <div class="ring-desc">Strava sync, club analytics, advanced scheduling, and Velo Mode.</div>
+          <div class="ring-desc">Internal product instrumentation (H1–H5 adoption hypotheses) live today. External data — Strava sync, club analytics, advanced scheduling — scoped.</div>
           <ul class="ring-features">
-            <li class="scoped"><i class="fi fi-scope">·</i>Strava API Integration</li>
+            <li class="done"><i class="fi fi-check">✓</i>Innovation Accounting (H1–H5 instrumented)</li>
+            <li class="scoped"><i class="fi fi-scope">·</i>Strava API integration</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Predictive ride scheduling</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Club-wide performance metrics</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Velo Mode personalization</li>
           </ul>
         </div>
-        <span class="ring-status-badge badge-scoped">Research</span>
+        <span class="ring-status-badge badge-build">In Build</span>
       </div>
 
     </div>
@@ -657,7 +665,7 @@
   <!-- Footer -->
   <footer>
     <p>Built in the open. <a href="https://vechelon.ca">vechelon.ca</a></p>
-    <p>Last updated April 2026 · v1.4.0</p>
+    <p>Last updated May 2026 · v1.5.0</p>
   </footer>
 
 </div>
