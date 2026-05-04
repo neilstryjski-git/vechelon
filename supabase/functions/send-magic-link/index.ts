@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendResendEmail } from '../_shared/resend.ts'
+import { extractSlug } from '../_shared/extractSlug.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,18 +21,35 @@ serve(async (req) => {
   try {
     const { email, redirectTo } = await req.json()
     if (!email) throw new Error('Email is required')
+    if (!redirectTo) throw new Error('redirectTo is required')
+
+    // Parse the SPA-supplied redirectTo to derive tenant context.
+    // Pre-W137: this used a hardcoded PORTAL_URL fallback, ignoring the user's
+    // host. Combined with a LIMIT 1 tenant lookup, B&B users got Racer Sportif
+    // branding in their magic-link emails.
+    let redirectURL: URL
+    try {
+      redirectURL = new URL(redirectTo)
+    } catch {
+      throw new Error('Invalid redirectTo URL')
+    }
+
+    const slug = extractSlug(redirectURL.hostname)
 
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Fetch Tenant branding for the email
-    const { data: tenant } = await adminClient
-      .from('tenants')
-      .select('name, logo_url, primary_color')
-      .limit(1)
-      .maybeSingle()
+    // 1. Fetch Tenant branding for the email — keyed by slug derived from host.
+    const tenantQuery = slug
+      ? await adminClient
+          .from('tenants')
+          .select('name, logo_url, primary_color')
+          .eq('slug', slug)
+          .maybeSingle()
+      : { data: null }
+    const tenant = tenantQuery.data
 
     const clubName = tenant?.name || 'Vechelon'
     const clubLogo = tenant?.logo_url || ''
@@ -39,15 +57,16 @@ serve(async (req) => {
 
     const inputEmail = email.trim().toLowerCase()
 
-    // 2. Generate the Magic Link (OTP)
-    // redirect_to must be the exact URL in the Supabase allow-list (no query params).
-    // The click-through ?c= mechanism handles routing back to the portal.
-    const portalAuthBase = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal/auth'
+    // 2. Generate the Magic Link (OTP).
+    // Use the SPA-supplied redirectTo; Supabase Auth validates it against the
+    // uri_allow_list. The click-through ?c= mechanism still wraps the OTP link
+    // to defeat email-scanner pre-fetch (Gmail, Outlook SafeLinks, etc.).
+    const portalAuthBase = `${redirectURL.origin}${redirectURL.pathname}`
 
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: 'magiclink',
       email: inputEmail,
-      options: { redirectTo: portalAuthBase }
+      options: { redirectTo }
     })
 
     if (linkError) throw linkError
@@ -92,7 +111,7 @@ serve(async (req) => {
 
     const { error: resendError } = await sendResendEmail({
       to: inputEmail,
-      subject: 'Sign in to Vechelon',
+      subject: `Sign in to ${clubName}`,
       html: emailHtml
     })
 
