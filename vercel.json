@@ -26,6 +26,11 @@
       "destination": "/portal/index.html"
     },
     {
+      "source": "/",
+      "has": [{ "type": "host", "value": "vechelon\\.productdelivered\\.ca" }],
+      "destination": "/landing.html"
+    },
+    {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "(?<slug>[a-z0-9-]+)\\.vechelon\\.ca" }],
       "destination": "/portal/index.html"
