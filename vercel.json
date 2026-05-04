@@ -11,12 +11,6 @@
       "source": "/admin/:path*",
       "destination": "/portal/:path*",
       "permanent": true
-    },
-    {
-      "source": "/portal/:path*",
-      "has": [{ "type": "host", "value": "vechelon\\.productdelivered\\.ca" }],
-      "destination": "https://racer-sportif.vechelon.ca/:path*",
-      "permanent": false
     }
   ],
   "rewrites": [

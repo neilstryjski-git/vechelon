@@ -7,6 +7,7 @@ import { parsePoint, downloadGpx } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
 import { fireBroadcastCopy } from '../lib/analyticsEvents';
+import { buildRideUrl } from '../lib/portalBase';
 import Modal from './Modal';
 import RideFormModal from './RideFormModal';
 
@@ -94,7 +95,7 @@ const RideDetailSideSheet: React.FC = () => {
 
   useEffect(() => {
     if (!selectedRideId) { setQrDataUrl(null); return; }
-    const url = `${window.location.origin}/ride/${selectedRideId}?source=ridecard`;
+    const url = buildRideUrl(selectedRideId, 'ridecard');
     const size = 160;
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -227,7 +228,7 @@ const RideDetailSideSheet: React.FC = () => {
       ...(ride.external_url ? [`Route: ${ride.external_url}`] : []),
       `Meetup: ${meetupValue}`,
       ...(finishValue ? [`Finish: ${finishValue}`] : []),
-      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? window.location.origin}/ride/${ride.id}?source=broadcast`,
+      `Details: ${buildRideUrl(ride.id, 'broadcast')}`,
       '',
     ].join('\n');
   };

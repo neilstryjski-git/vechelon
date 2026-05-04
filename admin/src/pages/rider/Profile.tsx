@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { AUTH_HREF } from '../../lib/portalBase';
 import { useToast } from '../../store/useToast';
 
 const MAX_AVATAR_BYTES  = 10 * 1024 * 1024; // 10 MB hard reject
@@ -190,7 +191,7 @@ const Profile: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/auth';
+    window.location.href = AUTH_HREF;
   };
 
   if (isLoading) {
@@ -207,7 +208,7 @@ const Profile: React.FC = () => {
   if (!profile) {
     return (
       <div className="text-center pt-16 text-on-surface-variant font-label text-sm">
-        Not signed in. <a href="/auth" className="text-primary underline">Sign in</a>
+        Not signed in. <a href={AUTH_HREF} className="text-primary underline">Sign in</a>
       </div>
     );
   }

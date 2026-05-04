@@ -1,5 +1,6 @@
 import gpxParser from 'gpxparser';
 import QRCode from 'qrcode';
+import { buildRideUrl } from './portalBase';
 
 /**
  * Validates and parses a GPX string to extract coordinates.
@@ -39,9 +40,10 @@ export const parseGPXCoords = (gpxString: string) => {
  */
 export const generateRideQR = async (rideId: string) => {
   try {
-    // URL structure for guest join: [domain]/ride/[rideId]?source=ridecard
+    // URL structure for guest join: [domain]([/portal])/ride/[rideId]?source=ridecard
     // Source param drives IA H2/H4 attribution per VMT-D-37 / W117 LOE.
-    const joinUrl = `${window.location.origin}/ride/${rideId}?source=ridecard`;
+    // /portal/ prefix preserved on legacy host until W136 cutover (see portalBase.ts).
+    const joinUrl = buildRideUrl(rideId, 'ridecard');
     const qrDataUrl = await QRCode.toDataURL(joinUrl, {
       width: 400,
       margin: 2,

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { supabase } from '../lib/supabase';
+import { AUTH_HREF } from '../lib/portalBase';
 import MobileMenu from './MobileMenu';
 import RideDetailSideSheet from './RideDetailSideSheet';
 import ParticipantDetailSheet from './ParticipantDetailSheet';
@@ -66,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/auth';
+    window.location.href = AUTH_HREF;
   };
 
   const baseLinks: { to: string; label: string; end?: boolean }[] = [
