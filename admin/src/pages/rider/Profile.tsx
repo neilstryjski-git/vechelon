@@ -190,7 +190,7 @@ const Profile: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/portal/auth';
+    window.location.href = '/auth';
   };
 
   if (isLoading) {
@@ -207,7 +207,7 @@ const Profile: React.FC = () => {
   if (!profile) {
     return (
       <div className="text-center pt-16 text-on-surface-variant font-label text-sm">
-        Not signed in. <a href="/portal/auth" className="text-primary underline">Sign in</a>
+        Not signed in. <a href="/auth" className="text-primary underline">Sign in</a>
       </div>
     );
   }

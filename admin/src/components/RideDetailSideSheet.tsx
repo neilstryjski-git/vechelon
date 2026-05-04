@@ -94,7 +94,7 @@ const RideDetailSideSheet: React.FC = () => {
 
   useEffect(() => {
     if (!selectedRideId) { setQrDataUrl(null); return; }
-    const url = `${window.location.origin}/portal/ride/${selectedRideId}?source=ridecard`;
+    const url = `${window.location.origin}/ride/${selectedRideId}?source=ridecard`;
     const size = 160;
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -227,7 +227,7 @@ const RideDetailSideSheet: React.FC = () => {
       ...(ride.external_url ? [`Route: ${ride.external_url}`] : []),
       `Meetup: ${meetupValue}`,
       ...(finishValue ? [`Finish: ${finishValue}`] : []),
-      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca'}/portal/ride/${ride.id}?source=broadcast`,
+      `Details: ${import.meta.env.VITE_JOIN_BASE_URL ?? window.location.origin}/ride/${ride.id}?source=broadcast`,
       '',
     ].join('\n');
   };

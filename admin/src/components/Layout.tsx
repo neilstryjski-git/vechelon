@@ -66,7 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/portal/auth';
+    window.location.href = '/auth';
   };
 
   const baseLinks: { to: string; label: string; end?: boolean }[] = [

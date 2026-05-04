@@ -6,11 +6,28 @@
       "source": "/admin/:path*",
       "destination": "/portal/:path*",
       "permanent": true
+    },
+    {
+      "source": "/portal/:path*",
+      "has": [{ "type": "host", "value": "vechelon\\.productdelivered\\.ca" }],
+      "destination": "https://racer-sportif.vechelon.ca/:path*",
+      "permanent": false
+    },
+    {
+      "source": "/portal/:path*",
+      "has": [{ "type": "host", "value": "(?<slug>[a-z0-9-]+)\\.vechelon\\.ca" }],
+      "destination": "/:path*",
+      "permanent": false
     }
   ],
   "rewrites": [
     {
       "source": "/portal/:path*",
+      "destination": "/portal/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "(?<slug>[a-z0-9-]+)\\.vechelon\\.ca" }],
       "destination": "/portal/index.html"
     },
     {
