@@ -18,7 +18,9 @@ import { useBranding } from './hooks/useBranding';
 import { useTierDetection } from './hooks/useTierDetection';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
+import { extractSlug } from './lib/extractSlug';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
+import ClubNotFound from './pages/ClubNotFound';
 
 // Placeholder tenant UUID seeded in useAppStore until the real tenant id
 // resolves from the tenants query. The IA portal_visit effect must not fire
@@ -143,58 +145,78 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
 }
 
 function AppContent() {
-  // Dynamic branding fetch from Supabase with a 5s timeout for offline resilience
+  // MT-S0-03 / W124: subdomain-slug routing. The slug derived here is the
+  // single source of truth for which tenant the app loads. Apex, admin.*,
+  // localhost, vercel previews, and unrelated domains all resolve to null —
+  // those contexts render ClubNotFound (no fallback to "first tenant").
+  const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
+
   const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
-    queryKey: ['tenant-config'],
+    queryKey: ['tenant-config', slug],
+    enabled: slug !== null,
     queryFn: async () => {
-      console.log('[v1.3.0] Fetching tenant config...');
-      
       const fetchPromise = supabase
         .from('tenants')
-        .select('id, primary_color, accent_color, logo_url, name')
-        .limit(1)
+        .select('id, primary_color, accent_color, logo_url, name, slug')
+        .eq('slug', slug as string)
         .maybeSingle();
 
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Tenant config fetch timed out')), 5000)
       );
 
       const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
-      
+
       if (result instanceof Error) throw result;
       if (result.error) throw result.error;
-      
-      return result.data || {};
+
+      return result.data ?? null;
     },
     retry: 1,
     staleTime: Infinity
   });
 
   if (tenantError) {
-    console.warn('[v1.3.0] Using fallback branding:', tenantError);
+    console.warn('[Vechelon] Tenant lookup failed', { code: (tenantError as { code?: string })?.code });
   }
 
-  // Update tab title to tenant name
-  if (tenant?.name) document.title = tenant.name;
+  // No-tenant context: slug is null OR query resolved with no row. We reset
+  // tab title and store tenant id so navigating from a valid tenant to a
+  // ClubNotFound state does not leave the previous tenant's name/id behind.
+  const isNoTenantContext = slug === null || (!tenantLoading && !tenant);
 
-  // W131 / IA-S0-03: keep store tenant_id in sync with the resolved tenant
-  // so analytics_events inserts attribute correctly. The store's hardcoded
-  // placeholder UUID is left in place as a fallback for now; once subdomain
-  // routing (MT-S0-03 / W124) lands, this set is the single source of truth.
+  React.useEffect(() => {
+    if (tenant?.name) {
+      document.title = tenant.name;
+    } else if (isNoTenantContext) {
+      document.title = 'Vechelon';
+    }
+  }, [tenant?.name, isNoTenantContext]);
+
   const setTenantId = useAppStore((s) => s.setTenantId);
   React.useEffect(() => {
-    if (tenant?.id) setTenantId(tenant.id);
-  }, [tenant?.id, setTenantId]);
+    if (tenant?.id) {
+      setTenantId(tenant.id);
+    } else if (isNoTenantContext) {
+      setTenantId(null);
+    }
+  }, [tenant?.id, isNoTenantContext, setTenantId]);
 
-  // Fallback to Velo Modern defaults
-  useBranding(tenant && tenant.primary_color ? {
-    primaryColor: tenant.primary_color,
-    accentColor: tenant.accent_color,
-    logoUrl: tenant.logo_url || undefined,
-  } : {
-    primaryColor: '#5f5e5e',
-    accentColor: '#006e35',
-  });
+  // Pass null to useBranding on no-tenant paths so it doesn't write any
+  // tenant CSS variables onto :root (the hook already no-ops on null).
+  useBranding(
+    !isNoTenantContext && tenant && tenant.primary_color
+      ? {
+          primaryColor: tenant.primary_color,
+          accentColor: tenant.accent_color,
+          logoUrl: tenant.logo_url || undefined,
+        }
+      : null
+  );
+
+  if (slug === null) {
+    return <ClubNotFound />;
+  }
 
   if (tenantLoading) {
     return <div className="p-20 text-center font-label animate-pulse text-on-surface-variant flex flex-col items-center justify-center min-h-screen bg-surface">
@@ -203,7 +225,9 @@ function AppContent() {
     </div>;
   }
 
-  console.log('[Vechelon] Rendering Router with basename /portal. Path:', window.location.pathname);
+  if (!tenant) {
+    return <ClubNotFound />;
+  }
 
   return (
     <Router basename="/portal">
