@@ -69,7 +69,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      currentTenantId: '00000000-0000-0000-0000-000000000001',
+      currentTenantId: null,
       isSidebarOpen: true,
       sessionCookieId: null,
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,

@@ -11,12 +11,10 @@ import { buildRideUrl } from '../lib/portalBase';
 import { importLibrary } from '../lib/mapsLoader';
 
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const TENANT_ID = '00000000-0000-0000-0000-000000000001';
-const USER_ID   = '00000000-0000-0000-0000-00000000000a';
+// W140: TENANT_ID and USER_ID constants removed. Tenant id reads from
+// useAppStore.currentTenantId (set by App.tsx after the slug-based tenant
+// query resolves). User id reads from supabase.auth.getUser() in the
+// mutation flow.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -185,6 +183,7 @@ function generateSeriesDates(
 function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: () => void) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const tenantId = useAppStore((s) => s.currentTenantId);
 
   return useMutation({
     mutationFn: async ({
@@ -216,6 +215,15 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       meetupCoords:    { lat: number; lng: number } | null;
       singleRideId?:   string;
     }) => {
+      if (!tenantId) {
+        throw new Error('Tenant context not yet resolved. Refresh the page and try again.');
+      }
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      if (!userId) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
       let gpxPath:      string | null = null;
       let thumbnailUrl: string | null = null;
       let startCoords:  string | null = null;
@@ -248,7 +256,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
 
         const hash        = await calculateHash(text);
         const routeId     = crypto.randomUUID();
-        const filePath    = `${TENANT_ID}/${routeId}.gpx`;
+        const filePath    = `${tenantId}/${routeId}.gpx`;
         const routeName   = name.trim() || parsed.name || pendingFile.name.replace(/\.gpx$/i, '');
         const thumbUrl    = parsed.points ? getStaticMapUrl(parsed.points) : null;
 
@@ -259,14 +267,14 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
 
         const { error: insErr } = await supabase.from('route_library').insert({
           id:               routeId,
-          tenant_id:        TENANT_ID,
+          tenant_id:        tenantId,
           name:             routeName,
           file_path:        filePath,
           distance_km:      parsed.distance_km,
           elevation_gain_m: parsed.elevation_gain,
           thumbnail_url:    thumbUrl,
           file_hash:        hash,
-          created_by:       USER_ID,
+          created_by:       userId,
           external_url:     null,
         });
         if (insErr) {
@@ -325,8 +333,8 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
           meetup_label:    meetupLabel.trim() || (rideType === 'meetup' ? 'Meetup' : 'Start'),
           qr_code:         qrCode,
           series_id:       seriesId,
-          tenant_id:       TENANT_ID,
-          created_by:      USER_ID,
+          tenant_id:       tenantId,
+          created_by:      userId,
         };
       }));
 
@@ -937,11 +945,10 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
 
       // W132 / IA-S0-04: broadcast_copy fires on the pre-save broadcast for
       // single (non-recurring) rides. The ride is being created right now, so
-      // minutes_since_ride_created ≈ 0. Skip if the store still holds the
-      // placeholder UUID (W131 lesson) — the real tenant id resolves shortly
-      // after via App.tsx setTenantId effect.
+      // minutes_since_ride_created ≈ 0. Skip if tenant context isn't resolved
+      // yet (store init is null per W140; was placeholder UUID pre-W140).
       const tenantId = useAppStore.getState().currentTenantId;
-      if (tenantId && tenantId !== '00000000-0000-0000-0000-000000000001') {
+      if (tenantId) {
         void supabase.auth.getUser().then(({ data: authData }) => {
           const adminUserId = authData.user?.id;
           if (adminUserId && singleRideId) {
