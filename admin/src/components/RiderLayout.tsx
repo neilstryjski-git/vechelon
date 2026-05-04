@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { AUTH_HREF } from '../lib/portalBase';
 import { useAppStore } from '../store/useAppStore';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
@@ -64,7 +65,7 @@ const RiderLayout: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/auth';
+    window.location.href = AUTH_HREF;
   };
 
   const riderLinks = [

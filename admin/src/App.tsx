@@ -19,6 +19,7 @@ import { useTierDetection } from './hooks/useTierDetection';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
 import { extractSlug } from './lib/extractSlug';
+import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
 
@@ -230,7 +231,7 @@ function AppContent() {
   }
 
   return (
-    <Router basename="/">
+    <Router basename={PORTAL_BASE}>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         
