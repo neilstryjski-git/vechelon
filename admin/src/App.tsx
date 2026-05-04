@@ -23,11 +23,10 @@ import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
 
-// Placeholder tenant UUID seeded in useAppStore until the real tenant id
-// resolves from the tenants query. The IA portal_visit effect must not fire
-// against this UUID — it would either FK-violate the analytics_events insert
-// or attribute the very first event of each session to a non-existent tenant.
-const PLACEHOLDER_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+// W140: store now initializes currentTenantId to null. The AdaptiveLayout
+// effect and the broadcast_copy guard short-circuit on null, so no placeholder
+// UUID is needed. Pre-W140 a placeholder seeded the store; that pattern is
+// gone.
 
 // Simple Error Boundary for UX stability
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
@@ -122,7 +121,6 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
   // the tenant query resolves.
   React.useEffect(() => {
     if (!currentTenantId) return;
-    if (currentTenantId === PLACEHOLDER_TENANT_ID) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase.auth.getUser();

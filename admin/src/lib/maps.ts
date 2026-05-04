@@ -40,11 +40,13 @@ export const encodePolyline = (points: { lat: number; lon: number }[]) => {
  * Fulfills G11 / Decision D-Design.
  */
 export const getStaticMapUrl = (points: { lat: number; lon: number }[], options: { width?: number; height?: number; color?: string; weight?: number } = {}) => {
-  const { 
-    width = 600, 
-    height = 300, 
-    color = '0x006e35ff', // Racer Sportif Green
-    weight = 4 
+  const {
+    width = 600,
+    height = 300,
+    // W140: neutral default. Callers should pass tenant.accent_color when
+    // available — no hardcoded RS green fallback (was '0x006e35ff' pre-W140).
+    color = '0x444444ff',
+    weight = 4
   } = options;
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;

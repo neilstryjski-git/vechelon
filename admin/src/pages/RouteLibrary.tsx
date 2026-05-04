@@ -60,23 +60,29 @@ function useRoutes() {
 function useUploadRoute() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const tenantId = useAppStore((s) => s.currentTenantId);
 
   return useMutation({
     mutationFn: async ({ file, name, externalUrl, hash }: { file: File; name: string; externalUrl: string; hash: string }) => {
+      if (!tenantId) {
+        throw new Error('Tenant context not yet resolved. Refresh the page and try again.');
+      }
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
       const text    = await file.text();
       const parsed  = parseGPXCoords(text);
       if (!parsed) throw new Error('GPX file contains no track data');
 
-      const finalName = name.trim() || 
-                        parsed.name || 
+      const finalName = name.trim() ||
+                        parsed.name ||
                         file.name.replace(/\.gpx$/i, '').replace(/[_-]/g, ' ');
 
       const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
 
-      const { data: authData } = await supabase.auth.getUser();
-      const userId = authData?.user?.id || '00000000-0000-0000-0000-00000000000a';
-
-      const tenantId = '00000000-0000-0000-0000-000000000001';
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
 

@@ -242,17 +242,12 @@ const RideDetailSideSheet: React.FC = () => {
     }
     // W132 / IA-S0-04: broadcast_copy fires regardless of clipboard outcome —
     // the admin clicked the button, which is the H1 signal. Fire-and-forget.
-    // Skip if currentTenantId still holds the placeholder UUID (W131 lesson)
-    // to avoid FK violations and misattribution.
+    // Skip if tenant context isn't resolved yet (store init is null per W140).
     if (ride) {
       const tenantId = useAppStore.getState().currentTenantId;
       const { data: authData } = await supabase.auth.getUser();
       const adminUserId = authData.user?.id;
-      if (
-        tenantId &&
-        tenantId !== '00000000-0000-0000-0000-000000000001' &&
-        adminUserId
-      ) {
+      if (tenantId && adminUserId) {
         void fireBroadcastCopy({
           tenantId,
           rideId: ride.id,
