@@ -119,8 +119,28 @@ serve(async (req) => {
     }
 
     // ── 4. Generate Invite Link & Send via Resend ─────────────────────────
-    const origin = req.headers.get('origin') ?? req.headers.get('referer')?.split('/portal')[0]
-    const portalUrl = origin ? `${origin}/portal` : (Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal')
+    // Host-aware portalBase: legacy productdelivered.ca runs the SPA at /portal/
+    // (Router basename = '/portal'); *.vechelon.ca subdomains run at root
+    // (basename = '/'). The click destination must match Router's basename or
+    // the user lands on ROUTE NOT MATCHED. Mirror W122/W137's send-magic-link
+    // pattern: derive origin from request, append /portal only on legacy host.
+    let origin: string | null = req.headers.get('origin')
+    if (!origin) {
+      const referer = req.headers.get('referer')
+      if (referer) {
+        try { origin = new URL(referer).origin } catch { /* ignore */ }
+      }
+    }
+
+    let portalUrl: string
+    if (origin) {
+      let hostname = ''
+      try { hostname = new URL(origin).hostname } catch { /* ignore */ }
+      const isLegacyHost = hostname === 'vechelon.productdelivered.ca'
+      portalUrl = isLegacyHost ? `${origin}/portal` : origin
+    } else {
+      portalUrl = Deno.env.get('PORTAL_URL') ?? 'https://vechelon.productdelivered.ca/portal'
+    }
 
     let inviteLink: string
     let invitedUserId: string
