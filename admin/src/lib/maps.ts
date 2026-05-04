@@ -43,9 +43,11 @@ export const getStaticMapUrl = (points: { lat: number; lon: number }[], options:
   const {
     width = 600,
     height = 300,
-    // W140: neutral default. Callers should pass tenant.accent_color when
-    // available — no hardcoded RS green fallback (was '0x006e35ff' pre-W140).
-    color = '0x444444ff',
+    // Default polyline color. Callers should pass tenant.accent_color when
+    // available — pre-demo revert restored RS green default to keep
+    // productdelivered.ca/portal route thumbnails consistent. Plumbing
+    // tenant.accent_color through is a follow-up (G23 task to be filed).
+    color = '0x006e35ff',
     weight = 4
   } = options;
 
