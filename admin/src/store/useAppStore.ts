@@ -197,39 +197,45 @@ export const useAppStore = create<AppState>()(
           set({ isRideGuest: true });
         }
 
-        // D37: upsert against partial UNIQUE indexes added in
-        // 20260428000007_ride_participants_dedupe_and_uniqueness.sql.
-        // Authenticated users → conflict on (ride_id, account_id);
-        // guest email → conflict on (ride_id, lower(email)).
-        // ON CONFLICT DO NOTHING — re-RSVPs are no-ops; existing rows
-        // (including their role) are preserved. Role transitions are
-        // handled via the admin role-assignment flow, not joinRide.
-        // D37: simple INSERT + catch unique_violation (23505) as a no-op.
-        // We use plain INSERT instead of upsert because supabase-js's
-        // onConflict cannot target partial unique indexes (PostgreSQL
-        // requires the index predicate in ON CONFLICT, which the JS client
-        // can't send). The DB-side partial unique indexes
-        // (uniq_ride_participants_ride_email, uniq_ride_participants_ride_account_no_email)
-        // still enforce integrity. A duplicate RSVP triggers 23505 here,
-        // which we treat as success — the row already exists with the
-        // existing role, which is the desired no-op behavior.
-        const { error } = await supabase
-          .from('ride_participants')
-          .insert({
-            ride_id: rideId,
-            account_id: accountId,
-            display_name: displayName,
-            phone: phone,
-            email: effectiveEmail,
-            role: user ? 'member' : 'guest',
-            status: 'rsvpd',
-            session_cookie_id: sessionCookieId
+        if (user) {
+          // Authenticated path: direct INSERT — participant_insert_policy is TO authenticated.
+          // D37: simple INSERT + catch unique_violation (23505) as a no-op.
+          const { error } = await supabase
+            .from('ride_participants')
+            .insert({
+              ride_id: rideId,
+              account_id: accountId,
+              display_name: displayName,
+              phone: phone,
+              email: effectiveEmail,
+              role: 'member',
+              status: 'rsvpd',
+              session_cookie_id: sessionCookieId
+            });
+
+          if (error && (error as { code?: string }).code !== '23505') {
+            throw error;
+          }
+        } else {
+          // Guest path: route through guest-rsvp Edge Function (W143 / MT-H-05).
+          // anon INSERT into ride_participants is no longer permitted by RLS.
+          const { error: efError } = await supabase.functions.invoke('guest-rsvp', {
+            body: {
+              ride_id: rideId,
+              display_name: displayName,
+              email: normalisedGuestEmail,
+              session_cookie_id: sessionCookieId,
+            },
           });
 
-        // 23505 = unique_violation — duplicate RSVP, treat as no-op so role
-        // transitions handled by admin role-assignment UI are preserved.
-        if (error && (error as { code?: string }).code !== '23505') {
-          throw error;
+          if (efError) {
+            let message = 'Unable to join ride. Please try again.';
+            try {
+              const body = await (efError as { context?: Response }).context?.json?.();
+              if (body?.error) message = body.error;
+            } catch { /* ignore */ }
+            throw new Error(message);
+          }
         }
       },
 
