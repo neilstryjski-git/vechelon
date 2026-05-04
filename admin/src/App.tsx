@@ -230,7 +230,7 @@ function AppContent() {
   }
 
   return (
-    <Router basename="/portal">
+    <Router basename="/">
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         

@@ -64,7 +64,7 @@ const RiderLayout: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'global' });
-    window.location.href = '/portal/auth';
+    window.location.href = '/auth';
   };
 
   const riderLinks = [

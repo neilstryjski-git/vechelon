@@ -14,7 +14,7 @@ import { importLibrary } from '../lib/mapsLoader';
 // Constants
 // ---------------------------------------------------------------------------
 
-const JOIN_BASE = import.meta.env.VITE_JOIN_BASE_URL ?? 'https://vechelon.productdelivered.ca';
+const JOIN_BASE = import.meta.env.VITE_JOIN_BASE_URL ?? (typeof window !== 'undefined' ? window.location.origin : '');
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const USER_ID   = '00000000-0000-0000-0000-00000000000a';
 
@@ -304,7 +304,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       // Build all rows (generating a QR per instance)
       const rows = await Promise.all(dates.map(async (date, i) => {
         const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
-        const joinUrl = `${JOIN_BASE}/portal/ride/${rideId}?source=ridecard`;
+        const joinUrl = `${JOIN_BASE}/ride/${rideId}?source=ridecard`;
         const qrCode  = await generateQRWithLogo(joinUrl);
         return {
           id:              rideId,
@@ -927,7 +927,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
           `Date/Time: ${dateStr} · ${timeStr}`,
           ...(externalUrl.trim() ? [`Route: ${externalUrl.trim()}`] : []),
           `Meetup: ${meetupValue}`,
-          `Details: ${JOIN_BASE}/portal/ride/${singleRideId}?source=broadcast`,
+          `Details: ${JOIN_BASE}/ride/${singleRideId}?source=broadcast`,
           '',
         ].join('\n');
         navigator.clipboard.writeText(broadcast).catch(() => {});
