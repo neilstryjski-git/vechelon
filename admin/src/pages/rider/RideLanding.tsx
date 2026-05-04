@@ -169,13 +169,11 @@ const RideLanding: React.FC = () => {
     queryKey: ['ride-landing', rideId],
     queryFn: async () => {
       if (!rideId) return null;
-      const { data, error } = await supabase
-        .from('rides')
-        .select('id, name, type, scheduled_start, start_label, start_coords, finish_label, finish_coords, external_url, gpx_path, thumbnail_url, status, actual_end')
-        .eq('id', rideId)
-        .maybeSingle();
+      const { data, error } = await supabase.functions.invoke('guest-view-ride', {
+        body: { ride_id: rideId },
+      });
       if (error) throw error;
-      return data;
+      return (data?.ride as RideRow) ?? null;
     },
     enabled: !!rideId,
   });
