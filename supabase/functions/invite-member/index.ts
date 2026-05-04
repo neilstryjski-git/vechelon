@@ -55,6 +55,23 @@ serve(async (req) => {
     const inviteRole: 'admin' | 'member' = role === 'admin' ? 'admin' : 'member'
     const normalizedEmail = email.trim().toLowerCase()
 
+    // Service-role client for cross-tenant lookups (W127), tenant branding
+    // (W137), and account/account_tenants pre-creation (W63).
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    // Look up the inviting admin's tenant name for personalized email copy.
+    // Pre-W137 this was hardcoded as "Racer Sportif" in the body — broken on
+    // any non-RS tenant.
+    const { data: tenant } = await adminClient
+      .from('tenants')
+      .select('name')
+      .eq('id', tenantId)
+      .maybeSingle()
+    const clubName = tenant?.name || 'Vechelon'
+
     // ── 3a. Cross-club email validation (W127 / Pillar II §2.3) ──────────
     // Reject emails already registered to a different tenant. Each club requires
     // a dedicated email per VMT-D-33. Error must NOT reveal the source club —
@@ -63,10 +80,6 @@ serve(async (req) => {
     // Fires BEFORE invite link generation so no partial accounts row is created
     // on rejection. Uses service role for the lookup (must read accounts +
     // account_tenants across tenant boundaries to detect the cross-tenant case).
-    const adminClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
 
     const { data: existingAccount, error: lookupError } = await adminClient
       .from('accounts')
@@ -155,7 +168,7 @@ serve(async (req) => {
           <td style="padding:40px 40px 32px;">
             <h2 style="margin:0 0 16px;font-size:24px;font-weight:800;color:#1c1c1c;letter-spacing:-0.02em;">You've been invited to ride.</h2>
             <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#444;">
-              Your club admin has added you to the <strong>Racer Sportif</strong> portal on Vechelon — the tactical command centre for serious group rides.
+              Your club admin has added you to the <strong>${clubName}</strong> portal on Vechelon — the tactical command centre for serious group rides.
             </p>
             <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#444;">
               Once you accept, you'll have access to the ride calendar, route library, live ride tracking, and RSVP tools — everything your club needs to ride together, faster and smarter.
@@ -212,7 +225,7 @@ serve(async (req) => {
         <tr>
           <td style="background:#f9f9f9;border-top:1px solid #eee;padding:24px 40px;">
             <p style="margin:0 0 8px;font-size:12px;color:#999;line-height:1.6;">
-              This invitation was sent by your club admin at <strong>Racer Sportif</strong>. If you weren't expecting this, you can safely ignore it — no account will be created unless you click the link above.
+              This invitation was sent by your club admin at <strong>${clubName}</strong>. If you weren't expecting this, you can safely ignore it — no account will be created unless you click the link above.
             </p>
             <p style="margin:0;font-size:11px;color:#bbb;letter-spacing:0.15em;text-transform:uppercase;">Vechelon · Tactical Ride Intelligence · vechelon.ca</p>
           </td>
@@ -226,7 +239,7 @@ serve(async (req) => {
 
     const { error: resendError } = await sendResendEmail({
       to: normalizedEmail,
-      subject: 'Join Vechelon | Racer Sportif Invitation',
+      subject: `Join Vechelon | ${clubName} Invitation`,
       html: emailHtml
     })
 
