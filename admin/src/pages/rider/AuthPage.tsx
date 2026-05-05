@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
+import { extractSlug } from '../../lib/extractSlug';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error' | 'verifying';
 
@@ -14,7 +15,8 @@ const AuthPage: React.FC = () => {
   const [stage, setStage] = useState<Stage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string }>(['tenant-config']);
+  const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
+  const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string, qr_mark_url?: string }>(['tenant-config', slug]);
 
   // Contextual Deep-Linking: Capture where the user wanted to go
   const redirectTo = searchParams.get('redirectTo') || '/';
@@ -196,14 +198,28 @@ const AuthPage: React.FC = () => {
 
       {/* Club mark - Dynamic Branding */}
       <div className="mb-12 text-center animate-in slide-in-from-top-4 duration-700">
-        {tenant?.logo_url ? (
-          <img src={tenant.logo_url} alt={tenant.name} className="h-16 w-auto object-contain mx-auto mb-6" />
+        {tenant ? (
+          <>
+            {/* Club-specific branding */}
+            {tenant.logo_url && (
+              <img src={tenant.logo_url} alt={tenant.name} className="h-16 w-auto object-contain mx-auto mb-4" />
+            )}
+            <p className="font-headline font-extrabold text-2xl tracking-tighter italic text-on-background uppercase mb-6">
+              {tenant.name}
+            </p>
+            {/* Vechelon wordmark below */}
+            <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background uppercase">
+              VECHELON
+            </h1>
+          </>
         ) : (
-          <div className="w-16 h-16 bg-brand-logo bg-contain bg-no-repeat bg-center mx-auto mb-6 grayscale contrast-125 opacity-40" />
+          <>
+            <div className="w-16 h-16 bg-brand-logo bg-contain bg-no-repeat bg-center mx-auto mb-6 grayscale contrast-125 opacity-40" />
+            <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background uppercase">
+              VECHELON
+            </h1>
+          </>
         )}
-        <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background uppercase">
-          {tenant?.name || 'VECHELON'}
-        </h1>
         <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant mt-2">
           Tactical Rider Portal
         </p>

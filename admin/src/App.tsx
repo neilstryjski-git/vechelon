@@ -192,9 +192,9 @@ function AppContent() {
     }
     const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (link) {
-      link.href = tenant?.logo_url ?? '/portal/favicon.svg';
+      link.href = tenant?.qr_mark_url ?? tenant?.logo_url ?? '/portal/favicon.svg';
     }
-  }, [tenant?.name, tenant?.logo_url, isNoTenantContext]);
+  }, [tenant?.name, tenant?.logo_url, tenant?.qr_mark_url, isNoTenantContext]);
 
   const setTenantId = useAppStore((s) => s.setTenantId);
   const setQrMarkUrl = useAppStore((s) => s.setQrMarkUrl);
