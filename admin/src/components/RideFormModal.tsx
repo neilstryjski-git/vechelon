@@ -612,11 +612,12 @@ function RouteUploader({
 interface MeetupLocationPickerProps {
   coords:         { lat: number; lng: number } | null;
   label:          string;
+  initialCenter?: { lat: number; lng: number } | null;
   onCoordsChange: (c: { lat: number; lng: number }) => void;
   onLabelChange:  (l: string) => void;
 }
 
-function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
+function MeetupLocationPicker({ coords, initialCenter, onCoordsChange, onLabelChange }: MeetupLocationPickerProps) {
   const mapDivRef        = useRef<HTMLDivElement>(null);
   const mapRef           = useRef<google.maps.Map | null>(null);
   const markerRef        = useRef<google.maps.Marker | null>(null);
@@ -649,10 +650,10 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
         sessionTokenRef.current = new placesLib.AutocompleteSessionToken();
       }
 
-      const defaultCenter = coords ?? { lat: 43.6532, lng: -79.3832 };
+      const displayCenter = coords ?? initialCenter ?? { lat: 43.6532, lng: -79.3832 };
       const map = new Map(mapDivRef.current, {
-        center: defaultCenter,
-        zoom:   coords ? 15 : 11,
+        center: displayCenter,
+        zoom:   coords ? 15 : (initialCenter ? 13 : 11),
         disableDefaultUI: true,
         zoomControl: true,
       });
@@ -660,7 +661,7 @@ function MeetupLocationPicker({ coords, onCoordsChange, onLabelChange }: MeetupL
 
       const marker = new google.maps.Marker({
         map,
-        position:  defaultCenter,
+        position:  coords ?? { lat: 43.6532, lng: -79.3832 },
         draggable: true,
         visible:   !!coords,
       });
@@ -835,6 +836,8 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const [rideType, setRideType]         = useState<RideType>('route');
   const [meetupLabel, setMeetupLabel]   = useState('');
   const [meetupCoords, setMeetupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // GPX start point for map display only — does not commit as meetup coords
+  const [gpxStartCenter, setGpxStartCenter] = useState<{ lat: number; lng: number } | null>(null);
 
   // ── Recurring state ──────────────────────────────────────────────────────
   const [isRecurring, setIsRecurring]       = useState(false);
@@ -851,10 +854,12 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
     }
   }, [scheduledStart]);
 
-  // Auto-populate meetup pin from GPX start coords (Route Rides only)
+  // Center the meetup map on the GPX start for visual context (Route Rides only).
+  // Does NOT set meetupCoords — if the user never picks a location the mutation
+  // falls back to startCoords (the actual GPX first point) at save time.
   useEffect(() => {
     if (rideType !== 'route') return;
-    if (!selectedRoute && !pendingFile) return;
+    if (!selectedRoute && !pendingFile) { setGpxStartCenter(null); return; }
 
     (async () => {
       let parsed: ReturnType<typeof parseGPXCoords> | null = null;
@@ -867,7 +872,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
         parsed = parseGPXCoords(await pendingFile.text());
       }
       if (parsed?.start) {
-        setMeetupCoords({ lat: parsed.start.lat, lng: parsed.start.lon });
+        setGpxStartCenter({ lat: parsed.start.lat, lng: parsed.start.lon });
       }
     })();
   }, [selectedRoute, pendingFile, rideType]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -917,6 +922,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       setRideType('route');
       setMeetupLabel('');
       setMeetupCoords(null);
+      setGpxStartCenter(null);
     } else {
       setEditValues({ ...EMPTY_EDIT, ...initialValues });
     }
@@ -1151,6 +1157,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 <MeetupLocationPicker
                   coords={meetupCoords}
                   label={meetupLabel}
+                  initialCenter={gpxStartCenter}
                   onCoordsChange={setMeetupCoords}
                   onLabelChange={setMeetupLabel}
                 />
@@ -1166,7 +1173,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 />
                 {rideType === 'route' && !meetupCoords && (
                   <p className="font-body text-xs text-on-surface-variant/60 mt-1.5">
-                    Auto-populated from GPX start when a route is selected.
+                    Leave blank to use the GPX start point.
                   </p>
                 )}
               </div>

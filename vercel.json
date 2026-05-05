@@ -11,6 +11,12 @@
       "source": "/admin/:path*",
       "destination": "/portal/:path*",
       "permanent": true
+    },
+    {
+      "source": "/ride/:path*",
+      "has": [{ "type": "host", "value": "vechelon\\.productdelivered\\.ca" }],
+      "destination": "/portal/ride/:path*",
+      "permanent": false
     }
   ],
   "rewrites": [
