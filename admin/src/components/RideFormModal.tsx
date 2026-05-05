@@ -1294,12 +1294,12 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
 
               {/* External URL */}
               <div>
-                <label className={labelClass}>External Link <span className="opacity-40 normal-case tracking-normal">{rideType === 'meetup' ? '(Event page / details link)' : '(Route / course link)'}</span></label>
+                <label className={labelClass}>External Link <span className="opacity-40 normal-case tracking-normal">{rideType === 'meetup' ? '(Event page / details link)' : '(Garmin Connect or similar)'}</span></label>
                 <input
                   type="text"
                   value={externalUrl}
                   onChange={e => setExternalUrl(e.target.value)}
-                  placeholder="https://www.komoot.com/…"
+                  placeholder="https://connect.garmin.com/…"
                   className={inputClass}
                 />
               </div>
@@ -1388,12 +1388,12 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               </div>
 
               <div>
-                <label className={labelClass}>External Link</label>
+                <label className={labelClass}>External Link <span className="opacity-40 normal-case tracking-normal">(Garmin Connect or similar)</span></label>
                 <input
                   type="text"
                   value={editValues.external_url}
                   onChange={e => setEditValues(v => ({ ...v, external_url: e.target.value }))}
-                  placeholder="https://www.komoot.com/…"
+                  placeholder="https://connect.garmin.com/…"
                   className={inputClass}
                 />
               </div>
