@@ -156,7 +156,7 @@ function AppContent() {
     queryFn: async () => {
       const fetchPromise = supabase
         .from('tenants')
-        .select('id, primary_color, accent_color, logo_url, name, slug')
+        .select('id, primary_color, accent_color, logo_url, qr_mark_url, name, slug')
         .eq('slug', slug as string)
         .maybeSingle();
 

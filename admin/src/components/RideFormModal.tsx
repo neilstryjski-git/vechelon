@@ -102,15 +102,32 @@ async function generateQRWithLogo(url: string, logoUrl?: string | null): Promise
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, x + pad, y + pad, logoSize, logoSize);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(canvas.toDataURL('image/png'));
-    img.src = logoUrl || '/portal/favicon.svg';
-  });
+  if (logoUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, x + pad, y + pad, logoSize, logoSize);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(canvas.toDataURL('image/png'));
+      img.src = logoUrl;
+    });
+  }
+
+  // Fallback: canvas "78" mark
+  const cx = size / 2;
+  const cy = size / 2;
+  const r  = logoSize / 2;
+  ctx.fillStyle = '#111111';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font      = `bold ${Math.round(r * 1.1)}px 'Arial Black', Arial, sans-serif`;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('78', cx, cy + Math.round(r * 0.05));
+  return canvas.toDataURL('image/png');
 }
 
 // ---------------------------------------------------------------------------
@@ -305,8 +322,8 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       const rows = await Promise.all(dates.map(async (date, i) => {
         const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
         const joinUrl = buildRideUrl(rideId, 'ridecard');
-        const logoUrl = (queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']))?.logo_url;
-        const qrCode  = await generateQRWithLogo(joinUrl, logoUrl);
+        const qrMarkUrl = (queryClient.getQueryData<{ qr_mark_url?: string | null }>(['tenant-config']))?.qr_mark_url;
+        const qrCode    = await generateQRWithLogo(joinUrl, qrMarkUrl);
         return {
           id:              rideId,
           name:            rideName,

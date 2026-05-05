@@ -83,7 +83,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
   const ROSTER_LIMIT = 8;
 
-  const tenant = queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']);
+  const tenant = queryClient.getQueryData<{ logo_url?: string | null; qr_mark_url?: string | null }>(['tenant-config']);
 
   const isOpen = rideSheetVisible && !!selectedRideId;
 
@@ -119,16 +119,31 @@ const RideDetailSideSheet: React.FC = () => {
       ctx.fillStyle = '#fafafa';
       ctx.fill();
 
-      // Draw Vechelon logo in center
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
+      // Draw tenant QR mark in center — image if qr_mark_url set, else canvas "78"
+      const qrMarkUrl = tenant?.qr_mark_url;
+      if (qrMarkUrl) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
+          setQrDataUrl(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
+        img.src = qrMarkUrl;
+      } else {
+        const r = logoSize / 2;
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fafafa';
+        ctx.font      = `bold ${Math.round(r * 1.1)}px 'Arial Black', Arial, sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('78', cx, cy + Math.round(r * 0.05));
         setQrDataUrl(canvas.toDataURL('image/png'));
-      };
-      img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
-      img.src = tenant?.logo_url || '/portal/favicon.svg';
+      }
     }).catch(() => setQrDataUrl(null));
-  }, [selectedRideId, tenant?.logo_url]);
+  }, [selectedRideId, tenant?.qr_mark_url]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
