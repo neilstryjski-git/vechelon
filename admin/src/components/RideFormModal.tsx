@@ -811,6 +811,8 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   onClose,
   onCreated,
 }) => {
+  const tenantId = useAppStore((s) => s.currentTenantId);
+
   // ── Create state ────────────────────────────────────────────────────────
   const [name, setName]                   = useState('');
   const [scheduledStart, setScheduledStart] = useState('');
