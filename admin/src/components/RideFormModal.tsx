@@ -59,7 +59,7 @@ async function calculateHash(text: string): Promise<string> {
 }
 
 
-async function generateQRWithLogo(url: string): Promise<string> {
+async function generateQRWithLogo(url: string, logoUrl?: string | null): Promise<string> {
   const size = 320;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -102,23 +102,15 @@ async function generateQRWithLogo(url: string): Promise<string> {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Club mark: black circle with white "78" — drawn directly, no file dependency
-  const cx = size / 2;
-  const cy = size / 2;
-  const r  = logoSize / 2;
-
-  ctx.fillStyle = '#111111';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font      = `bold ${Math.round(r * 1.1)}px 'Arial Black', Arial, sans-serif`;
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('78', cx, cy + Math.round(r * 0.05)); // subtle optical centring
-
-  return canvas.toDataURL('image/png');
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, x + pad, y + pad, logoSize, logoSize);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(canvas.toDataURL('image/png'));
+    img.src = logoUrl || '/portal/favicon.svg';
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +305,8 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       const rows = await Promise.all(dates.map(async (date, i) => {
         const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
         const joinUrl = buildRideUrl(rideId, 'ridecard');
-        const qrCode  = await generateQRWithLogo(joinUrl);
+        const logoUrl = (queryClient.getQueryData<{ logo_url?: string | null }>(['tenant-config']))?.logo_url;
+        const qrCode  = await generateQRWithLogo(joinUrl, logoUrl);
         return {
           id:              rideId,
           name:            rideName,
