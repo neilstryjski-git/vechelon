@@ -25,6 +25,7 @@ export interface Participant {
 interface AppState {
   // UI State (Persisted)
   currentTenantId: string | null;
+  qrMarkUrl: string | null;
   isSidebarOpen: boolean;
   sessionCookieId: string | null;
   
@@ -43,6 +44,7 @@ interface AppState {
 
   // Actions
   setTenantId: (id: string | null) => void;
+  setQrMarkUrl: (url: string | null) => void;
   setSelectedRideId: (id: string | null) => void;
   closeSheet: () => void;
   setSelectedParticipantId: (id: string | null) => void;
@@ -70,6 +72,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       currentTenantId: null,
+      qrMarkUrl: null,
       isSidebarOpen: true,
       sessionCookieId: null,
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -85,6 +88,7 @@ export const useAppStore = create<AppState>()(
       rideSheetVisible: false,
 
       setTenantId: (id) => set({ currentTenantId: id }),
+      setQrMarkUrl: (url) => set({ qrMarkUrl: url }),
       setSelectedRideId: (id) => set({ selectedRideId: id, rideSheetVisible: id !== null }),
       closeSheet: () => set({ rideSheetVisible: false }),
       setSelectedParticipantId: (id) => set({ selectedParticipantId: id }),

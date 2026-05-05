@@ -197,13 +197,16 @@ function AppContent() {
   }, [tenant?.name, tenant?.logo_url, isNoTenantContext]);
 
   const setTenantId = useAppStore((s) => s.setTenantId);
+  const setQrMarkUrl = useAppStore((s) => s.setQrMarkUrl);
   React.useEffect(() => {
     if (tenant?.id) {
       setTenantId(tenant.id);
+      setQrMarkUrl(tenant.qr_mark_url ?? null);
     } else if (isNoTenantContext) {
       setTenantId(null);
+      setQrMarkUrl(null);
     }
-  }, [tenant?.id, isNoTenantContext, setTenantId]);
+  }, [tenant?.id, tenant?.qr_mark_url, isNoTenantContext, setTenantId, setQrMarkUrl]);
 
   // Pass null to useBranding on no-tenant paths so it doesn't write any
   // tenant CSS variables onto :root (the hook already no-ops on null).

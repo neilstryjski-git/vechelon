@@ -322,7 +322,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
       const rows = await Promise.all(dates.map(async (date, i) => {
         const rideId  = (i === 0 && singleRideId) ? singleRideId : crypto.randomUUID();
         const joinUrl = buildRideUrl(rideId, 'ridecard');
-        const qrMarkUrl = (queryClient.getQueryData<{ qr_mark_url?: string | null }>(['tenant-config']))?.qr_mark_url;
+        const qrMarkUrl = useAppStore.getState().qrMarkUrl;
         const qrCode    = await generateQRWithLogo(joinUrl, qrMarkUrl);
         return {
           id:              rideId,

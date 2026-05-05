@@ -83,7 +83,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
   const ROSTER_LIMIT = 8;
 
-  const tenant = queryClient.getQueryData<{ logo_url?: string | null; qr_mark_url?: string | null }>(['tenant-config']);
+  const qrMarkUrl = useAppStore((s) => s.qrMarkUrl);
 
   const isOpen = rideSheetVisible && !!selectedRideId;
 
@@ -120,7 +120,6 @@ const RideDetailSideSheet: React.FC = () => {
       ctx.fill();
 
       // Draw tenant QR mark in center — image if qr_mark_url set, else canvas "78"
-      const qrMarkUrl = tenant?.qr_mark_url;
       if (qrMarkUrl) {
         const img = new Image();
         img.onload = () => {
@@ -143,7 +142,7 @@ const RideDetailSideSheet: React.FC = () => {
         setQrDataUrl(canvas.toDataURL('image/png'));
       }
     }).catch(() => setQrDataUrl(null));
-  }, [selectedRideId, tenant?.qr_mark_url]);
+  }, [selectedRideId, qrMarkUrl]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
