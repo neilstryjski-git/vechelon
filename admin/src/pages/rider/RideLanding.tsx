@@ -157,9 +157,18 @@ const RideLanding: React.FC = () => {
 
   const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string }>(['tenant-config']);
 
+  const source = React.useMemo(
+    () => new URLSearchParams(window.location.search).get('source'),
+    []
+  );
+  const isSocialSource = source === 'social';
+
   const [isJoining, setIsJoining] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [magicEmail, setMagicEmail] = useState('');
+  const [magicSent, setMagicSent] = useState(false);
+  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
 
   // -------------------------------------------------------------------------
   // Fetch ride
@@ -316,6 +325,23 @@ const RideLanding: React.FC = () => {
     const tenantId = useAppStore.getState().currentTenantId;
     if (tenantId) {
       void firePortalNavExternal({ tenantId, rideId: ride.id, navType });
+    }
+  };
+
+  const handleSendMagicLink = async () => {
+    if (!magicEmail.trim()) return;
+    setIsSendingMagicLink(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: magicEmail.trim().toLowerCase(),
+        options: { emailRedirectTo: window.location.href },
+      });
+      if (error) throw error;
+      setMagicSent(true);
+    } catch (e: any) {
+      addToast(`Could not send link: ${e.message}`, 'error');
+    } finally {
+      setIsSendingMagicLink(false);
     }
   };
 
@@ -600,50 +626,93 @@ const RideLanding: React.FC = () => {
             <div className="pt-2 border-t border-outline-variant/10">
               {isGuest && (
                 !participation ? (
-                  <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
-                    <div>
-                      <h4 className="font-headline font-bold text-sm text-on-background mb-1">Guest RSVP</h4>
-                      <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">Identify for the ride roster</p>
+                  isSocialSource ? (
+                    /* Social share path: require magic-link auth before RSVP */
+                    <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+                      {magicSent ? (
+                        <div className="space-y-3 text-center">
+                          <span className="material-symbols-outlined text-3xl text-primary block">mark_email_read</span>
+                          <h4 className="font-headline font-bold text-sm text-on-background">Check your inbox</h4>
+                          <p className="font-body text-xs text-on-surface-variant leading-relaxed">
+                            We sent a secure link to <strong>{magicEmail}</strong>. Click it to sign in and claim your spot on this ride.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <h4 className="font-headline font-bold text-sm text-on-background mb-1">Member-Shared Ride</h4>
+                            <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">
+                              Sign in to RSVP — no password needed
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <input
+                              type="email"
+                              value={magicEmail}
+                              onChange={(e) => setMagicEmail(e.target.value)}
+                              placeholder="Your email address"
+                              className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+                            />
+                            <button
+                              onClick={handleSendMagicLink}
+                              disabled={isSendingMagicLink || !magicEmail.trim()}
+                              className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
+                            >
+                              <span className="material-symbols-outlined">
+                                {isSendingMagicLink ? 'hourglass_top' : 'send'}
+                              </span>
+                              {isSendingMagicLink ? 'Sending…' : 'Send Access Link'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
-                        placeholder="Operator Name *"
-                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
-                      />
-                      <input
-                        type="email"
-                        value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
-                        placeholder="Email (for history synchronization)"
-                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
-                      />
-                      <button
-                        onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
-                        disabled={isJoining || !guestName.trim()}
-                        className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
-                      >
-                        <span className="material-symbols-outlined">
-                          {isActive ? 'play_circle' : 'event_available'}
-                        </span>
-                        {isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
-                      </button>
-                      <div className="pt-2 text-center">
-                        <button 
-                          onClick={() => {
-                            const baseUrl = window.location.origin + window.location.pathname;
-                            const redirectUrl = `${baseUrl}`;
-                            navigate(`/auth?redirectTo=${encodeURIComponent(redirectUrl)}`);
-                          }} 
-                          className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
+                  ) : (
+                    /* Standard frictionless RSVP (ridecard / broadcast / captain) */
+                    <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+                      <div>
+                        <h4 className="font-headline font-bold text-sm text-on-background mb-1">Guest RSVP</h4>
+                        <p className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">Identify for the ride roster</p>
+                      </div>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={guestName}
+                          onChange={(e) => setGuestName(e.target.value)}
+                          placeholder="Operator Name *"
+                          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+                        />
+                        <input
+                          type="email"
+                          value={guestEmail}
+                          onChange={(e) => setGuestEmail(e.target.value)}
+                          placeholder="Email (for history synchronization)"
+                          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+                        />
+                        <button
+                          onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
+                          disabled={isJoining || !guestName.trim()}
+                          className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
                         >
-                          Already an operator? <span className="font-bold underline">Sign in</span>
+                          <span className="material-symbols-outlined">
+                            {isActive ? 'play_circle' : 'event_available'}
+                          </span>
+                          {isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
                         </button>
+                        <div className="pt-2 text-center">
+                          <button
+                            onClick={() => {
+                              const baseUrl = window.location.origin + window.location.pathname;
+                              navigate(`/auth?redirectTo=${encodeURIComponent(baseUrl)}`);
+                            }}
+                            className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
+                          >
+                            Already an operator? <span className="font-bold underline">Sign in</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )
                 ) : (
                   <div className="space-y-4 animate-in zoom-in-95 duration-500">
                     <div className="flex items-center justify-center gap-3 py-5 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 shadow-sm">

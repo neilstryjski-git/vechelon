@@ -6,8 +6,9 @@ import { supabase } from '../lib/supabase';
 import { parsePoint, downloadGpx } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
-import { fireBroadcastCopy } from '../lib/analyticsEvents';
+import { fireBroadcastCopy, fireRiderShare } from '../lib/analyticsEvents';
 import { buildRideUrl } from '../lib/portalBase';
+import { getRiderHash } from '../lib/riderHash';
 import Modal from './Modal';
 import RideFormModal from './RideFormModal';
 
@@ -268,6 +269,28 @@ const RideDetailSideSheet: React.FC = () => {
           rideCreatedAt: ride.created_at,
           adminUserId,
         });
+      }
+    }
+  };
+
+  const handleShare = async () => {
+    if (!ride) return;
+    try {
+      const hash = await getRiderHash();
+      const shareUrl = buildRideUrl(ride.id, 'social', hash);
+      if (navigator.share) {
+        await navigator.share({ title: ride.name, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        addToast('Share link copied!', 'success');
+      }
+      const tenantId = useAppStore.getState().currentTenantId;
+      if (tenantId) {
+        void fireRiderShare({ tenantId, rideId: ride.id, sharerHash: hash });
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        addToast('Could not generate share link', 'error');
       }
     }
   };
@@ -618,13 +641,25 @@ const RideDetailSideSheet: React.FC = () => {
                   View on Tactical HUD
                 </button>
 
-                <button
-                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                  onClick={handleCopyBroadcast}
-                >
-                  <span className="material-symbols-outlined text-sm">content_copy</span>
-                  Copy Broadcast
-                </button>
+                {isAdmin && (
+                  <button
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={handleCopyBroadcast}
+                  >
+                    <span className="material-symbols-outlined text-sm">content_copy</span>
+                    Copy Broadcast
+                  </button>
+                )}
+
+                {!isAdmin && userTier === 'affiliated' && (
+                  <button
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={handleShare}
+                  >
+                    <span className="material-symbols-outlined text-sm">share</span>
+                    Share Ride
+                  </button>
+                )}
 
                 {ride.gpx_path && (
                   <button

@@ -138,6 +138,22 @@ export async function fireBroadcastCopy(opts: {
   }, opts.adminUserId);
 }
 
+/**
+ * W133: rider_share fires when an affiliated member generates a social share URL.
+ * Drives H5 (referral attribution). sharerHash is the 12-char base32 ref tag
+ * embedded in the ?ref= param of the shared URL.
+ */
+export async function fireRiderShare(opts: {
+  tenantId: string;
+  rideId: string;
+  sharerHash: string;
+}): Promise<void> {
+  await insertEvent('rider_share', opts.tenantId, {
+    ride_id: opts.rideId,
+    sharer_hash: opts.sharerHash,
+  });
+}
+
 function attributionFromSession(): Record<string, string> {
   const out: Record<string, string> = {};
   const ref = readSession(SESSION_KEY_REF);

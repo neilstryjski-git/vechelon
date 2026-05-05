@@ -18,11 +18,13 @@ export const AUTH_HREF = isLegacyHost ? '/portal/auth' : '/auth';
 /** Build a shareable ride URL for the current host. Honors VITE_JOIN_BASE_URL. */
 export function buildRideUrl(
   rideId: string,
-  source: 'ridecard' | 'broadcast'
+  source: 'ridecard' | 'broadcast' | 'social',
+  ref?: string
 ): string {
   const origin =
     (import.meta.env.VITE_JOIN_BASE_URL as string | undefined) ??
     (typeof window !== 'undefined' ? window.location.origin : '');
   const pathPrefix = isLegacyHost ? '/portal' : '';
-  return `${origin}${pathPrefix}/ride/${rideId}?source=${source}`;
+  const refParam = ref ? `&ref=${ref}` : '';
+  return `${origin}${pathPrefix}/ride/${rideId}?source=${source}${refParam}`;
 }
