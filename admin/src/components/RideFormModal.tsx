@@ -875,16 +875,17 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const isPending      = createMutation.isPending || updateMutation.isPending;
 
   const { data: routes = [] } = useQuery<RouteRow[]>({
-    queryKey: ['route-library'],
+    queryKey: ['route-library', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('route_library')
         .select('id, name, file_path, distance_km, elevation_gain_m, thumbnail_url, file_hash, created_at')
+        .eq('tenant_id', tenantId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
-    enabled: isOpen && mode === 'create',
+    enabled: isOpen && mode === 'create' && !!tenantId,
   });
 
   // Reset on open
