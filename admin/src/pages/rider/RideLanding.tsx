@@ -164,6 +164,7 @@ const RideLanding: React.FC = () => {
   const isSocialSource = source === 'social';
 
   const [isJoining, setIsJoining] = useState(false);
+  const [rsvpDone, setRsvpDone] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [magicEmail, setMagicEmail] = useState('');
@@ -277,6 +278,7 @@ const RideLanding: React.FC = () => {
     setIsJoining(true);
     try {
       await joinRide(ride.id, nameOverride, emailOverride);
+      setRsvpDone(true);
       addToast(
         ride.status === 'active' ? 'You have joined the ride!' : 'RSVP confirmed.',
         'success',
@@ -691,13 +693,13 @@ const RideLanding: React.FC = () => {
                         />
                         <button
                           onClick={() => handleJoin(guestName.trim(), guestEmail.trim() || undefined)}
-                          disabled={isJoining || !guestName.trim()}
-                          className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient"
+                          disabled={isJoining || rsvpDone || !guestName.trim()}
+                          className={`w-full py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-ambient disabled:opacity-90 ${rsvpDone ? 'bg-tertiary text-white' : 'signature-gradient text-on-primary hover:opacity-90 disabled:opacity-50'}`}
                         >
                           <span className="material-symbols-outlined">
-                            {isActive ? 'play_circle' : 'event_available'}
+                            {rsvpDone ? 'check_circle' : (isActive ? 'play_circle' : 'event_available')}
                           </span>
-                          {isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
+                          {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
                         </button>
                         <div className="pt-2 text-center">
                           <button
@@ -759,13 +761,13 @@ const RideLanding: React.FC = () => {
                 ) : (
                   <button
                     onClick={() => handleJoin()}
-                    disabled={isJoining}
-                    className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 shadow-ambient animate-in slide-in-from-bottom-2 duration-500"
+                    disabled={isJoining || rsvpDone}
+                    className={`w-full py-4 rounded-xl font-headline font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-ambient disabled:opacity-90 animate-in slide-in-from-bottom-2 duration-500 ${rsvpDone ? 'bg-tertiary text-white' : 'signature-gradient text-on-primary hover:opacity-90 disabled:opacity-50'}`}
                   >
                     <span className="material-symbols-outlined">
-                      {isActive ? 'play_circle' : 'event_available'}
+                      {rsvpDone ? 'check_circle' : (isActive ? 'play_circle' : 'event_available')}
                     </span>
-                    {isJoining ? 'Establishing Link…' : (isActive ? 'Join Mission' : 'Commit RSVP')}
+                    {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Establishing Link…' : (isActive ? 'Join Mission' : 'Commit RSVP')}
                   </button>
                 )
               )}
