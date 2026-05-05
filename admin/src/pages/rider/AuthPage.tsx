@@ -202,7 +202,7 @@ const AuthPage: React.FC = () => {
           <>
             {/* Club-specific branding */}
             {tenant.logo_url ? (
-              <img src={tenant.logo_url} alt={tenant.name} className="h-16 w-auto object-contain mx-auto mb-6" />
+              <img src={tenant.logo_url} alt={tenant.name} className="h-16 w-auto object-contain mx-auto mb-6 mix-blend-multiply" />
             ) : (
               <p className="font-headline font-extrabold text-2xl tracking-tighter italic text-on-background uppercase mb-6">
                 {tenant.name}
