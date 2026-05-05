@@ -190,7 +190,11 @@ function AppContent() {
     } else if (isNoTenantContext) {
       document.title = 'Vechelon';
     }
-  }, [tenant?.name, isNoTenantContext]);
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (link) {
+      link.href = tenant?.logo_url ?? '/portal/favicon.svg';
+    }
+  }, [tenant?.name, tenant?.logo_url, isNoTenantContext]);
 
   const setTenantId = useAppStore((s) => s.setTenantId);
   React.useEffect(() => {
