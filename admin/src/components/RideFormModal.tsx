@@ -52,6 +52,17 @@ interface RideFormModalProps {
 // Utilities
 // ---------------------------------------------------------------------------
 
+// Returns null if the URL points to our own app (catches auto-pasted broadcast URLs).
+function sanitizeExternalUrl(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return null;
+  try {
+    const { hostname } = new URL(v);
+    if (hostname.endsWith('vechelon.ca') || hostname.endsWith('productdelivered.ca')) return null;
+  } catch { /* not a valid URL — let the field hold it as-is for display */ }
+  return v;
+}
+
 async function calculateHash(text: string): Promise<string> {
   if (!window.crypto?.subtle) return Date.now().toString(16);
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -330,7 +341,7 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
           type:            rideType,
           status:          'created',
           scheduled_start: date.toISOString(),
-          external_url:    externalUrl.trim() || null,
+          external_url:    sanitizeExternalUrl(externalUrl),
           gpx_path:        rideType === 'meetup' ? null : gpxPath,
           thumbnail_url:   thumbnailUrl,
           start_coords:    startCoords,
@@ -959,7 +970,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
         const broadcast = [
           `*${name.trim()}*`,
           `Date/Time: ${dateStr} · ${timeStr}`,
-          ...(externalUrl.trim() ? [`Route: ${externalUrl.trim()}`] : []),
+          ...(sanitizeExternalUrl(externalUrl) ? [`Route: ${sanitizeExternalUrl(externalUrl)}`] : []),
           `Meetup: ${meetupValue}`,
           `Details: ${buildRideUrl(singleRideId, 'broadcast')}`,
           '',
@@ -1285,7 +1296,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               <div>
                 <label className={labelClass}>External Link <span className="opacity-40 normal-case tracking-normal">{rideType === 'meetup' ? '(Event page / details link)' : '(Route / course link)'}</span></label>
                 <input
-                  type="url"
+                  type="text"
                   value={externalUrl}
                   onChange={e => setExternalUrl(e.target.value)}
                   placeholder="https://www.komoot.com/…"
@@ -1379,7 +1390,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
               <div>
                 <label className={labelClass}>External Link</label>
                 <input
-                  type="url"
+                  type="text"
                   value={editValues.external_url}
                   onChange={e => setEditValues(v => ({ ...v, external_url: e.target.value }))}
                   placeholder="https://www.komoot.com/…"
