@@ -748,7 +748,7 @@ function MeetupLocationPicker({ coords, initialCenter, onCoordsChange, onLabelCh
     }
   };
 
-  // Sync externally-set coords (e.g. GPX auto-populate)
+  // Sync externally-set coords (explicit user selection)
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !markerRef.current || !coords) return;
     mapRef.current.panTo(coords);
@@ -756,6 +756,13 @@ function MeetupLocationPicker({ coords, initialCenter, onCoordsChange, onLabelCh
     markerRef.current.setPosition(coords);
     markerRef.current.setVisible(true);
   }, [isMapReady, coords?.lat, coords?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pan to GPX start for visual context when no explicit coords are set
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current || !initialCenter || coords) return;
+    mapRef.current.panTo(initialCenter);
+    mapRef.current.setZoom(13);
+  }, [isMapReady, initialCenter?.lat, initialCenter?.lng, coords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-2">
