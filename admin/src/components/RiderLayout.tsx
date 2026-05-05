@@ -8,6 +8,7 @@ import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import MobileMenu from './MobileMenu';
 import ToastContainer from './ToastContainer';
 import RideDetailSideSheet from './RideDetailSideSheet';
+import VocFeedbackModal from './VocFeedbackModal';
 
 function useCurrentAvatar() {
   return useQuery<{ name: string | null; avatar_url: string | null } | null>({
@@ -43,6 +44,7 @@ const RiderLayout: React.FC = () => {
   const userTier = useAppStore((state) => state.userTier);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [isVocOpen, setIsVocOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const { data: currentUser } = useCurrentAvatar();
   const navigate = useNavigate();
@@ -86,6 +88,7 @@ const RiderLayout: React.FC = () => {
         title="RIDER PORTAL"
         currentUser={currentUser ? { name: currentUser.name, avatarUrl: currentUser.avatar_url } : null}
         onSignOut={handleSignOut}
+        onFeedback={userTier === 'affiliated' ? () => setIsVocOpen(true) : undefined}
       />
 
       {/* Pending Affiliation HUD — Tier 2 (initiated) only */}
@@ -165,6 +168,16 @@ const RiderLayout: React.FC = () => {
                     <span className="material-symbols-outlined text-base text-on-surface-variant">person</span>
                     Update Profile
                   </button>
+                  {userTier === 'affiliated' && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setIsAvatarMenuOpen(false); setIsVocOpen(true); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors border-t border-outline-variant/10"
+                    >
+                      <span className="material-symbols-outlined text-base text-on-surface-variant">feedback</span>
+                      Submit Feedback
+                    </button>
+                  )}
                   <button
                     role="menuitem"
                     onClick={() => { setIsAvatarMenuOpen(false); handleSignOut(); }}
@@ -196,6 +209,7 @@ const RiderLayout: React.FC = () => {
 
       <ToastContainer />
       <RideDetailSideSheet />
+      <VocFeedbackModal isOpen={isVocOpen} onClose={() => setIsVocOpen(false)} />
 
       {/* Global Footer */}
       <footer className="mt-20 border-t border-surface-container-low px-6 py-8">

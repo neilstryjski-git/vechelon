@@ -29,6 +29,10 @@ interface MobileMenuProps {
    * Should call supabase.auth.signOut({ scope: 'global' }) per D33.
    */
   onSignOut?: () => void;
+  /**
+   * Opens the VoC feedback modal. Only shown for affiliated riders.
+   */
+  onFeedback?: () => void;
 }
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -45,6 +49,7 @@ const MobileMenu: React.FC<MobileMenuProps> = ({
   title = 'VECHELON',
   currentUser,
   onSignOut,
+  onFeedback,
 }) => {
   const navigate = useNavigate();
   const isSignedIn = !!currentUser;
@@ -123,6 +128,15 @@ const MobileMenu: React.FC<MobileMenuProps> = ({
                     </p>
                   </div>
                 </div>
+                {onFeedback && (
+                  <button
+                    onClick={() => { onClose(); onFeedback(); }}
+                    className="w-full py-3 mb-2 rounded-lg bg-surface-container-high font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant hover:bg-surface-container-highest transition-all flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-sm">feedback</span>
+                    Submit Feedback
+                  </button>
+                )}
                 <button
                   onClick={() => { onClose(); onSignOut?.(); }}
                   disabled={!onSignOut}
