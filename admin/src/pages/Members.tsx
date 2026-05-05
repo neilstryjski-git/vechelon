@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageHeader from '../components/PageHeader';
 import { useToast } from '../store/useToast';
+import { useAppStore } from '../store/useAppStore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -396,6 +397,7 @@ const Members: React.FC = () => {
 
   const { addToast }  = useToast();
   const queryClient   = useQueryClient();
+  const currentTenantId = useAppStore((s) => s.currentTenantId);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
@@ -406,7 +408,7 @@ const Members: React.FC = () => {
   // -------------------------------------------------------------------------
 
   const { data: rows = [], isLoading } = useQuery<MemberRow[]>({
-    queryKey: ['members'],
+    queryKey: ['members', currentTenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('account_tenants')
@@ -424,24 +426,27 @@ const Members: React.FC = () => {
             emergency_contact_phone
           )
         `)
+        .eq('tenant_id', currentTenantId!)
         .not('status', 'in', '("deleted")')
         .order('joined_at', { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as unknown as MemberRow[];
     },
+    enabled: !!currentTenantId,
   });
 
   // Guest RSVPs — rows with no linked account (account_id IS NULL).
   // After D37, members also store their email on ride_participants, so the
   // account_id NULL filter is the load-bearing semantic — NOT email presence.
-  // Deduped by email, keeping the most recent RSVP. Tenant-scoped via the rides RLS join.
+  // Deduped by email, keeping the most recent RSVP. Tenant-scoped via rides join.
   const { data: rsvpd = [], isLoading: isLoadingRsvpd } = useQuery<MemberRow[]>({
-    queryKey: ['members', 'rsvpd'],
+    queryKey: ['members', 'rsvpd', currentTenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('id, display_name, email, joined_at')
+        .select('id, display_name, email, joined_at, rides!inner(tenant_id)')
+        .eq('rides.tenant_id', currentTenantId!)
         .is('account_id', null)
         .not('email', 'is', null)
         .order('joined_at', { ascending: false });
@@ -471,6 +476,7 @@ const Members: React.FC = () => {
       }
       return unique;
     },
+    enabled: !!currentTenantId,
   });
 
   // -------------------------------------------------------------------------
