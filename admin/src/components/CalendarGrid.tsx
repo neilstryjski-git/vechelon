@@ -26,28 +26,30 @@ interface CalendarRide {
 // Hooks
 // ---------------------------------------------------------------------------
 
-function useCalendarRides(year: number, month: number) {
+function useCalendarRides(year: number, month: number, tenantId: string | null) {
   const startOfMonth = new Date(year, month, 1).toISOString();
   const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
 
   return useQuery<CalendarRide[]>({
-    queryKey: ['calendar-rides', year, month],
+    queryKey: ['calendar-rides', year, month, tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
         .select('id, name, scheduled_start, status, thumbnail_url, ride_participants(count)')
+        .eq('tenant_id', tenantId!)
         .gte('scheduled_start', startOfMonth)
         .lte('scheduled_start', endOfMonth)
         .order('scheduled_start', { ascending: true });
 
       if (error) throw error;
-      
+
       return (data || []).map((r: any) => ({
         ...r,
         status: r.status as RideStatus,
         riders: (r.ride_participants as any)?.[0]?.count ?? 0
       }));
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -115,7 +117,8 @@ const CalendarGrid: React.FC = () => {
 
   const setSelectedRideId = useAppStore((state) => state.setSelectedRideId);
   const isAdmin = useAppStore((state) => state.isAdmin);
-  const { data: rides = [], isLoading } = useCalendarRides(year, month);
+  const currentTenantId = useAppStore((state) => state.currentTenantId);
+  const { data: rides = [], isLoading } = useCalendarRides(year, month, currentTenantId);
 
   const ridesForDay = (day: number) =>
     rides.filter((r) => {

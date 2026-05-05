@@ -13,13 +13,14 @@ import RideFormModal from '../components/RideFormModal';
 // Stat queries
 // ---------------------------------------------------------------------------
 
-function useActiveRides() {
+function useActiveRides(tenantId: string | null) {
   return useQuery({
-    queryKey: ['stats', 'active-rides-list'],
+    queryKey: ['stats', 'active-rides-list', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
         .select('id, name, thumbnail_url, external_url, gpx_path, ride_participants(role)')
+        .eq('tenant_id', tenantId!)
         .eq('status', 'active')
         .limit(5);
       if (error) throw error;
@@ -28,51 +29,58 @@ function useActiveRides() {
         hasCaptain: (r.ride_participants as { role: string }[] | null)?.some(p => p.role === 'captain') ?? false,
       }));
     },
+    enabled: !!tenantId,
   });
 }
 
-function useActiveRidesCount() {
+function useActiveRidesCount(tenantId: string | null) {
   return useQuery({
-    queryKey: ['stats', 'active-rides'],
+    queryKey: ['stats', 'active-rides', tenantId],
     queryFn: async () => {
       const { count, error } = await supabase
         .from('rides')
         .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId!)
         .eq('status', 'active');
       if (error) throw error;
       return count ?? 0;
     },
+    enabled: !!tenantId,
   });
 }
 
-function useUpcomingRidesCount() {
+function useUpcomingRidesCount(tenantId: string | null) {
   return useQuery({
-    queryKey: ['stats', 'upcoming-rides'],
+    queryKey: ['stats', 'upcoming-rides', tenantId],
     queryFn: async () => {
       const { count, error } = await supabase
         .from('rides')
         .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId!)
         .eq('status', 'created')
         .gt('scheduled_start', new Date().toISOString());
       if (error) throw error;
       return count ?? 0;
     },
+    enabled: !!tenantId,
   });
 }
 
-function useMemberCounts() {
+function useMemberCounts(tenantId: string | null) {
   return useQuery({
-    queryKey: ['stats', 'member-counts'],
+    queryKey: ['stats', 'member-counts', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('account_tenants')
         .select('status')
+        .eq('tenant_id', tenantId!)
         .in('status', ['affiliated', 'initiated']);
       if (error) throw error;
       const affiliated = data?.filter(r => r.status === 'affiliated').length ?? 0;
       const initiated  = data?.filter(r => r.status === 'initiated').length ?? 0;
       return { affiliated, initiated };
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -147,11 +155,12 @@ const Dashboard: React.FC = () => {
   const isAdmin           = useAppStore((state) => state.isAdmin);
   const isRideGuest       = useAppStore((state) => state.isRideGuest);
   const userTier          = useAppStore((state) => state.userTier);
-  
-  const { data: activeRidesCount, isLoading: loadingCount } = useActiveRidesCount();
-  const { data: upcomingRides,    isLoading: loadingUpcoming } = useUpcomingRidesCount();
-  const { data: memberCounts,     isLoading: loadingMembers } = useMemberCounts();
-  const { data: activeRidesList } = useActiveRides();
+  const currentTenantId   = useAppStore((state) => state.currentTenantId);
+
+  const { data: activeRidesCount, isLoading: loadingCount } = useActiveRidesCount(currentTenantId);
+  const { data: upcomingRides,    isLoading: loadingUpcoming } = useUpcomingRidesCount(currentTenantId);
+  const { data: memberCounts,     isLoading: loadingMembers } = useMemberCounts(currentTenantId);
+  const { data: activeRidesList } = useActiveRides(currentTenantId);
 
   const [isCreateRideOpen, setIsCreateRideOpen] = useState(false);
 

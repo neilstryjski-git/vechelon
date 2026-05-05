@@ -14,13 +14,14 @@ interface RideRow {
   status: string;
 }
 
-function useNextRide(enabled: boolean) {
+function useNextRide(enabled: boolean, tenantId: string | null) {
   return useQuery<RideRow | null>({
-    queryKey: ['next-ride'],
+    queryKey: ['next-ride', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
         .select('id, name, scheduled_start, start_label, thumbnail_url, status')
+        .eq('tenant_id', tenantId!)
         .gte('scheduled_start', new Date().toISOString())
         .in('status', ['created', 'active'])
         .order('scheduled_start', { ascending: true })
@@ -29,19 +30,20 @@ function useNextRide(enabled: boolean) {
       if (error) throw error;
       return data;
     },
-    enabled,
+    enabled: enabled && !!tenantId,
   });
 }
 
-function useUpcomingRides(enabled: boolean) {
+function useUpcomingRides(enabled: boolean, tenantId: string | null) {
   const thirtyDaysOut = new Date();
   thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
   return useQuery<RideRow[]>({
-    queryKey: ['upcoming-rides'],
+    queryKey: ['upcoming-rides', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
         .select('id, name, scheduled_start, start_label, thumbnail_url, status')
+        .eq('tenant_id', tenantId!)
         .gte('scheduled_start', new Date().toISOString())
         .lte('scheduled_start', thirtyDaysOut.toISOString())
         .eq('status', 'created')
@@ -49,7 +51,7 @@ function useUpcomingRides(enabled: boolean) {
       if (error) throw error;
       return data ?? [];
     },
-    enabled,
+    enabled: enabled && !!tenantId,
   });
 }
 
@@ -85,6 +87,7 @@ const RiderHome: React.FC = () => {
   const userTier = useAppStore((s) => s.userTier);
   const joinRide = useAppStore((s) => s.joinRide);
   const setSelectedRideId = useAppStore((s) => s.setSelectedRideId);
+  const currentTenantId = useAppStore((s) => s.currentTenantId);
 
   const tenant = queryClient.getQueryData<{ name?: string; logo_url?: string }>(['tenant-config']);
 
@@ -93,10 +96,10 @@ const RiderHome: React.FC = () => {
   const isAffiliated = userTier === 'affiliated';
 
   // Initiated: single next ride
-  const { data: nextRide, isLoading: nextRideLoading } = useNextRide(isInitiated);
+  const { data: nextRide, isLoading: nextRideLoading } = useNextRide(isInitiated, currentTenantId);
 
   // Affiliated: scrollable upcoming list (next 30 days, created only)
-  const { data: upcomingRides = [], isLoading: upcomingLoading } = useUpcomingRides(isAffiliated);
+  const { data: upcomingRides = [], isLoading: upcomingLoading } = useUpcomingRides(isAffiliated, currentTenantId);
   const rideIds = upcomingRides.map(r => r.id);
   const { data: myParticipations = new Set<string>() } = useMyParticipations(rideIds);
 
