@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { useAppStore } from '../../store/useAppStore';
 
 interface MemberRow {
   id: string;
@@ -8,17 +9,22 @@ interface MemberRow {
   avatar_url: string | null;
 }
 
-function useMemberDirectory() {
+function useMemberDirectory(tenantId: string | null) {
   return useQuery<MemberRow[]>({
-    queryKey: ['rider-member-directory'],
+    queryKey: ['rider-member-directory', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('accounts')
-        .select('id, name, avatar_url')
-        .order('name', { ascending: true });
+        .from('account_tenants')
+        .select('accounts(id, name, avatar_url)')
+        .eq('tenant_id', tenantId!)
+        .in('status', ['affiliated', 'initiated'])
+        .order('joined_at', { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? [])
+        .map((r: any) => r.accounts as MemberRow | null)
+        .filter((a): a is MemberRow => !!a);
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -48,7 +54,8 @@ function MemberAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | n
 }
 
 const MemberDirectory: React.FC = () => {
-  const { data: members, isLoading, isError } = useMemberDirectory();
+  const currentTenantId = useAppStore((s) => s.currentTenantId);
+  const { data: members, isLoading, isError } = useMemberDirectory(currentTenantId);
 
   return (
     <div className="space-y-8">
