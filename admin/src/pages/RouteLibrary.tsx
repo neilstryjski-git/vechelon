@@ -43,17 +43,19 @@ async function calculateHash(text: string): Promise<string> {
 // Hooks
 // ---------------------------------------------------------------------------
 
-function useRoutes() {
+function useRoutes(tenantId: string | null) {
   return useQuery<RouteRow[]>({
-    queryKey: ['route-library'],
+    queryKey: ['route-library', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('route_library')
         .select('id, name, file_path, distance_km, elevation_gain_m, external_url, thumbnail_url, file_hash, created_at')
+        .eq('tenant_id', tenantId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -382,7 +384,8 @@ function UploadForm({ onUpload }: { onUpload: (file: File, name: string, externa
 }
 
 const RouteLibrary: React.FC = () => {
-  const { data: routes = [], isLoading }               = useRoutes();
+  const currentTenantId = useAppStore((state) => state.currentTenantId);
+  const { data: routes = [], isLoading }               = useRoutes(currentTenantId);
   const { mutate: upload, isPending }                  = useUploadRoute();
   const { mutate: deleteRoute }                        = useDeleteRoute();
   const isAdmin = useAppStore((state) => state.isAdmin);
