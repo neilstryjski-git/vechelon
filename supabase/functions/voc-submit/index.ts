@@ -48,25 +48,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { data: membership } = await adminClient
+    const { data: memberships } = await adminClient
       .from('account_tenants')
       .select('status, tenant_id')
       .eq('account_id', user.id)
       .eq('status', 'affiliated')
-      .maybeSingle()
+      .limit(1)
+
+    const membership = memberships?.[0] ?? null
 
     if (!membership) {
-      // Platform admins have no account_tenants row but should still be able
-      // to submit feedback. Fall back to checking platform_admin flag.
-      const { data: account } = await adminClient
-        .from('accounts')
-        .select('platform_admin')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (!account?.platform_admin) {
-        return json({ error: 'Affiliation required to submit feedback' }, 403)
-      }
+      return json({ error: 'Affiliation required to submit feedback' }, 403)
     }
 
     // ── 3. Rate limit ───────────────────────────────────────────────────────
