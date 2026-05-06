@@ -105,16 +105,13 @@ serve(async (req) => {
 
     const clubLabel = tenant?.slug ? `club:${tenant.slug}` : null
 
-    // ── 6. Fetch GitHub PAT from Vault ──────────────────────────────────────
-    const { data: vaultRow } = await adminClient
-      .schema('vault')
-      .from('decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('name', 'github_voc_pat')
-      .maybeSingle()
+    // ── 6. Fetch GitHub PAT from Vault via SECURITY DEFINER helper ─────────
+    // vault schema is not exposed via PostgREST — schema('vault').from() fails.
+    const { data: ghPat, error: ghPatError } = await adminClient
+      .rpc('get_github_voc_pat')
 
-    if (!vaultRow?.decrypted_secret) {
-      console.error('[voc-submit] github_voc_pat not found in vault')
+    if (ghPatError || !ghPat) {
+      console.error('[voc-submit] github_voc_pat not found in vault', ghPatError)
       return json({ error: 'Something went wrong, please try again' }, 500)
     }
 
@@ -136,7 +133,7 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           Accept: 'application/vnd.github.v3+json',
-          Authorization: `Bearer ${vaultRow.decrypted_secret}`,
+          Authorization: `Bearer ${ghPat}`,
           'Content-Type': 'application/json',
           'User-Agent': 'vechelon-voc-submit/1.0',
         },

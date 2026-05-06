@@ -44,26 +44,23 @@ serve(async (req) => {
       )
     }
 
-    // Fetch Vault secret via service role
+    // Fetch Vault secret via SECURITY DEFINER helper (vault schema is not
+    // exposed via PostgREST — schema('vault').from() returns PGRST106).
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
-    const { data: vaultRow, error: vaultError } = await adminClient
-      .schema('vault')
-      .from('decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('name', 'rider_hash_secret')
-      .maybeSingle()
+    const { data: secret, error: secretError } = await adminClient
+      .rpc('get_rider_hash_secret')
 
-    if (vaultError || !vaultRow?.decrypted_secret) {
+    if (secretError || !secret) {
       throw new Error('rider_hash_secret not configured')
     }
 
     const enc = new TextEncoder()
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
-      enc.encode(vaultRow.decrypted_secret),
+      enc.encode(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
