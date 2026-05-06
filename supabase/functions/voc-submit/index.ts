@@ -56,7 +56,17 @@ serve(async (req) => {
       .maybeSingle()
 
     if (!membership) {
-      return json({ error: 'Affiliation required to submit feedback' }, 403)
+      // Platform admins have no account_tenants row but should still be able
+      // to submit feedback. Fall back to checking platform_admin flag.
+      const { data: account } = await adminClient
+        .from('accounts')
+        .select('platform_admin')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (!account?.platform_admin) {
+        return json({ error: 'Affiliation required to submit feedback' }, 403)
+      }
     }
 
     // ── 3. Rate limit ───────────────────────────────────────────────────────
