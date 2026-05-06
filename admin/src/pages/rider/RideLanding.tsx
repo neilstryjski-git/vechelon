@@ -309,13 +309,19 @@ const RideLanding: React.FC = () => {
           riderType: tier === 'affiliated' ? 'member' : 'guest',
         });
       }
-      // Fire-and-forget magic link so guest can confirm email and link history.
-      // Redirect back to the same ride URL so clicking the link lands them here
-      // authenticated, triggering ensure_account_exists history conversion.
+      // Fire-and-forget magic link via send-magic-link EF so the OTP is wrapped
+      // in the ?c= click-through (D32 / D40). Click-through lands on /auth which
+      // exchanges the code, runs ensure_account_exists, then forwards to the
+      // ride URL preserved in redirectTo.
+      // redirectTo is path+search only so React Router's navigate() treats it
+      // as in-app routing (full URLs break navigate()).
       if (emailOverride) {
-        void supabase.auth.signInWithOtp({
-          email: emailOverride,
-          options: { emailRedirectTo: window.location.href },
+        const ridePath = window.location.pathname + window.location.search;
+        const authRedirect = `${window.location.origin}/auth?redirectTo=${encodeURIComponent(ridePath)}`;
+        void supabase.functions.invoke('send-magic-link', {
+          body: { email: emailOverride, redirectTo: authRedirect },
+        }).catch((err) => {
+          console.warn('[RideLanding] Magic link send failed:', err);
         });
       }
     } catch (e: any) {
@@ -356,11 +362,26 @@ const RideLanding: React.FC = () => {
     if (!magicEmail.trim()) return;
     setIsSendingMagicLink(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: magicEmail.trim().toLowerCase(),
-        options: { emailRedirectTo: window.location.href },
+      // Route through send-magic-link EF for the ?c= click-through wrapper
+      // (D32 / D40). Click-through lands on /auth which exchanges the code,
+      // runs ensure_account_exists, then forwards to the ride URL.
+      // redirectTo is path+search only so React Router's navigate() treats it
+      // as in-app routing.
+      const ridePath = window.location.pathname + window.location.search;
+      const authRedirect = `${window.location.origin}/auth?redirectTo=${encodeURIComponent(ridePath)}`;
+      const { data, error } = await supabase.functions.invoke('send-magic-link', {
+        body: { email: magicEmail.trim().toLowerCase(), redirectTo: authRedirect },
       });
-      if (error) throw error;
+      if (error) {
+        // Try to extract a structured error message from the EF response body
+        let msg = error.message;
+        try {
+          const body = await (error as { context?: Response }).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
       setMagicSent(true);
     } catch (e: any) {
       addToast(`Could not send link: ${e.message}`, 'error');

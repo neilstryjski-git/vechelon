@@ -58,8 +58,18 @@ const AuthPage: React.FC = () => {
 
     const finishSession = (_session: unknown) => {
       console.log('[Auth] Session active. Ensuring account and redirecting to:', redirectTo);
-      const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
-      supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
+      const { sessionCookieId, setIsRideGuest, currentTenantId } = useAppStore.getState();
+      if (!currentTenantId) {
+        // No tenant context (e.g., admin.vechelon.ca, or fresh-load race). Skip
+        // membership creation — caller can re-trigger from a tenant subdomain.
+        setIsRideGuest(false);
+        navigate(redirectTo, { replace: true });
+        return;
+      }
+      supabase.rpc('ensure_account_exists', {
+        p_session_cookie_id: sessionCookieId,
+        p_tenant_id: currentTenantId,
+      })
         .then(() => {
           setIsRideGuest(false);
           queryClient.invalidateQueries({ queryKey: ['my-profile'] });
@@ -116,8 +126,16 @@ const AuthPage: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[Auth] onAuthStateChange:', event, 'stage:', stage);
       if (event === 'SIGNED_IN' && session && stage !== 'verifying') {
-        const { sessionCookieId, setIsRideGuest } = useAppStore.getState();
-        supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId }).then(() => {
+        const { sessionCookieId, setIsRideGuest, currentTenantId } = useAppStore.getState();
+        if (!currentTenantId) {
+          setIsRideGuest(false);
+          navigate(redirectTo, { replace: true });
+          return;
+        }
+        supabase.rpc('ensure_account_exists', {
+          p_session_cookie_id: sessionCookieId,
+          p_tenant_id: currentTenantId,
+        }).then(() => {
           setIsRideGuest(false);
           navigate(redirectTo, { replace: true });
         });
@@ -131,8 +149,16 @@ const AuthPage: React.FC = () => {
     if (stage === 'idle' && !window.location.hash.includes('access_token=')) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session) return;
-        const { sessionCookieId } = useAppStore.getState();
-        supabase.rpc('ensure_account_exists', { p_session_cookie_id: sessionCookieId })
+        const { sessionCookieId, currentTenantId } = useAppStore.getState();
+        if (!currentTenantId) {
+          // No tenant context — no membership to ensure. Just navigate.
+          navigate(redirectTo, { replace: true });
+          return;
+        }
+        supabase.rpc('ensure_account_exists', {
+          p_session_cookie_id: sessionCookieId,
+          p_tenant_id: currentTenantId,
+        })
           .then(() => {
             queryClient.invalidateQueries({ queryKey: ['my-profile'] });
             queryClient.invalidateQueries({ queryKey: ['user-tier'] });
