@@ -163,6 +163,21 @@ const RideLanding: React.FC = () => {
   );
   const isSocialSource = source === 'social';
 
+  // For ?source=social: resolve session state before showing the magic-link
+  // form so signed-in users (whose userTier starts as 'guest' before
+  // useTierDetection resolves) are not shown the form at all — tier detection
+  // will update their tier and fire the affiliated redirect instead.
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+
+  React.useEffect(() => {
+    if (!isSocialSource) { setSessionChecked(true); return; }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session);
+      setSessionChecked(true);
+    });
+  }, [isSocialSource]);
+
   const [isJoining, setIsJoining] = useState(false);
   const [rsvpDone, setRsvpDone] = useState(false);
   const [guestName, setGuestName] = useState('');
@@ -635,8 +650,8 @@ const RideLanding: React.FC = () => {
             <div className="pt-2 border-t border-outline-variant/10">
               {isGuest && (
                 !participation ? (
-                  isSocialSource ? (
-                    /* Social share path: require magic-link auth before RSVP */
+                  isSocialSource && sessionChecked && !hasSession ? (
+                    /* Social share path: confirmed no session — show magic-link form */
                     <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
                       {magicSent ? (
                         <div className="space-y-3 text-center">
