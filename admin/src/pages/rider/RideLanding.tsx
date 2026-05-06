@@ -284,9 +284,7 @@ const RideLanding: React.FC = () => {
         'success',
       );
       queryClient.invalidateQueries({ queryKey: ['my-participation', ride.id] });
-      // W131 / IA-S0-03: portal_rsvp fires after a successful RSVP. rider_type
-      // is 'member' for affiliated, 'guest' for everyone else. Session ref hash
-      // (if present) carries through automatically via attributionFromSession.
+      // W131 / IA-S0-03: portal_rsvp fires after a successful RSVP.
       const tenantId = useAppStore.getState().currentTenantId;
       const tier = useAppStore.getState().userTier;
       if (tenantId) {
@@ -294,6 +292,15 @@ const RideLanding: React.FC = () => {
           tenantId,
           rideId: ride.id,
           riderType: tier === 'affiliated' ? 'member' : 'guest',
+        });
+      }
+      // Fire-and-forget magic link so guest can confirm email and link history.
+      // Redirect back to the same ride URL so clicking the link lands them here
+      // authenticated, triggering ensure_account_exists history conversion.
+      if (emailOverride) {
+        void supabase.auth.signInWithOtp({
+          email: emailOverride,
+          options: { emailRedirectTo: window.location.href },
         });
       }
     } catch (e: any) {
@@ -701,17 +708,23 @@ const RideLanding: React.FC = () => {
                           </span>
                           {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
                         </button>
-                        <div className="pt-2 text-center">
-                          <button
-                            onClick={() => {
-                              const baseUrl = window.location.origin + window.location.pathname;
-                              navigate(`/auth?redirectTo=${encodeURIComponent(baseUrl)}`);
-                            }}
-                            className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
-                          >
-                            Already an operator? <span className="font-bold underline">Sign in</span>
-                          </button>
-                        </div>
+                        {rsvpDone && guestEmail.trim() ? (
+                          <p className="pt-2 text-center font-label text-[9px] uppercase tracking-widest text-on-surface-variant">
+                            Check your email to link your history
+                          </p>
+                        ) : (
+                          <div className="pt-2 text-center">
+                            <button
+                              onClick={() => {
+                                const baseUrl = window.location.origin + window.location.pathname;
+                                navigate(`/auth?redirectTo=${encodeURIComponent(baseUrl)}`);
+                              }}
+                              className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
+                            >
+                              Already an operator? <span className="font-bold underline">Sign in</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
