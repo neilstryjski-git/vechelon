@@ -9,6 +9,7 @@ import MobileMenu from './MobileMenu';
 import RideDetailSideSheet from './RideDetailSideSheet';
 import ParticipantDetailSheet from './ParticipantDetailSheet';
 import ToastContainer from './ToastContainer';
+import VocFeedbackModal from './VocFeedbackModal';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `pb-1 border-b-2 transition-colors duration-200 ${
@@ -46,6 +47,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [isVocOpen, setIsVocOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
 
@@ -203,6 +205,14 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
                   </button>
                   <button
                     role="menuitem"
+                    onClick={() => { setIsAvatarMenuOpen(false); setIsVocOpen(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors border-t border-outline-variant/10"
+                  >
+                    <span className="material-symbols-outlined text-base text-on-surface-variant">feedback</span>
+                    Submit Feedback
+                  </button>
+                  <button
+                    role="menuitem"
                     onClick={() => { setIsAvatarMenuOpen(false); handleSignOut(); }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors border-t border-outline-variant/10"
                   >
@@ -222,6 +232,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
         <Outlet />
       </main>
 
+      <VocFeedbackModal isOpen={isVocOpen} onClose={() => setIsVocOpen(false)} />
       <RideDetailSideSheet />
       <ParticipantDetailSheet />
       <ToastContainer />
