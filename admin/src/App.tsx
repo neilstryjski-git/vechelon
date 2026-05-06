@@ -22,6 +22,7 @@ import { extractSlug } from './lib/extractSlug';
 import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
+import PlatformAdminApp from './pages/PlatformAdminApp';
 
 // W140: store now initializes currentTenantId to null. The AdaptiveLayout
 // effect and the broadcast_copy guard short-circuit on null, so no placeholder
@@ -150,6 +151,13 @@ function AppContent() {
   // those contexts render ClubNotFound (no fallback to "first tenant").
   const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
 
+  // W129: admin.vechelon.ca is the Platform Admin surface. Short-circuit
+  // here before slug===null falls through to ClubNotFound.
+  const isAdminHost = React.useMemo(
+    () => window.location.hostname === 'admin.vechelon.ca' || window.location.hostname.startsWith('admin.'),
+    []
+  );
+
   const { data: tenant, error: tenantError, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant-config', slug],
     enabled: slug !== null,
@@ -219,6 +227,10 @@ function AppContent() {
         }
       : null
   );
+
+  if (isAdminHost) {
+    return <PlatformAdminApp />;
+  }
 
   if (slug === null) {
     return <ClubNotFound />;

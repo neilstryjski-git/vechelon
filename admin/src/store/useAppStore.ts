@@ -28,7 +28,7 @@ interface AppState {
   qrMarkUrl: string | null;
   isSidebarOpen: boolean;
   sessionCookieId: string | null;
-  
+
   // Tactical & Auth State (Non-Persisted)
   isOnline: boolean;
   isPriorityMode: boolean;
@@ -41,6 +41,10 @@ interface AppState {
   selectedRideId: string | null;
   selectedParticipantId: string | null;
   rideSheetVisible: boolean;
+
+  // Platform Admin State (Non-Persisted)
+  isPlatformAdmin: boolean;
+  selectedPlatformTenantId: string | null;
 
   // Actions
   setTenantId: (id: string | null) => void;
@@ -59,6 +63,8 @@ interface AppState {
   endRide: (rideId: string) => Promise<{ summary: string; weather: any }>;
   addActiveBeacon: (participantId: string) => void;
   removeActiveBeacon: (participantId: string) => void;
+  setPlatformAdmin: (flag: boolean) => void;
+  setSelectedPlatformTenantId: (id: string | null) => void;
 }
 
 /**
@@ -86,6 +92,8 @@ export const useAppStore = create<AppState>()(
       selectedRideId: null,
       selectedParticipantId: null,
       rideSheetVisible: false,
+      isPlatformAdmin: false,
+      selectedPlatformTenantId: null,
 
       setTenantId: (id) => set({ currentTenantId: id }),
       setQrMarkUrl: (url) => set({ qrMarkUrl: url }),
@@ -281,11 +289,14 @@ export const useAppStore = create<AppState>()(
         const next = [...new Set([...state.activeBeacons, id])];
         return { activeBeacons: next, isPriorityMode: next.length > 0 };
       }),
-      
+
       removeActiveBeacon: (id) => set((state) => {
         const next = state.activeBeacons.filter(bid => bid !== id);
         return { activeBeacons: next, isPriorityMode: next.length > 0 };
       }),
+
+      setPlatformAdmin: (flag) => set({ isPlatformAdmin: flag }),
+      setSelectedPlatformTenantId: (id) => set({ selectedPlatformTenantId: id }),
 
       updateCachedParticipants: (rideId, participants) => 
         set((state) => ({
