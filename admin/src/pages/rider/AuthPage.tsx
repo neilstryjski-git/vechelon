@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { extractSlug } from '../../lib/extractSlug';
@@ -16,7 +16,24 @@ const AuthPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
-  const tenant = queryClient.getQueryData<{ name?: string, logo_url?: string, qr_mark_url?: string }>(['tenant-config', slug]);
+
+  // Subscribe to the same query key App.tsx uses — React Query deduplicates the
+  // network request, but this subscription ensures we re-render when data arrives
+  // (getQueryData is a one-shot synchronous read and won't trigger a re-render).
+  const { data: tenant } = useQuery<{ name?: string; logo_url?: string; qr_mark_url?: string; banner_url?: string } | null>({
+    queryKey: ['tenant-config', slug],
+    queryFn: async () => {
+      if (!slug) return null;
+      const { data } = await supabase
+        .from('tenants')
+        .select('name, logo_url, qr_mark_url, banner_url')
+        .eq('slug', slug)
+        .maybeSingle();
+      return data;
+    },
+    enabled: slug !== null,
+    staleTime: 1000 * 60 * 5,
+  });
 
   // Contextual Deep-Linking: Capture where the user wanted to go
   const redirectTo = searchParams.get('redirectTo') || '/';
@@ -197,10 +214,20 @@ const AuthPage: React.FC = () => {
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">
 
       {/* Club mark - Dynamic Branding */}
-      <div className="mb-12 text-center animate-in slide-in-from-top-4 duration-700">
-        {tenant ? (
+      <div className="mb-12 text-center animate-in slide-in-from-top-4 duration-700 w-full max-w-sm">
+        {tenant?.banner_url ? (
           <>
-            {/* Club-specific branding */}
+            <img
+              src={tenant.banner_url}
+              alt={tenant.name ?? 'Club banner'}
+              className="w-full rounded-2xl object-cover mb-6 shadow-ambient"
+            />
+            <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background uppercase">
+              VECHELON
+            </h1>
+          </>
+        ) : tenant ? (
+          <>
             {tenant.logo_url ? (
               <img src={tenant.logo_url} alt={tenant.name} className="h-16 w-auto object-contain mx-auto mb-6 mix-blend-multiply" />
             ) : (
@@ -208,7 +235,6 @@ const AuthPage: React.FC = () => {
                 {tenant.name}
               </p>
             )}
-            {/* Vechelon wordmark below */}
             <h1 className="font-headline font-extrabold text-4xl tracking-tighter italic text-on-background uppercase">
               VECHELON
             </h1>
