@@ -89,7 +89,7 @@ const RiderHome: React.FC = () => {
   const setSelectedRideId = useAppStore((s) => s.setSelectedRideId);
   const currentTenantId = useAppStore((s) => s.currentTenantId);
 
-  const tenant = queryClient.getQueryData<{ name?: string; logo_url?: string }>(['tenant-config']);
+  const tenant = queryClient.getQueryData<{ name?: string; logo_url?: string; banner_url?: string }>(['tenant-config']);
 
   const isGuest = userTier === 'guest';
   const isInitiated = userTier === 'initiated';
@@ -142,6 +142,13 @@ const RiderHome: React.FC = () => {
 
       {/* Hero */}
       <section className="text-center space-y-4 pt-8">
+        {tenant?.banner_url && (
+          <img
+            src={tenant.banner_url}
+            alt={tenant.name ?? 'Club banner'}
+            className="w-full max-w-lg mx-auto rounded-2xl object-cover shadow-ambient mb-2"
+          />
+        )}
         <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant">
           Welcome to the Portal
         </p>
