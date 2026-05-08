@@ -144,24 +144,20 @@ function TenantCard({ tenant }: TenantCardProps) {
         </div>
       </div>
 
-      {/* Role-gated write control: "Open Portal" only when account_tenants role=admin */}
       <div className="mt-auto flex flex-col gap-2">
-        {isClubAdmin ? (
-          <a
-            href={`https://${tenant.slug}.vechelon.ca`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-brand-primary/10 text-brand-primary font-label text-[10px] uppercase tracking-widest border border-brand-primary/20 hover:bg-brand-primary/20 transition-colors"
-          >
-            <span className="material-symbols-outlined text-sm">open_in_new</span>
-            Open Club Portal
-          </a>
-        ) : (
-          <div className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-surface-container-high text-on-surface-variant/40 font-label text-[10px] uppercase tracking-widest border border-outline-variant/10 cursor-not-allowed">
-            <span className="material-symbols-outlined text-sm">lock</span>
-            Read-only — no admin record
-          </div>
-        )}
+        <a
+          href={`https://${tenant.slug}.vechelon.ca`}
+          target="_blank"
+          rel="noreferrer"
+          className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-label text-[10px] uppercase tracking-widest border transition-colors ${
+            isClubAdmin
+              ? 'bg-brand-primary/10 text-brand-primary border-brand-primary/20 hover:bg-brand-primary/20'
+              : 'bg-surface-container-low text-on-surface-variant border-outline-variant/20 hover:bg-surface-container'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">open_in_new</span>
+          {isClubAdmin ? 'Open Club Portal' : 'View Club Portal'}
+        </a>
         <Link
           to={`/clubs/${tenant.id}/provisioning`}
           className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-surface-container-low text-on-surface-variant font-label text-[9px] uppercase tracking-widest border border-outline-variant/20 hover:bg-surface-container transition-colors"
