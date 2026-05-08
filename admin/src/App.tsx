@@ -208,6 +208,12 @@ function AppContent() {
   const isNoTenantContext = slug === null || (!tenantLoading && !tenant);
 
   React.useEffect(() => {
+    if (isAdminHost) {
+      document.title = 'Vechelon Platform Admin';
+      const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+      if (link) link.href = '/portal/vechelon-halfchainring.svg';
+      return;
+    }
     if (tenant?.name) {
       document.title = tenant.name;
     } else if (isNoTenantContext) {
@@ -217,7 +223,7 @@ function AppContent() {
     if (link) {
       link.href = tenant?.qr_mark_url ?? tenant?.logo_url ?? '/portal/favicon.svg';
     }
-  }, [tenant?.name, tenant?.logo_url, tenant?.qr_mark_url, isNoTenantContext]);
+  }, [isAdminHost, tenant?.name, tenant?.logo_url, tenant?.qr_mark_url, isNoTenantContext]);
 
   const setTenantId = useAppStore((s) => s.setTenantId);
   const setQrMarkUrl = useAppStore((s) => s.setQrMarkUrl);
