@@ -16,6 +16,7 @@ import MemberDirectory from './pages/rider/MemberDirectory';
 import CalendarGrid from './components/CalendarGrid';
 import { useBranding } from './hooks/useBranding';
 import { useTierDetection } from './hooks/useTierDetection';
+import { usePlatformAdminCheck } from './hooks/usePlatformAdminCheck';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
 import { extractSlug } from './lib/extractSlug';
@@ -93,23 +94,27 @@ function ClubSettings() {
 /** Renders Dashboard for admins, RiderHome for everyone else. */
 function SmartHome() {
   const isAdmin = useAppStore((s) => s.isAdmin);
-  return isAdmin ? <Dashboard /> : <RiderHome />;
+  const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
+  return (isAdmin || isPlatformAdmin) ? <Dashboard /> : <RiderHome />;
 }
 
 /** Renders full admin Members page for admins, rider-safe MemberDirectory for riders. */
 function SmartMembers() {
   const isAdmin = useAppStore((s) => s.isAdmin);
-  return isAdmin ? <Members /> : <MemberDirectory />;
+  const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
+  return (isAdmin || isPlatformAdmin) ? <Members /> : <MemberDirectory />;
 }
 
 /**
  * Adaptive UI Switcher.
  * Returns the Admin Sidebar layout or Rider Top-Nav layout based on role.
- * Fulfills the "Responsive Entry Point" requirement.
+ * Platform admins always get the admin layout regardless of account_tenants role.
  */
 function AdaptiveLayout({ tenant }: { tenant: any }) {
   useTierDetection();
+  usePlatformAdminCheck();
   const isAdmin = useAppStore((s) => s.isAdmin);
+  const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
   const userTier = useAppStore((s) => s.userTier);
   const currentTenantId = useAppStore((s) => s.currentTenantId);
 
@@ -137,7 +142,7 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
     };
   }, [currentTenantId, userTier]);
 
-  if (isAdmin) {
+  if (isAdmin || isPlatformAdmin) {
     return <Layout tenant={tenant || {}} />;
   }
 
