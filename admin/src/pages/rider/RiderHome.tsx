@@ -89,7 +89,7 @@ const RiderHome: React.FC = () => {
   const setSelectedRideId = useAppStore((s) => s.setSelectedRideId);
   const currentTenantId = useAppStore((s) => s.currentTenantId);
 
-  const tenant = queryClient.getQueryData<{ name?: string; logo_url?: string; banner_url?: string }>(['tenant-config']);
+  const tenant = queryClient.getQueryData<{ name?: string; logo_url?: string; qr_mark_url?: string; banner_url?: string }>(['tenant-config']);
 
   const isGuest = userTier === 'guest';
   const isInitiated = userTier === 'initiated';
@@ -149,12 +149,14 @@ const RiderHome: React.FC = () => {
             className="w-full max-w-lg mx-auto rounded-2xl object-cover shadow-ambient mb-2"
           />
         )}
-        <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant">
-          Welcome to the Portal
-        </p>
         <h1 className="font-headline font-extrabold text-5xl md:text-7xl tracking-tighter italic text-on-background uppercase">
-          {tenant?.name || 'VECHELON'}
+          VECHELON
         </h1>
+        {tenant?.name && (
+          <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant">
+            {tenant.name}
+          </p>
+        )}
         <p className="font-body text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
           Tactical command for the {tenant?.name || 'club'} peloton. Coordinate rides, track your history, and stay mission-ready.
         </p>
@@ -317,8 +319,16 @@ const RiderHome: React.FC = () => {
         <section className="max-w-lg mx-auto">
           <div className="bg-surface-container-low rounded-2xl p-8 space-y-6 border border-outline-variant/10">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-primary text-xl">group</span>
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                {(tenant?.qr_mark_url || tenant?.logo_url) ? (
+                  <img
+                    src={tenant.qr_mark_url ?? tenant.logo_url!}
+                    alt={tenant?.name ?? 'Club'}
+                    className="w-8 h-8 object-contain"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined text-primary text-xl">group</span>
+                )}
               </div>
               <div>
                 <h3 className="font-headline font-bold text-lg text-on-background">Join the Club</h3>
