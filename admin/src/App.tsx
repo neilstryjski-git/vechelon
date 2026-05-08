@@ -112,7 +112,7 @@ function SmartMembers() {
  */
 function AdaptiveLayout({ tenant }: { tenant: any }) {
   useTierDetection();
-  usePlatformAdminCheck();
+  const { isLoading: paLoading } = usePlatformAdminCheck();
   const isAdmin = useAppStore((s) => s.isAdmin);
   const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
   const userTier = useAppStore((s) => s.userTier);
@@ -141,6 +141,16 @@ function AdaptiveLayout({ tenant }: { tenant: any }) {
       cancelled = true;
     };
   }, [currentTenantId, userTier]);
+
+  // Wait for platform admin check before committing to a layout — prevents
+  // non-affiliated platform admins from briefly seeing the initiated HUD.
+  if (paLoading) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <span className="material-symbols-outlined text-4xl animate-spin text-on-surface-variant/20">sync</span>
+      </div>
+    );
+  }
 
   if (isAdmin || isPlatformAdmin) {
     return <Layout tenant={tenant || {}} />;
