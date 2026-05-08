@@ -121,6 +121,95 @@ function AdminStep({ tenantId, hasAdmin }: { tenantId: string; hasAdmin: boolean
 // Step 2 — Branding
 // ---------------------------------------------------------------------------
 
+async function uploadAsset(tenantId: string, slot: 'logo' | 'qr-mark', file: File): Promise<string> {
+  const ext = file.name.split('.').pop() ?? 'png';
+  const path = `${tenantId}/${slot}.${ext}`;
+  const { error } = await supabase.storage
+    .from('tenant-assets')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from('tenant-assets').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function ImageField({
+  label,
+  url,
+  onUrl,
+  slot,
+  tenantId,
+  onUploading,
+}: {
+  label: string;
+  url: string;
+  onUrl: (u: string) => void;
+  slot: 'logo' | 'qr-mark';
+  tenantId: string;
+  onUploading: (v: boolean) => void;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [localErr, setLocalErr] = useState('');
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLocalErr('');
+    setUploading(true);
+    onUploading(true);
+    try {
+      const publicUrl = await uploadAsset(tenantId, slot, file);
+      onUrl(publicUrl);
+    } catch (err: any) {
+      setLocalErr(err.message);
+    } finally {
+      setUploading(false);
+      onUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div>
+      <label className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-1.5">{label}</label>
+      <div className="flex items-center gap-2">
+        {url && (
+          <img src={url} alt={label} className="h-10 w-auto max-w-[80px] object-contain rounded border border-outline-variant/20 flex-shrink-0" />
+        )}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30 font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:border-brand-primary/40 transition-colors disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-sm">{uploading ? 'hourglass_top' : 'upload'}</span>
+          {uploading ? 'Uploading…' : url ? 'Replace' : 'Choose file'}
+        </button>
+        {url && (
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => onUrl(e.target.value)}
+            placeholder="or paste URL"
+            className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 font-mono text-[10px] text-on-surface-variant/70 placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+          />
+        )}
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} />
+      </div>
+      {!url && (
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => onUrl(e.target.value)}
+          placeholder="or paste a URL"
+          className="mt-1.5 w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
+        />
+      )}
+      {localErr && <p className="font-label text-[9px] text-error uppercase tracking-wide mt-1">{localErr}</p>}
+    </div>
+  );
+}
+
 function BrandingStep({ tenant, onSaved }: { tenant: Tenant; onSaved: () => void }) {
   const isDone = !!tenant.logo_url;
   const [editing, setEditing] = useState(!isDone);
@@ -129,6 +218,7 @@ function BrandingStep({ tenant, onSaved }: { tenant: Tenant; onSaved: () => void
   const [logoUrl, setLogoUrl] = useState(tenant.logo_url ?? '');
   const [qrMarkUrl, setQrMarkUrl] = useState(tenant.qr_mark_url ?? '');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState('');
 
   const save = async () => {
@@ -171,7 +261,7 @@ function BrandingStep({ tenant, onSaved }: { tenant: Tenant; onSaved: () => void
   return (
     <div className="space-y-4">
       <p className="font-body text-sm text-on-surface-variant/70">
-        Set brand colours and logo URLs. Sr PM supplies final assets per VMT-D-36. Leave URL fields blank to keep defaults.
+        Set brand colours and upload logo assets. Files are stored in Supabase Storage.
       </p>
 
       <div className="grid grid-cols-2 gap-4">
@@ -193,24 +283,14 @@ function BrandingStep({ tenant, onSaved }: { tenant: Tenant; onSaved: () => void
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div>
-          <label className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-1.5">Logo URL</label>
-          <input type="text" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://…/logo.png"
-            className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all" />
-        </div>
-        <div>
-          <label className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block mb-1.5">QR Mark URL</label>
-          <input type="text" value={qrMarkUrl} onChange={(e) => setQrMarkUrl(e.target.value)}
-            placeholder="https://…/qr-mark.svg"
-            className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-2.5 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all" />
-        </div>
+      <div className="space-y-3">
+        <ImageField label="Club Logo" url={logoUrl} onUrl={setLogoUrl} slot="logo" tenantId={tenant.id} onUploading={setUploading} />
+        <ImageField label="QR Mark" url={qrMarkUrl} onUrl={setQrMarkUrl} slot="qr-mark" tenantId={tenant.id} onUploading={setUploading} />
       </div>
 
       {msg && <p className="font-label text-[9px] text-error uppercase tracking-wide">{msg}</p>}
 
-      <button onClick={save} disabled={saving}
+      <button onClick={save} disabled={saving || uploading}
         className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-[10px] uppercase tracking-widest disabled:opacity-50">
         {saving ? 'Saving…' : 'Save Branding'}
       </button>
