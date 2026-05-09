@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { fetchGpxPoints, formatPoint, parsePoint, getStaticMapPinUrl } from '../lib/maps';
 import { useToast } from '../store/useToast';
+import { useAppStore } from '../store/useAppStore';
 import InteractiveMap from '../components/InteractiveMap';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
@@ -19,6 +20,8 @@ interface RosterParticipant {
   display_name: string | null;
   role: ParticipantRole;
   status: string;
+  account_id: string | null;
+  email: string | null;
 }
 
 function useRideRoster(rideId: string | undefined) {
@@ -27,13 +30,43 @@ function useRideRoster(rideId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('id, display_name, role, status')
+        .select('id, display_name, role, status, account_id, email')
         .eq('ride_id', rideId!)
         .order('display_name');
       if (error) throw error;
       return (data || []) as RosterParticipant[];
     },
     enabled: !!rideId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Affiliated member picker query
+// ---------------------------------------------------------------------------
+
+interface AffiliatedMember {
+  account_id: string;
+  accounts: {
+    name: string | null;
+    email: string;
+  };
+}
+
+function useAffiliatedMembers(tenantId: string | null, enabled: boolean) {
+  return useQuery<AffiliatedMember[]>({
+    queryKey: ['affiliated-members', tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('account_tenants')
+        .select('account_id, accounts(name, email)')
+        .eq('tenant_id', tenantId!)
+        .eq('status', 'affiliated');
+      if (error) throw error;
+      const sorted = ((data || []) as unknown as AffiliatedMember[])
+        .sort((a, b) => (a.accounts.name ?? a.accounts.email).localeCompare(b.accounts.name ?? b.accounts.email));
+      return sorted;
+    },
+    enabled: !!tenantId && enabled,
   });
 }
 
@@ -58,11 +91,16 @@ const RideBuilder: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const currentTenantId = useAppStore((s) => s.currentTenantId);
 
   const [routePoints, setRoutePoints] = useState<{lat: number, lng: number}[]>([]);
   const [markers, setMarkers] = useState<Waypoint[]>([]);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAddCrewModal, setShowAddCrewModal] = useState(false);
+  const [crewSearch, setCrewSearch] = useState('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [crewRole, setCrewRole] = useState<'member' | 'captain' | 'support'>('member');
 
   // 1. Fetch Ride Data
   const { data: ride, isLoading } = useQuery({
@@ -240,6 +278,18 @@ const RideBuilder: React.FC = () => {
   // Roster
   const { data: roster = [] } = useRideRoster(rideId);
   const isRideActive = ride?.status === 'active';
+  const canAddCrew = ride?.status === 'created';
+
+  const { data: affiliatedMembers = [] } = useAffiliatedMembers(currentTenantId, showAddCrewModal);
+
+  const rosterAccountIds = new Set(roster.map((p) => p.account_id).filter(Boolean) as string[]);
+  const filteredMembers = affiliatedMembers
+    .filter((m) => !rosterAccountIds.has(m.account_id))
+    .filter((m) => {
+      if (!crewSearch.trim()) return true;
+      const q = crewSearch.toLowerCase();
+      return (m.accounts.name ?? '').toLowerCase().includes(q) || m.accounts.email.toLowerCase().includes(q);
+    });
 
   const roleMutation = useMutation({
     mutationFn: async ({ participantId, role }: { participantId: string; role: ParticipantRole }) => {
@@ -255,6 +305,43 @@ const RideBuilder: React.FC = () => {
     },
     onError: (e: Error) => {
       addToast(`Failed to update role: ${e.message}`, 'error');
+    },
+  });
+
+  const closeAddCrewModal = () => {
+    setShowAddCrewModal(false);
+    setCrewSearch('');
+    setSelectedMemberId(null);
+    setCrewRole('member');
+  };
+
+  const addMemberMutation = useMutation({
+    mutationFn: async ({ accountId, displayName, email, role }: {
+      accountId: string; displayName: string; email: string; role: 'member' | 'captain' | 'support';
+    }) => {
+      const { error } = await supabase.from('ride_participants').insert({
+        ride_id: rideId,
+        account_id: accountId,
+        display_name: displayName,
+        email: email.toLowerCase(),
+        role,
+        status: 'rsvpd',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ride-roster', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides-list'] });
+      closeAddCrewModal();
+      addToast('Crew member added.', 'success');
+    },
+    onError: (e: any) => {
+      if (e?.code === '23505') {
+        addToast('Already on ride', 'warning');
+        closeAddCrewModal();
+      } else {
+        addToast(`Failed to add crew member: ${e.message}`, 'error');
+      }
     },
   });
 
@@ -302,6 +389,107 @@ const RideBuilder: React.FC = () => {
       confirmLabel="Delete"
       type="danger"
     />
+
+    {/* Add Crew Member Modal */}
+    {showAddCrewModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-low p-8 max-w-md w-full mx-4 space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-headline font-bold text-lg text-on-background">Add Crew Member</h3>
+            <button onClick={closeAddCrewModal} className="material-symbols-outlined text-on-surface-variant/50 hover:text-on-surface-variant transition-colors">close</button>
+          </div>
+
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">Search Members</label>
+            <input
+              type="text"
+              value={crewSearch}
+              onChange={(e) => { setCrewSearch(e.target.value); setSelectedMemberId(null); }}
+              placeholder="Name or email..."
+              autoFocus
+              className="w-full bg-surface-container-high text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+            />
+          </div>
+
+          <div className="max-h-60 overflow-y-auto space-y-1">
+            {filteredMembers.length === 0 ? (
+              <p className="font-body text-sm text-on-surface-variant/50 italic text-center py-4">
+                {crewSearch
+                  ? 'No matching members.'
+                  : affiliatedMembers.length === 0
+                    ? 'No affiliated members in this club yet.'
+                    : 'All affiliated members are already on this ride.'}
+              </p>
+            ) : (
+              filteredMembers.map((m) => {
+                const name = m.accounts.name ?? m.accounts.email.split('@')[0];
+                const isSelected = selectedMemberId === m.account_id;
+                return (
+                  <button
+                    key={m.account_id}
+                    onClick={() => setSelectedMemberId(isSelected ? null : m.account_id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                      isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-surface-container-high border border-transparent'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
+                      <span className="font-label text-[10px] font-bold text-on-surface-variant">
+                        {name.slice(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-body text-sm text-on-background truncate">{name}</p>
+                      <p className="font-label text-[9px] text-on-surface-variant/60 truncate">{m.accounts.email}</p>
+                    </div>
+                    {isSelected && <span className="material-symbols-outlined text-primary text-sm shrink-0">check_circle</span>}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {selectedMemberId && (
+            <div>
+              <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">Assign Role</label>
+              <select
+                value={crewRole}
+                onChange={(e) => setCrewRole(e.target.value as 'member' | 'captain' | 'support')}
+                className="w-full bg-surface-container-high text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60"
+              >
+                <option value="member">Member</option>
+                <option value="captain">Captain</option>
+                <option value="support">Support</option>
+              </select>
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={closeAddCrewModal}
+              className="px-5 py-2.5 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                const member = affiliatedMembers.find((m) => m.account_id === selectedMemberId);
+                if (!member) return;
+                addMemberMutation.mutate({
+                  accountId: member.account_id,
+                  displayName: member.accounts.name ?? member.accounts.email.split('@')[0],
+                  email: member.accounts.email,
+                  role: crewRole,
+                });
+              }}
+              disabled={!selectedMemberId || addMemberMutation.isPending}
+              className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {addMemberMutation.isPending ? 'Adding...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="h-[calc(100vh-120px)] flex flex-col space-y-6">
       <PageHeader
         label="Ride Customization"
@@ -497,12 +685,23 @@ const RideBuilder: React.FC = () => {
         <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold">
           Crew Roster
         </h3>
-        {roster.length > 0 && !roster.some(p => p.role === 'captain') && (
-          <span className="flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-            <span className="material-symbols-outlined text-[10px]">warning</span>
-            No Captain
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {roster.length > 0 && !roster.some(p => p.role === 'captain') && (
+            <span className="flex items-center gap-1 font-label text-[9px] uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              <span className="material-symbols-outlined text-[10px]">warning</span>
+              No Captain
+            </span>
+          )}
+          {canAddCrew && (
+            <button
+              onClick={() => setShowAddCrewModal(true)}
+              className="flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-label text-[9px] uppercase tracking-widest hover:bg-primary/20 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[11px]">person_add</span>
+              Add Crew
+            </button>
+          )}
+        </div>
       </div>
 
       {isRideActive && (

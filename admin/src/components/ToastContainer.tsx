@@ -6,6 +6,7 @@ const ToastIcon = ({ type }: { type: ToastType }) => {
   switch (type) {
     case 'success': return <span className="material-symbols-outlined text-tertiary">check_circle</span>;
     case 'error':   return <span className="material-symbols-outlined text-error">error</span>;
+    case 'warning': return <span className="material-symbols-outlined text-amber-500">warning</span>;
     default:        return <span className="material-symbols-outlined text-primary">info</span>;
   }
 };
