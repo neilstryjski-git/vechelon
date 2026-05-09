@@ -329,11 +329,22 @@ const RideBuilder: React.FC = () => {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['ride-roster', rideId] });
       queryClient.invalidateQueries({ queryKey: ['stats', 'active-rides-list'] });
       closeAddCrewModal();
       addToast('Crew member added.', 'success');
+      if (variables.role === 'captain' || variables.role === 'support') {
+        supabase.functions.invoke('notify-crew-added', {
+          body: {
+            email: variables.email,
+            display_name: variables.displayName,
+            ride_id: rideId,
+            role: variables.role,
+            tenant_id: currentTenantId,
+          },
+        }).catch((err) => console.warn('notify-crew-added failed (non-blocking):', err));
+      }
     },
     onError: (e: any) => {
       if (e?.code === '23505') {
