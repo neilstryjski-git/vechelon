@@ -104,15 +104,20 @@ function useRideParticipants(rideId: string | null) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StatCard({ label, value, isLoading, subCounts, roadmapNote }: {
+function StatCard({ label, value, isLoading, subCounts, roadmapNote, onClick }: {
   label:        string;
   value:        number;
   isLoading:    boolean;
   subCounts?:   { label: string; value: number; active?: boolean }[];
   roadmapNote?: string;
+  onClick?:     () => void;
 }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="bg-surface-container-lowest p-6 rounded-xl shadow-ambient border border-surface-container-low/50 flex flex-col gap-3">
+    <Tag
+      {...(onClick ? { onClick, type: 'button' as const } : {})}
+      className={`bg-surface-container-lowest p-6 rounded-xl shadow-ambient border border-surface-container-low/50 flex flex-col gap-3 text-left w-full${onClick ? ' hover:bg-surface-container-low hover:border-brand-primary/30 transition-colors cursor-pointer group' : ''}`}
+    >
       <h3 className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
         {label}
       </h3>
@@ -138,7 +143,13 @@ function StatCard({ label, value, isLoading, subCounts, roadmapNote }: {
           <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant/40">{roadmapNote}</span>
         </div>
       )}
-    </div>
+      {onClick && (
+        <div className="mt-auto pt-2 border-t border-surface-container-low flex items-center justify-between">
+          <span className="font-label text-[9px] uppercase tracking-widest text-brand-primary/60 group-hover:text-brand-primary transition-colors">View all</span>
+          <span className="material-symbols-outlined text-[14px] text-brand-primary/60 group-hover:text-brand-primary transition-colors">chevron_right</span>
+        </div>
+      )}
+    </Tag>
   );
 }
 
@@ -293,6 +304,7 @@ const Dashboard: React.FC = () => {
           label="Upcoming Scheduled"
           value={upcomingRides ?? 0}
           isLoading={loadingUpcoming}
+          onClick={isAdmin ? () => navigate('/rides') : undefined}
         />
         <StatCard
           label="Members"
