@@ -397,7 +397,7 @@ const RideDetailSideSheet: React.FC = () => {
           initialValues={{
             name:             ride.name,
             scheduled_start:  ride.scheduled_start
-              ? new Date(ride.scheduled_start).toISOString().slice(0, 16)
+              ? (() => { const d = new Date(ride.scheduled_start); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })()
               : '',
             start_label:      ride.start_label  ?? '',
             finish_label:     ride.finish_label ?? '',
