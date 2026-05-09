@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../store/useToast';
+import { parsePoint } from '../lib/maps';
 import PageHeader from '../components/PageHeader';
 
 const PAGE_SIZE = 10;
@@ -12,6 +13,7 @@ interface RideRow {
   name: string;
   scheduled_start: string;
   start_label: string | null;
+  start_coords: string | null;
   thumbnail_url: string | null;
   status: string;
 }
@@ -73,7 +75,7 @@ const AdminRideFeed: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, thumbnail_url, status')
+        .select('id, name, scheduled_start, start_label, start_coords, thumbnail_url, status')
         .eq('tenant_id', currentTenantId)
         .gte('scheduled_start', new Date().toISOString())
         .in('status', ['created'])
@@ -159,12 +161,18 @@ const AdminRideFeed: React.FC = () => {
                     <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-0.5">
                       {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
                     </p>
-                    {ride.start_label && (
-                      <p className="font-body text-xs text-on-surface-variant mt-1">
-                        <span className="material-symbols-outlined text-[12px] align-middle mr-1">location_on</span>
-                        {ride.start_label}
-                      </p>
-                    )}
+                    {ride.start_label && (() => {
+                      const coords = parsePoint(ride.start_coords);
+                      const mapsUrl = coords
+                        ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                        : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
+                      return (
+                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-on-surface-variant mt-1 hover:text-brand-primary transition-colors">
+                          <span className="material-symbols-outlined text-[12px] align-middle">location_on</span>
+                          {ride.start_label}
+                        </a>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-3">
                     {joined ? (

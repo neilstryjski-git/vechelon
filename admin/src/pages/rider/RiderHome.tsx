@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { useToast } from '../../store/useToast';
+import { parsePoint } from '../../lib/maps';
 
 interface RideRow {
   id: string;
   name: string;
   scheduled_start: string;
   start_label: string | null;
+  start_coords: string | null;
   thumbnail_url: string | null;
   status: string;
 }
@@ -20,7 +22,7 @@ function useNextRide(enabled: boolean, tenantId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, thumbnail_url, status')
+        .select('id, name, scheduled_start, start_label, start_coords, thumbnail_url, status')
         .eq('tenant_id', tenantId!)
         .gte('scheduled_start', new Date().toISOString())
         .in('status', ['created', 'active'])
@@ -42,7 +44,7 @@ function useUpcomingRides(enabled: boolean, tenantId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, scheduled_start, start_label, thumbnail_url, status')
+        .select('id, name, scheduled_start, start_label, start_coords, thumbnail_url, status')
         .eq('tenant_id', tenantId!)
         .gte('scheduled_start', new Date().toISOString())
         .lte('scheduled_start', thirtyDaysOut.toISOString())
@@ -206,12 +208,18 @@ const RiderHome: React.FC = () => {
                         <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-0.5">
                           {formatDate(ride.scheduled_start)} · {formatTime(ride.scheduled_start)}
                         </p>
-                        {ride.start_label && (
-                          <p className="font-body text-xs text-on-surface-variant mt-1">
-                            <span className="material-symbols-outlined text-[12px] align-middle mr-1">location_on</span>
-                            {ride.start_label}
-                          </p>
-                        )}
+                        {ride.start_label && (() => {
+                          const coords = parsePoint(ride.start_coords);
+                          const mapsUrl = coords
+                            ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                            : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
+                          return (
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-on-surface-variant mt-1 hover:text-brand-primary transition-colors">
+                              <span className="material-symbols-outlined text-[12px] align-middle">location_on</span>
+                              {ride.start_label}
+                            </a>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex items-center gap-3">
@@ -268,12 +276,18 @@ const RiderHome: React.FC = () => {
                   <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
                     {formatDate(nextRide.scheduled_start)} · {formatTime(nextRide.scheduled_start)}
                   </p>
-                  {nextRide.start_label && (
-                    <p className="font-body text-xs text-on-surface-variant mt-1">
-                      <span className="material-symbols-outlined text-[12px] align-middle mr-1">location_on</span>
-                      {nextRide.start_label}
-                    </p>
-                  )}
+                  {nextRide.start_label && (() => {
+                    const coords = parsePoint(nextRide.start_coords);
+                    const mapsUrl = coords
+                      ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                      : `https://maps.google.com/?q=${encodeURIComponent(nextRide.start_label)}`;
+                    return (
+                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-on-surface-variant mt-1 hover:text-brand-primary transition-colors">
+                        <span className="material-symbols-outlined text-[12px] align-middle">location_on</span>
+                        {nextRide.start_label}
+                      </a>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-4 pt-2">
                   <p className="font-label text-[10px] text-on-surface-variant/60 italic leading-relaxed uppercase tracking-wide">

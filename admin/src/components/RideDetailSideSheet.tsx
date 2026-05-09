@@ -661,6 +661,18 @@ const RideDetailSideSheet: React.FC = () => {
                   </button>
                 )}
 
+                {ride.external_url && (
+                  <a
+                    href={ride.external_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">open_in_new</span>
+                    View Route
+                  </a>
+                )}
+
                 {ride.gpx_path && (
                   <button
                     className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
