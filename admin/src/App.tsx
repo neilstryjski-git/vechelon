@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import RiderLayout from './components/RiderLayout';
 import Dashboard from './pages/Dashboard';
+import AdminRideFeed from './pages/AdminRideFeed';
 import Members from './pages/Members';
 import RouteLibraryPage from './pages/RouteLibrary';
 import RideBuilder from './pages/RideBuilder';
@@ -278,6 +279,7 @@ function AppContent() {
           {/* Index: SmartHome switches based on role */}
           <Route index           element={<SmartHome />}         />
           <Route path="dashboard" element={<Dashboard />}        />
+          <Route path="rides"     element={<AdminRideFeed />}   />
           <Route path="calendar"  element={<CalendarGrid />}     />
           <Route path="routes"    element={<RouteLibraryPage />} />
           <Route path="builder/:rideId" element={<RideBuilder />} />
