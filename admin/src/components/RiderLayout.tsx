@@ -75,7 +75,7 @@ const RiderLayout: React.FC = () => {
     ...(userTier !== 'guest' ? [{ to: '/calendar', label: 'Calendar' }] : []),
     ...(userTier !== 'guest' ? [{ to: '/routes', label: 'Routes' }] : []),
     ...(userTier === 'affiliated' ? [{ to: '/members', label: 'Members' }] : []),
-    { to: '/profile', label: 'Profile' },  // mobile menu only
+    ...(userTier !== 'guest' ? [{ to: '/profile', label: 'Profile' }] : []),
   ];
 
   return (
@@ -160,14 +160,16 @@ const RiderLayout: React.FC = () => {
                   role="menu"
                   className="absolute right-0 mt-2 w-48 bg-surface-container-lowest border border-outline-variant/15 rounded-xl shadow-ambient overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
                 >
-                  <button
-                    role="menuitem"
-                    onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-base text-on-surface-variant">person</span>
-                    Update Profile
-                  </button>
+                  {userTier !== 'guest' && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left font-body text-sm text-on-background hover:bg-surface-container-low transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base text-on-surface-variant">person</span>
+                      Update Profile
+                    </button>
+                  )}
                   {userTier === 'affiliated' && (
                     <button
                       role="menuitem"
