@@ -214,7 +214,7 @@ const RiderHome: React.FC = () => {
                             ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
                             : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
                           return (
-                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-on-surface-variant mt-1 hover:text-brand-primary transition-colors">
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-brand-primary/70 hover:text-brand-primary mt-1 transition-colors">
                               <span className="material-symbols-outlined text-[12px] align-middle">location_on</span>
                               {ride.start_label}
                             </a>
@@ -282,7 +282,7 @@ const RiderHome: React.FC = () => {
                       ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
                       : `https://maps.google.com/?q=${encodeURIComponent(nextRide.start_label)}`;
                     return (
-                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-on-surface-variant mt-1 hover:text-brand-primary transition-colors">
+                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-xs text-brand-primary/70 hover:text-brand-primary mt-1 transition-colors">
                         <span className="material-symbols-outlined text-[12px] align-middle">location_on</span>
                         {nextRide.start_label}
                       </a>
