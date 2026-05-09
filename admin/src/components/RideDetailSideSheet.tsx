@@ -494,8 +494,8 @@ const RideDetailSideSheet: React.FC = () => {
                         ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
                         : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
                       return (
-                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors truncate">
-                          {ride.start_label}
+                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-body text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors min-w-0">
+                          <span className="truncate">{ride.start_label}</span>
                           <span className="material-symbols-outlined text-[11px] shrink-0">open_in_new</span>
                         </a>
                       );
@@ -509,8 +509,8 @@ const RideDetailSideSheet: React.FC = () => {
                             ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
                             : `https://maps.google.com/?q=${encodeURIComponent(ride.meetup_label)}`;
                           return (
-                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-body text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors truncate">
-                              {ride.meetup_label}
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-body text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors min-w-0">
+                              <span className="truncate">{ride.meetup_label}</span>
                               <span className="material-symbols-outlined text-[11px] shrink-0">open_in_new</span>
                             </a>
                           );
