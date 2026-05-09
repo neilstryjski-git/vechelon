@@ -488,13 +488,31 @@ const RideDetailSideSheet: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
                     <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Start Point</span>
-                    <p className="font-body text-sm font-medium text-on-background truncate">
-                      {ride.start_label || '—'}
-                    </p>
+                    {ride.start_label ? (() => {
+                      const coords = parsePoint(ride.start_coords);
+                      const mapsUrl = coords
+                        ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                        : `https://maps.google.com/?q=${encodeURIComponent(ride.start_label)}`;
+                      return (
+                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="font-body text-sm font-medium text-on-background truncate block hover:text-brand-primary transition-colors">
+                          {ride.start_label}
+                        </a>
+                      );
+                    })() : <p className="font-body text-sm font-medium text-on-background">—</p>}
                     {ride.meetup_label && ride.meetup_label !== ride.start_label && (
                       <div className="mt-2">
                         <span className="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant block mb-1">Meetup Point</span>
-                        <p className="font-body text-sm font-medium text-on-background truncate">{ride.meetup_label}</p>
+                        {(() => {
+                          const coords = parsePoint(ride.meetup_coords);
+                          const mapsUrl = coords
+                            ? `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+                            : `https://maps.google.com/?q=${encodeURIComponent(ride.meetup_label)}`;
+                          return (
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="font-body text-sm font-medium text-on-background truncate block hover:text-brand-primary transition-colors">
+                              {ride.meetup_label}
+                            </a>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
