@@ -304,7 +304,7 @@ const Dashboard: React.FC = () => {
           label="Upcoming Scheduled"
           value={upcomingRides ?? 0}
           isLoading={loadingUpcoming}
-          onClick={isAdmin ? () => navigate('/rides') : undefined}
+          onClick={(isAdmin || isPlatformAdmin) ? () => navigate('/rides') : undefined}
         />
         <StatCard
           label="Members"

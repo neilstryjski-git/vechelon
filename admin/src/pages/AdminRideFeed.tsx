@@ -28,8 +28,9 @@ const AdminRideFeed: React.FC = () => {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const isAdmin       = useAppStore((s) => s.isAdmin);
-  const joinRide      = useAppStore((s) => s.joinRide);
+  const isAdmin           = useAppStore((s) => s.isAdmin);
+  const isPlatformAdmin   = useAppStore((s) => s.isPlatformAdmin);
+  const joinRide          = useAppStore((s) => s.joinRide);
   const setSelectedRideId = useAppStore((s) => s.setSelectedRideId);
   const currentTenantId   = useAppStore((s) => s.currentTenantId);
 
@@ -41,8 +42,8 @@ const AdminRideFeed: React.FC = () => {
   const [myParticipations, setMyParticipations] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!isAdmin) navigate('/');
-  }, [isAdmin]);
+    if (!isAdmin && !isPlatformAdmin) navigate('/');
+  }, [isAdmin, isPlatformAdmin]);
 
   useEffect(() => {
     if (!currentTenantId) return;
