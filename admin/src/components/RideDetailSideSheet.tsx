@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import QRCode from 'qrcode';
 import { supabase } from '../lib/supabase';
 import { parsePoint, downloadGpx } from '../lib/maps';
 import { useAppStore } from '../store/useAppStore';
@@ -77,14 +76,11 @@ const RideDetailSideSheet: React.FC = () => {
 
   const [isJoining, setIsJoining] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAllParticipants, setShowAllParticipants] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
   const ROSTER_LIMIT = 8;
-
-  const qrMarkUrl = useAppStore((s) => s.qrMarkUrl);
 
   const isOpen = rideSheetVisible && !!selectedRideId;
 
@@ -93,57 +89,6 @@ const RideDetailSideSheet: React.FC = () => {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }: { data: any }) => setCurrentUser(data.user));
   }, []);
-
-  useEffect(() => {
-    if (!selectedRideId) { setQrDataUrl(null); return; }
-    const url = buildRideUrl(selectedRideId, 'ridecard');
-    const size = 160;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-
-    QRCode.toCanvas(canvas, url, {
-      width: size,
-      margin: 1,
-      errorCorrectionLevel: 'H',
-      color: { dark: '#1c1c1c', light: '#fafafa' },
-    }).then(() => {
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // White circle background for logo
-      const logoSize = size * 0.22;
-      const cx = size / 2;
-      const cy = size / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, logoSize * 0.65, 0, 2 * Math.PI);
-      ctx.fillStyle = '#fafafa';
-      ctx.fill();
-
-      // Draw tenant QR mark in center — image if qr_mark_url set, else canvas "78"
-      if (qrMarkUrl) {
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, cx - logoSize / 2, cy - logoSize / 2, logoSize, logoSize);
-          setQrDataUrl(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => setQrDataUrl(canvas.toDataURL('image/png'));
-        img.src = qrMarkUrl;
-      } else {
-        const r = logoSize / 2;
-        ctx.fillStyle = '#111111';
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fafafa';
-        ctx.font      = `bold ${Math.round(r * 1.1)}px 'Arial Black', Arial, sans-serif`;
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('78', cx, cy + Math.round(r * 0.05));
-        setQrDataUrl(canvas.toDataURL('image/png'));
-      }
-    }).catch(() => setQrDataUrl(null));
-  }, [selectedRideId, qrMarkUrl]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -544,15 +489,14 @@ const RideDetailSideSheet: React.FC = () => {
                 )}
               </div>
 
-              {/* QR Code */}
-              {qrDataUrl && (
-                <div className="flex items-center gap-4 bg-surface-container-low rounded-xl p-4 border border-outline-variant/10">
-                  <img src={qrDataUrl} alt="Ride QR Code" className="w-20 h-20 rounded-lg shrink-0" />
-                  <div>
-                    <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Scan to Join</p>
-                    <p className="font-body text-xs text-on-surface-variant/70">Share this ride with your group — opens the rider landing page.</p>
-                  </div>
-                </div>
+              {!isAdmin && userTier === 'affiliated' && (
+                <button
+                  className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                  onClick={handleShare}
+                >
+                  <span className="material-symbols-outlined text-sm">share</span>
+                  Share Ride
+                </button>
               )}
 
               {/* Participant List */}
@@ -668,16 +612,6 @@ const RideDetailSideSheet: React.FC = () => {
                   >
                     <span className="material-symbols-outlined text-sm">content_copy</span>
                     Copy Broadcast
-                  </button>
-                )}
-
-                {!isAdmin && userTier === 'affiliated' && (
-                  <button
-                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
-                    onClick={handleShare}
-                  >
-                    <span className="material-symbols-outlined text-sm">share</span>
-                    Share Ride
                   </button>
                 )}
 
