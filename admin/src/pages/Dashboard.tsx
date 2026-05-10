@@ -164,6 +164,7 @@ const Dashboard: React.FC = () => {
   const selectedRideId    = useAppStore((state) => state.selectedRideId);
   const activeBeacons     = useAppStore((state) => state.activeBeacons);
   const isAdmin           = useAppStore((state) => state.isAdmin);
+  const isPlatformAdmin   = useAppStore((state) => state.isPlatformAdmin);
   const isRideGuest       = useAppStore((state) => state.isRideGuest);
   const userTier          = useAppStore((state) => state.userTier);
   const currentTenantId   = useAppStore((state) => state.currentTenantId);
