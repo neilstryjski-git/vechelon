@@ -116,9 +116,14 @@ async function generateQRWithLogo(url: string, logoUrl?: string | null): Promise
   if (logoUrl) {
     return new Promise((resolve) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => {
-        ctx.drawImage(img, x + pad, y + pad, logoSize, logoSize);
-        resolve(canvas.toDataURL('image/png'));
+        try {
+          ctx.drawImage(img, x + pad, y + pad, logoSize, logoSize);
+          resolve(canvas.toDataURL('image/png'));
+        } catch {
+          resolve(canvas.toDataURL('image/png'));
+        }
       };
       img.onerror = () => resolve(canvas.toDataURL('image/png'));
       img.src = logoUrl;

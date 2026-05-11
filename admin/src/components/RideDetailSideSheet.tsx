@@ -35,6 +35,7 @@ interface RideDetail {
   finish_label: string | null;
   external_url: string | null;
   gpx_path:     string | null;
+  qr_code:      string | null;
   start_coords: string | null;
   meetup_coords: string | null;
   meetup_label: string | null;
@@ -80,6 +81,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAllParticipants, setShowAllParticipants] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
+  const [showQrOverlay, setShowQrOverlay] = useState(false);
   const ROSTER_LIMIT = 8;
 
   const isOpen = rideSheetVisible && !!selectedRideId;
@@ -92,13 +94,16 @@ const RideDetailSideSheet: React.FC = () => {
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        if (showQrOverlay) setShowQrOverlay(false);
+        else close();
+      }
     };
     if (isOpen) {
       window.addEventListener('keydown', handleEsc);
     }
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen]);
+  }, [isOpen, showQrOverlay]);
 
   const { data: ride, isLoading: loadingRide } = useQuery<RideDetail | null>({
     queryKey: ['ride-detail', selectedRideId],
@@ -106,7 +111,7 @@ const RideDetailSideSheet: React.FC = () => {
       if (!selectedRideId) return null;
       const { data, error } = await supabase
         .from('rides')
-        .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, start_coords, meetup_coords, meetup_label, created_at')
+        .select('id, name, type, status, thumbnail_url, scheduled_start, start_label, finish_label, external_url, gpx_path, qr_code, start_coords, meetup_coords, meetup_label, created_at')
         .eq('id', selectedRideId)
         .maybeSingle();
       if (error) throw error;
@@ -357,6 +362,33 @@ const RideDetailSideSheet: React.FC = () => {
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
+        {showQrOverlay && ride?.qr_code && (
+          <div
+            className="absolute inset-0 z-[55] flex flex-col items-center justify-center bg-surface/95 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setShowQrOverlay(false)}
+          >
+            <button
+              className="absolute top-5 right-5 p-2 hover:bg-surface-container-high rounded-full transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowQrOverlay(false); }}
+              aria-label="Close QR overlay"
+            >
+              <span className="material-symbols-outlined text-on-surface-variant">close</span>
+            </button>
+            <div className="flex flex-col items-center gap-6 px-8" onClick={(e) => e.stopPropagation()}>
+              <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant text-center">
+                Show to riders to let them join
+              </p>
+              <img src={ride.qr_code} alt="Ride QR Code" className="w-60 h-60 rounded-2xl shadow-ambient" />
+              <p className="font-headline font-bold text-on-background text-center text-lg tracking-tight">
+                {ride.name}
+              </p>
+              <p className="font-body text-xs text-on-surface-variant/60 text-center">
+                Tap anywhere to close
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="p-6 border-b border-surface-container-low flex justify-between items-center bg-surface-container-low/30">
           <div>
@@ -612,6 +644,16 @@ const RideDetailSideSheet: React.FC = () => {
                   >
                     <span className="material-symbols-outlined text-sm">content_copy</span>
                     Copy Broadcast
+                  </button>
+                )}
+
+                {ride.qr_code && (
+                  <button
+                    className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                    onClick={() => setShowQrOverlay(true)}
+                  >
+                    <span className="material-symbols-outlined text-sm">qr_code_2</span>
+                    Show QR Code
                   </button>
                 )}
 
