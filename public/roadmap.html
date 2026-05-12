@@ -186,6 +186,24 @@
       font-size: 10px; font-weight: 800; padding: 5px 40px;
       transform: rotate(45deg); letter-spacing: 0.1em;
     }
+    .value-set-card.shipped::before {
+      content: 'SHIPPED ✓';
+      background: var(--complete); color: #000;
+    }
+    .value-set-card.next-major::before {
+      content: 'NEXT MAJOR RELEASE';
+      background: var(--v2); color: #000;
+    }
+    .minor-note {
+      text-align: center;
+      font-size: 11px; color: var(--muted);
+      letter-spacing: 0.08em;
+      padding: 18px 0;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .minor-note::before, .minor-note::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
     .value-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 24px;
@@ -368,7 +386,7 @@
         <path id="hdr-path" fill="var(--primary-color)" fill-rule="evenodd" />
       </svg>
     </div>
-    <span class="version-pill">v1.5.0 — May 2026</span>
+    <span class="version-pill">v1.6.0 — May 2026</span>
   </header>
 
   <!-- Hero -->
@@ -413,23 +431,35 @@
 
   <!-- Active Value Set -->
   <section class="active-section">
-    <p class="section-label">Active Value Picks</p>
-    <div class="value-set-card">
+    <p class="section-label">Releases</p>
+    <div class="value-set-card shipped">
       <div class="value-grid">
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v3)">Multi-Club Theme</div>
           <div class="pick-title">Multi-Club Foundations</div>
-          <div class="pick-desc">Phase 1 shipped — Platform Admin role, RLS isolation, cross-club email validation, and the Bikes &amp; Beers test tenant. Subdomain routing and admin.vechelon.ca surface next.</div>
+          <div class="pick-desc">Platform Admin role, RLS isolation, cross-club email validation, subdomain routing, and Bikes &amp; Beers and Lakeside Wheelers as live test tenants alongside Racer Sportif.</div>
         </div>
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v5)">Club Growth Theme</div>
           <div class="pick-title">Voice of Customer</div>
-          <div class="pick-desc">Schema, GitHub Issues integration, and label set shipped. In-app feedback modal lands next, gated only on the GitHub PAT in Vault.</div>
+          <div class="pick-desc">VoC schema, GitHub Issues integration, label set, and Innovation Accounting hypotheses H1–H5 instrumented end-to-end. Rider Share viral growth loop shipped.</div>
         </div>
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v6)">Intelligence Theme</div>
           <div class="pick-title">Innovation Accounting</div>
-          <div class="pick-desc">Five adoption hypotheses (H1–H5) instrumented end-to-end. Internal data layer for product decisions — Sr PM-only via Supabase service role.</div>
+          <div class="pick-desc">Five adoption hypotheses (H1–H5) instrumented end-to-end. Internal data layer live for product decisions. Multi-tenancy hardening audit completed.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="minor-note">Minor iterative releases shipping continuously</div>
+
+    <div class="value-set-card next-major">
+      <div class="value-grid">
+        <div class="value-pick">
+          <div class="pick-tag" style="--tag-color: var(--v2)">Android Theme</div>
+          <div class="pick-title">Android Tactical — PoC</div>
+          <div class="pick-desc">Proof of concept for live tactical ride tracking on Android. Real-time fleet map, Support Beacon, and Captain controls on the road. Gate: validate core GPS and real-time infra before full build.</div>
         </div>
       </div>
     </div>
@@ -477,7 +507,7 @@
       </div>
 
       <!-- v2.0 Android Tactical -->
-      <div class="ring-card blocked" style="--ring-color: var(--v2);">
+      <div class="ring-card next-up" style="--ring-color: var(--v2);">
         <div class="ring-rail">Rail 3a</div>
         <div class="ring-wrap">
           <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
@@ -501,8 +531,8 @@
         <div class="ring-info">
           <div class="ring-version">v2.0</div>
           <div class="ring-title">Android Tactical</div>
-          <div class="ring-subtitle">The live ride goes mobile</div>
-          <div class="ring-desc">A live tactical map showing every rider's position in real time. Support Beacon one tap away. Captain controls from the road.</div>
+          <div class="ring-subtitle">PoC — Live ride goes mobile</div>
+          <div class="ring-desc">Proof of concept: validate real-time fleet tracking, Support Beacon, and Captain controls on Android before committing to the full build.</div>
           <ul class="ring-features">
             <li class="locked"><i class="fi fi-lock">⊘</i>Live fleet tracking map</li>
             <li class="locked"><i class="fi fi-lock">⊘</i>Support Beacon — one tap alert</li>
@@ -511,7 +541,7 @@
             <li class="locked"><i class="fi fi-lock">⊘</i>Ad hoc ride creation on road</li>
           </ul>
         </div>
-        <span class="ring-status-badge badge-blocked">Pending Gate</span>
+        <span class="ring-status-badge badge-next">Next Up — PoC</span>
       </div>
 
       <!-- v2.1 iOS -->
@@ -665,7 +695,7 @@
   <!-- Footer -->
   <footer>
     <p>Built in the open. <a href="https://vechelon.ca">vechelon.ca</a></p>
-    <p>Last updated May 2026 · v1.5.0</p>
+    <p>Last updated May 2026 · v1.6.0</p>
   </footer>
 
 </div>
