@@ -1,6 +1,6 @@
-# Vechelon | Internal Roadmap (v1.5.0)
+# Vechelon | Internal Roadmap (v1.6.0)
 
-Project: Vechelon | Current Version: v1.5.0 | Last Sync Date: 2026-05-03 | Status: COMMITTED
+Project: Vechelon | Current Version: v1.6.0 | Last Sync Date: 2026-05-12 | Status: COMMITTED
 
 **Source of truth for all roadmap decisions. The public roadmap is a rendered view of this document.
 If it is not here, it is not on the public roadmap. Changes via MACD only.**
@@ -74,7 +74,7 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 
 **Theme:** The live ride. React Native mobile app, Android-first. The tactical map goes live — fleet tracking, Support Beacon, Captain mobile controls.
 
-**Status:** ⏸ Blocked — external platform consultation gate
+**Status:** 📋 Scoped — PoC next. Gate lifted. Approach: Android PoC to validate real-time fleet tracking, Support Beacon, and Captain controls before committing to full build. React Native platform decision is the first foundation step.
 
 ### Features
 
@@ -132,7 +132,7 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 
 **Theme:** Data sovereignty and multi-tenancy. Phase 1 — operator-provisioned multi-tenancy with Platform Admin role and a second test tenant — is in build off the back of the VoC/MT/IA Sprint 0 foundations. Phase 2 — self-serve onboarding, branding portal, and multi-membership UI — remains scoped for the full v3.0 release.
 
-**Status:** 🟡 In Build — Phase 1 foundations from VoC/MT/IA Sprint 0 (Pillar set v1.3.2). Platform Admin schema, RLS extensions, cross-club email validation, and the Bikes & Beers test tenant scaffold shipped to production. Subdomain routing and the admin.vechelon.ca surface are next.
+**Status:** 🟡 In Build — Phase 1 Complete. Three live tenants (Racer Sportif, Bikes & Beers, Lakeside Wheelers) with full data sovereignty, Platform Admin role, and subdomain routing all shipped May 2026. Phase 2 (self-serve onboarding, multi-membership, branding portal) scoped.
 
 ### Features
 
@@ -143,10 +143,10 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | 3.03 | Multi-membership — rider affiliated with multiple clubs | Both | 🔴 Not Started | Rider Pillar II §2 — Phase 2; Brain ratification pending per VoC/MT/IA Pillar I §2 constraint. |
 | 3.04 | Self-serve branding portal — logo, colours, slug | Admin Portal | 🔴 Not Started | Admin Pillar II §11.3 — Phase 2. |
 | 3.05 | Independent data isolation per club | Backend | 🟢 Complete ✓ | VoC/MT/IA Pillar II §4.3 + W126 — Platform Admin RLS policies via is_platform_admin() helper, cross-tenant SELECT bypass for Platform Admin only. |
-| 3.06 | Platform Admin role — cross-tenant operator surface | Admin Portal | 🟡 In Build | VoC/MT/IA Pillar II §4 — admin.vechelon.ca surface (W129) plus Create Club form per W116 LOE outcome. |
-| 3.07 | Bikes & Beers test tenant — operator-provisioned second tenant | Backend | 🟡 In Build | VoC/MT/IA Pillar I §6 — branding handoff + RLS isolation tests (W128). |
+| 3.06 | Platform Admin role — cross-tenant operator surface | Admin Portal | 🟢 Complete ✓ | VoC/MT/IA Pillar II §4 — admin.vechelon.ca surface (W129) plus Create Club form per W116 LOE outcome. |
+| 3.07 | Three test tenants — Bikes & Beers and Lakeside Wheelers operator-provisioned | Backend | 🟢 Complete ✓ | VoC/MT/IA Pillar I §6 — branding handoff + RLS isolation confirmed across all three tenants. |
 | 3.08 | Cross-club email validation — one email, one club | Backend | 🟢 Complete ✓ | VoC/MT/IA Pillar II §2.3 — server-side rejection at invite time without revealing source club (W127). |
-| 3.09 | Subdomain routing — clubname.vechelon.ca | Both | 🟡 In Build | VoC/MT/IA Pillar II §2 — slug-based tenant load + "Club not found" fallback (W124/W125). DNS migration via Porkbun in flight (W123). |
+| 3.09 | Subdomain routing — clubname.vechelon.ca | Both | 🟢 Complete ✓ | VoC/MT/IA Pillar II §2 — slug-based tenant load + "Club not found" fallback (W124/W125). DNS migrated via Porkbun May 2026 (W123). |
 
 ### Foundations
 
@@ -194,7 +194,7 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 
 **Theme:** Riders shape the club. VoC and Rider Share landed Phase 1 in the VoC/MT/IA Sprint 0; the rest of the theme — Observer role, member-uploaded routes, ride history, guest conversion — remains scoped.
 
-**Status:** 🟡 In Build — VoC Phase 1 (schema, GitHub Issues integration, labels) shipped May 2026. Rider Share feature in build. Rest of theme scoped.
+**Status:** 🟡 In Build — VoC Phase 1 (schema, GitHub Issues integration, labels) and Rider Share shipped May 2026. Observer role, member GPX uploads, and ride history profiles scoped.
 
 ### Features
 
@@ -202,12 +202,12 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 |---|---|---|---|---|
 | 5.01 | Observer role — non-riding map monitor | Mobile | 🔴 Not Started | Admin Pillar I §5.6 |
 | 5.02 | Member GPX upload — distinct from admin route library | Rider Portal | 🔴 Not Started | Admin Pillar IV D-30 |
-| 5.03 | Voice of Customer — idea submission via GitHub Issues | Both | 🟡 In Build | VoC/MT/IA Pillar I §3.1 + Pillar II §5 — Phase 1 schema, labels, Edge Function code shipped (W119/W121). Modal UI + voc-submit deployment next (W130 — gated on GitHub PAT in Supabase Vault). |
+| 5.03 | Voice of Customer — idea submission via GitHub Issues | Both | 🟢 Complete ✓ | VoC/MT/IA Pillar I §3.1 + Pillar II §5 — Phase 1: schema, labels, Edge Function shipped (W119/W121/W130). |
 | 5.04 | Ride history on profile — participated rides | Rider Portal | 🔴 Not Started | Rider Pillar II §4.9 |
 | 5.05 | Guest view configuration — club admin controls public visibility | Rider Portal | 🔴 Not Started | Rider Pillar IV Roadmap |
 | 5.06 | Account claiming post-purge — guest merges historical records | Both | 🔴 Not Started | Admin Pillar IV Roadmap |
 | 5.07 | WhatsApp deep-link sharing — direct link into ride join flow | Mobile | 🔴 Not Started | Admin Pillar I §7 |
-| 5.08 | Rider Share — non-admin viral growth loop on ride card | Rider Portal | 🟡 In Build | VoC/MT/IA Pillar I §3.4 + VMT-D-40 — viewer-state-driven Shared Landing, HMAC-SHA256 rider hash, Web Share API + clipboard fallback. W133 in build. |
+| 5.08 | Rider Share — non-admin viral growth loop on ride card | Rider Portal | 🟢 Complete ✓ | VoC/MT/IA Pillar I §3.4 + VMT-D-40 — viewer-state-driven Shared Landing, HMAC-SHA256 rider hash, Web Share API + clipboard fallback. W133 shipped May 2026. |
 
 ### Foundations
 
@@ -217,7 +217,7 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | F5.02 | Member GPX storage — Supabase Storage bucket extension | Backend | 🔴 Not Started | Distinct from admin route library. |
 | F5.03 | VoC schema — last_voc_submission rate-limit clock + GitHub label set | Backend | 🟢 Complete ✓ | VoC/MT/IA W119 + W121 — accounts.last_voc_submission column, 10 GitHub labels (type/theme/club/source). |
 | F5.04 | Historical ride query — ride_participants join for profile history | Backend | 🔴 Not Started | |
-| F5.05 | rider_hash function — HMAC-SHA256 deterministic one-way hash | Backend | 🟡 In Build | VMT-D-41 LLD locked — server secret in Supabase Vault, PL/pgSQL reverse-lookup. Ships with W133. |
+| F5.05 | rider_hash function — HMAC-SHA256 deterministic one-way hash | Backend | 🟢 Complete ✓ | VMT-D-41 — server secret in Supabase Vault, PL/pgSQL reverse-lookup. Shipped with W133 May 2026. |
 
 ---
 
@@ -254,6 +254,79 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 
 ---
 
+---
+
+## Stride Backlog — Configured, Not Yet Started
+
+> Internal only. These tasks exist on Stride board 116 and are fully specified but not yet in progress. Grouped by goal. Last synced: 2026-05-12.
+
+### Open Defects
+
+| ID | Title | Notes |
+|---|---|---|
+| D12 | Delete Ride — confirm modal button has no action | Modal shows but confirm does nothing |
+| D31 | Ride card link not visible from RSVP screen | — |
+| D34 | Guest RSVP from authenticated session — bogus display_name | Attributes guest row to authenticated user_id |
+| D35 | Sign-out reachability — UX audit (paths where button hidden) | — |
+| D39 | ensure_account_exists() resolves tenant via LIMIT 1 — multi-tenant unsafe | Safety-critical for multi-club |
+| D40 | RideLanding fires non-wrapped magic link — D32 click-through bypass | — |
+
+### G19 — MVE Phase II: Rider Experience
+
+| ID | Title | Status |
+|---|---|---|
+| W102 | UAT: Rider Experience Scenarios (Human Verification) | open |
+
+### G20 — Frictionless Sign Up III: Email-only RSVP + Magic Link
+
+| ID | Title | Status |
+|---|---|---|
+| W103 | Update Mermaid diagram in frictionless_sign_up_action_plan_v3.md | open |
+| W105 | Ride Landing: email-only guest RSVP form + Magic Link sent confirmation | blocked |
+| W106 | Ride Landing: allow Initiated-tier users to RSVP | open |
+| W107 | Auth flow: prompt for name after magic link verification if profile name missing | blocked |
+
+### G21 — Playwright UAT & Pre-Push Safety Net
+
+| ID | Title | Status |
+|---|---|---|
+| W108 | Add pre-push git hook to block broken builds | open |
+| W109 | Install and configure Playwright in the admin project | open |
+| W110 | Create Supabase admin auth helper for Playwright | blocked |
+| W111 | Write auth regression tests | blocked |
+| W112 | Write role-based UI regression tests | blocked |
+| W113–W115 | Extend pre-push hook to run Playwright tests (3 tasks) | blocked |
+
+### G24 — Voice & Tone Amendment 001: Remove Tactical Copy
+
+| ID | Title | Status |
+|---|---|---|
+| W144 | Voice sweep AuthPage.tsx | open |
+| W145 | Voice sweep Dashboard.tsx + Layout.tsx | open |
+| W146 | Voice sweep RideLanding.tsx | open |
+| W147 | Voice sweep RideDetailSideSheet.tsx | open |
+| W148 | Voice sweep RiderHome.tsx + RiderLayout.tsx | open |
+| W149 | Voice sweep EndRideButton.tsx | open |
+| W150 | Voice sweep ParticipantDetailSheet.tsx | open |
+| W151 | Voice sweep RideBuilder.tsx | open |
+| W152 | Voice sweep App.tsx | open |
+| W153 | Visual QA pass — Amendment 001 post-sweep end-to-end verification | blocked |
+
+### G25 — Admin Crew Assignment (Add Members Without RSVP)
+
+| ID | Title | Status |
+|---|---|---|
+| W157 | UAT: Validate captain designation without prior RSVP (human verification) | open |
+| W159 | In-app notification: banner for member added to ride by admin | open |
+
+### Standalone Open Work
+
+| ID | Title | Status |
+|---|---|---|
+| W70 | Define environment strategy for transactional email testing | open |
+
+---
+
 ## Change Log
 
 | Version | Date | Time (UTC) | Action | Decision | Lead |
@@ -263,4 +336,5 @@ If it is not here, it is not on the public roadmap. Changes via MACD only.**
 | v1.2.0 | 2026-04-19 | 14:00 | CHANGE | v1.0 overall status corrected to In Build — Complete requires Hands assessment and UAT closure. Confirm? items relabelled to In Build. UAT note added to v1.0 status line. | TPM |
 | v1.3.0 | 2026-04-20 | 00:00 | CHANGE | The Hands codebase assessment of all v1.0 In Build items. 1.03/1.04/1.05/1.07 confirmed Complete. 1.12 downgraded to Not Started — no rider-facing member directory page exists. F1.05/F1.08 confirmed Complete. 1.16/1.17/F1.09/F1.10 remain In Build — cron schedules unconfirmed. F1.04 remains In Build — GCP billing alert unverifiable from code. F1.12 downgraded to Not Started — no Sentry integration in codebase. | The Hands |
 | v1.4.0 | 2026-04-20 | 10:00 | ADD | Two rider access milestones in build: 1.11a route library expanded to Tier 2 (initiated); 1.12 member directory (names only) implemented for Tier 3 (affiliated). RLS migrations applied, nav updated, MemberDirectory page created. | The Hands |
+| v1.6.0 | 2026-05-12 | 13:00 | CHANGE | v1.5.0 release closed as shipped. v3.0 Multi-Club Phase 1 complete: 3.06/3.07/3.09 → Complete; Lakeside Wheelers added as third live tenant; status → Phase 1 Complete. v5.0 Club Growth: 5.03 VoC and 5.08 Rider Share → Complete; F5.05 rider_hash → Complete. v2.0 Android Tactical: gate lifted, status → Scoped PoC next. Change log and version pill updated to v1.6.0. Public roadmap SHIPPED/NEXT MAJOR RELEASE cards updated. | The Hands |
 | v1.5.0 | 2026-05-03 | 12:00 | CHANGE | VoC/MT/IA Sprint 0 (Pillar set v1.3.2) dispersed across themes. v3.0 Multi-Club: status Scoped → In Build, added 3.06 Platform Admin role, 3.07 Bikes & Beers test tenant, 3.08 cross-club email validation, 3.09 subdomain routing; foundations F3.01/F3.02/F3.05/F3.06 marked complete. v5.0 Club Growth: status Scoped → In Build, 5.03 VoC marked In Build (Phase 1 schema + labels + Edge Function shipped), added 5.08 Rider Share, foundation F5.03 marked complete + F5.05 rider_hash added. v6.0 Intelligence: status Scoped → In Build, added 6.07 Innovation Accounting (H1–H5 instrumented, Phase 1 complete), added 6.08 IA dashboard UI (deferred), foundations F6.05/F6.06/F6.07 added and marked complete. v1.0 Club Command: added 1.19 Iterative development from customer feedback (post-MVE defect loop). Webpage and document versions locked at v1.5.0 going forward. Stale productdocuments/ duplicate moved to docs/_archive/. | TPM |
