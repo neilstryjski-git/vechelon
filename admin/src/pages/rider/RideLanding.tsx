@@ -9,7 +9,14 @@ import {
   firePortalRsvp,
   firePortalGpxDownload,
   firePortalNavExternal,
+  fireQueryTimeout,
 } from '../../lib/analyticsEvents';
+
+// D41: hard ceiling on mount-time fetches. The headline iOS Safari incident
+// (2026-05-15) sat on an eternal spinner because the network silently stalled
+// — neither resolved nor rejected. 10s gives 3G the room to succeed while
+// keeping a hung request from holding the spinner forever.
+const RIDE_FETCH_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
 // BDD Scenarios (living documentation)
@@ -134,6 +141,38 @@ function NotFound({ message }: { message: string }) {
   );
 }
 
+// D41: rendered when the ride query failed or timed out after React Query's
+// automatic retries. Distinct from NotFound (which signals "this ride does
+// not exist") — RideFetchError signals "we couldn't reach the server."
+// Copy escalates after the second consecutive failed manual retry so the
+// user gets actionable feedback when the network is truly down.
+function RideFetchError({ failedManualRetries, onRetry }: { failedManualRetries: number; onRetry: () => void }) {
+  const escalate = failedManualRetries >= 2;
+  return (
+    <div className="max-w-lg mx-auto text-center space-y-6 pt-16">
+      <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mx-auto">
+        <span className="material-symbols-outlined text-on-surface-variant text-3xl">wifi_off</span>
+      </div>
+      <div>
+        <h2 className="font-headline font-bold text-xl text-on-background">
+          {escalate ? "Still can't reach the server" : 'Trouble loading the ride'}
+        </h2>
+        <p className="font-body text-sm text-on-surface-variant mt-2">
+          {escalate
+            ? 'Check your connection and try again, or open this link from a different network.'
+            : 'This is taking longer than expected. Tap below to try again.'}
+        </p>
+      </div>
+      <button
+        onClick={onRetry}
+        className="font-label text-[10px] uppercase tracking-widest text-primary hover:opacity-70 transition-opacity"
+      >
+        Retry →
+      </button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -190,18 +229,97 @@ const RideLanding: React.FC = () => {
   // Fetch ride
   // -------------------------------------------------------------------------
 
-  const { data: ride, isLoading, isError } = useQuery<RideRow | null>({
+  // D41: track manual retry count so the error UI can escalate its copy after
+  // two consecutive failed manual retries. Reset on a successful fetch via the
+  // useEffect below so a transient failure doesn't poison the copy forever.
+  const [failedManualRetries, setFailedManualRetries] = useState(0);
+
+  // D41: tracks cumulative attempt count (auto + manual) for telemetry. A ref
+  // not state because the queryFn closure binds the value at first invocation
+  // — destructuring failureCount from useQuery would be stale across React
+  // Query's internal retry loop (it does not re-create the queryFn between
+  // retries). Reset to 0 on success, same as failedManualRetries.
+  const attemptRef = React.useRef(0);
+
+  const { data: ride, isLoading, isError, refetch } = useQuery<RideRow | null>({
     queryKey: ['ride-landing', rideId],
-    queryFn: async () => {
+    // D41: React Query v5 passes a per-query AbortSignal via the queryFn
+    // context. We pair it with a setTimeout that aborts the controller on
+    // RIDE_FETCH_TIMEOUT_MS so a silently-stalled network (the iOS Safari
+    // incident, 2026-05-15) surfaces as a rejection — not an eternal spinner.
+    queryFn: async ({ signal }) => {
       if (!rideId) return null;
-      const { data, error } = await supabase.functions.invoke('guest-view-ride', {
-        body: { ride_id: rideId },
-      });
-      if (error) throw error;
-      return (data?.ride as RideRow) ?? null;
+      const attempt = attemptRef.current;
+      attemptRef.current = attempt + 1;
+      const start = Date.now();
+      const controller = new AbortController();
+      // Distinguish the abort cause: timeout vs unmount/navigation. Both end
+      // up calling controller.abort(), so signal.aborted alone can't tell
+      // them apart — we set timedOut at the moment setTimeout fires.
+      let timedOut = false;
+      const onUpstreamAbort = () => controller.abort();
+      signal.addEventListener('abort', onUpstreamAbort);
+      const timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, RIDE_FETCH_TIMEOUT_MS);
+
+      try {
+        // FunctionInvokeOptions.signal aborts the underlying fetch when the
+        // controller fires — no orphaned in-flight request.
+        const { data, error } = await supabase.functions.invoke('guest-view-ride', {
+          body: { ride_id: rideId },
+          signal: controller.signal,
+        });
+        if (error) throw error;
+        return (data?.ride as RideRow) ?? null;
+      } catch (err) {
+        const elapsedMs = Date.now() - start;
+        // unmount (upstream signal fired before our timeout) is benign noise
+        // and would pollute the IA signal — skip telemetry in that case.
+        const isUnmount = signal.aborted && !timedOut;
+        if (!isUnmount) {
+          const trigger: 'timeout' | 'error' = timedOut ? 'timeout' : 'error';
+          const tenantId = useAppStore.getState().currentTenantId;
+          if (tenantId) {
+            void fireQueryTimeout({
+              tenantId,
+              queryKey: 'ride-landing',
+              trigger,
+              attempt,
+              elapsedMs,
+              rideId,
+            });
+          }
+        }
+        throw err;
+      } finally {
+        window.clearTimeout(timeoutId);
+        signal.removeEventListener('abort', onUpstreamAbort);
+      }
     },
     enabled: !!rideId,
+    // D41: 2 automatic retries with exponential backoff (~1s, ~3s) before the
+    // error UI shows. Global default is `retry: false` (App.tsx:77) — overridden
+    // here only for the critical ride query so other surfaces aren't affected.
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 3000),
   });
+
+  // D41: reset the manual-retry counter and the cumulative attempt counter as
+  // soon as a fetch succeeds so a transient failure followed by a recovery
+  // doesn't keep the escalated copy armed for the next mount.
+  React.useEffect(() => {
+    if (ride) {
+      setFailedManualRetries(0);
+      attemptRef.current = 0;
+    }
+  }, [ride]);
+
+  const handleRideFetchRetry = React.useCallback(() => {
+    setFailedManualRetries((n) => n + 1);
+    void refetch();
+  }, [refetch]);
 
   // -------------------------------------------------------------------------
   // Route stats — present when ride.gpx_path matches a route_library file_path
@@ -209,12 +327,16 @@ const RideLanding: React.FC = () => {
 
   const { data: routeStats } = useQuery<{ distance_km: number | null; elevation_gain_m: number | null } | null>({
     queryKey: ['ride-route-stats', ride?.gpx_path],
-    queryFn: async () => {
+    // D41: pass the React Query signal to abortSignal so unmount cancels the
+    // in-flight request. Auxiliary query — failure degrades gracefully (no
+    // route stats badge); no error UI or retry needed.
+    queryFn: async ({ signal }) => {
       if (!ride?.gpx_path) return null;
       const { data } = await supabase
         .from('route_library')
         .select('distance_km, elevation_gain_m')
         .eq('file_path', ride.gpx_path)
+        .abortSignal(signal)
         .maybeSingle();
       return data;
     },
@@ -227,11 +349,12 @@ const RideLanding: React.FC = () => {
 
   const { data: summary } = useQuery<RideSummary | null>({
     queryKey: ['ride-summary', rideId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from('ride_summaries')
         .select('post_ride_summary')
         .eq('ride_id', rideId)
+        .abortSignal(signal)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -245,11 +368,12 @@ const RideLanding: React.FC = () => {
 
   const { data: participantCount } = useQuery<number>({
     queryKey: ['ride-participant-count', rideId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { count, error } = await supabase
         .from('ride_participants')
         .select('*', { count: 'exact', head: true })
-        .eq('ride_id', rideId);
+        .eq('ride_id', rideId)
+        .abortSignal(signal);
       if (error) throw error;
       return count ?? 0;
     },
@@ -262,7 +386,12 @@ const RideLanding: React.FC = () => {
 
   const { data: participation } = useQuery({
     queryKey: ['my-participation', rideId],
-    queryFn: async () => {
+    // D41: supabase.auth.getUser() does NOT accept an AbortSignal, so the auth
+    // call itself can stall on a marginal network independent of the PostgREST
+    // call. This is auxiliary (controls only the join-button render state) and
+    // out of scope for D41 — the page already renders without it. abortSignal
+    // is still threaded into the PostgREST query so unmount cancels cleanly.
+    queryFn: async ({ signal }) => {
       if (!rideId) return null;
       const { data: { user } } = await supabase.auth.getUser();
       const sessionCookieId = useAppStore.getState().sessionCookieId;
@@ -278,7 +407,7 @@ const RideLanding: React.FC = () => {
         query.eq('session_cookie_id', sessionCookieId).is('account_id', null);
       }
 
-      const { data } = await query.maybeSingle();
+      const { data } = await query.abortSignal(signal).maybeSingle();
       return data;
     },
     enabled: !!rideId && (ride?.status === 'created' || ride?.status === 'active'),
@@ -404,7 +533,15 @@ const RideLanding: React.FC = () => {
     </div>
   );
 
-  if (isError || !ride) return (
+  // D41: distinguish "fetch failed" (network / server / timeout — show retry)
+  // from "ride genuinely does not exist" (returned null — show NotFound).
+  if (isError) return (
+    <div className="py-8">
+      <RideFetchError failedManualRetries={failedManualRetries} onRetry={handleRideFetchRetry} />
+    </div>
+  );
+
+  if (!ride) return (
     <div className="py-8">
       <NotFound message="Ride not found" />
     </div>
