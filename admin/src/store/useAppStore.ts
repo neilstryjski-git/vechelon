@@ -231,6 +231,8 @@ export const useAppStore = create<AppState>()(
         } else {
           // Guest path: route through guest-rsvp Edge Function (W143 / MT-H-05).
           // anon INSERT into ride_participants is no longer permitted by RLS.
+          // D42: the EF auto-links account_id when the submitted email matches
+          // an existing accounts row — client behaviour is unchanged either way.
           const { error: efError } = await supabase.functions.invoke('guest-rsvp', {
             body: {
               ride_id: rideId,

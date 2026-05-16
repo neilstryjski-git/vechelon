@@ -86,14 +86,39 @@ serve(async (req) => {
 
     const normalisedEmail = typeof email === 'string' ? email.trim().toLowerCase() || null : null
 
+    // D42: email-match auto-link. If the submitted email matches an existing
+    // public.accounts row (FK-synced to auth.users.email via the W141
+    // accounts_email_unique migration), link the new ride_participants row
+    // to that account up-front — account_id set, role='member' — rather than
+    // creating an orphan guest persona that pollutes the Members admin view
+    // and disconnects the RSVP from the real identity. The user's browser
+    // session remains anonymous; when they later authenticate (separately or
+    // never), My Rides already reflects the RSVP because account_id matches.
+    //
+    // Griefing surface (acceptable): an attacker who knows a member's email
+    // can RSVP them to a ride they didn't sign up for. Same surface area as
+    // the existing no-email guest path (anyone can RSVP as 'Joe Smith' with
+    // zero proof today), so this doesn't lower the bar. If griefing becomes
+    // a real concern, a tenant-level 'confirm-by-email' feature is the right
+    // fix, not refusing to auto-link emails.
+    let linkedAccountId: string | null = null
+    if (normalisedEmail) {
+      const { data: existingAccount } = await adminClient
+        .from('accounts')
+        .select('id')
+        .ilike('email', normalisedEmail)
+        .maybeSingle()
+      linkedAccountId = existingAccount?.id ?? null
+    }
+
     const { error: insertError } = await adminClient
       .from('ride_participants')
       .insert({
         ride_id,
-        account_id: null,
+        account_id: linkedAccountId,
         display_name: display_name.trim(),
         email: normalisedEmail,
-        role: 'guest',
+        role: linkedAccountId ? 'member' : 'guest',
         status: 'rsvpd',
         session_cookie_id,
       })
