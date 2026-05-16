@@ -154,6 +154,34 @@ export async function fireRiderShare(opts: {
   });
 }
 
+/**
+ * D41: fires when a mount-time fetch in the rider portal is cancelled (timeout
+ * or unmount) or rejects after retry exhaustion. Lets us measure the
+ * false-positive rate of the timeout/retry hardening once it's in production
+ * and tune the timeout if needed.
+ *
+ * attempt = 0 for the initial failure, 1+ for manual retries. trigger
+ * distinguishes the cause so we can separate "network actually stalled" from
+ * "server returned an error" once we have field data.
+ */
+export async function fireQueryTimeout(opts: {
+  tenantId: string;
+  queryKey: string;
+  trigger: 'timeout' | 'error';
+  attempt: number;
+  elapsedMs: number;
+  rideId?: string;
+}): Promise<void> {
+  const metadata: Record<string, unknown> = {
+    query_key: opts.queryKey,
+    trigger: opts.trigger,
+    attempt: opts.attempt,
+    elapsed_ms: opts.elapsedMs,
+  };
+  if (opts.rideId) metadata.ride_id = opts.rideId;
+  await insertEvent('query_timeout', opts.tenantId, metadata);
+}
+
 function attributionFromSession(): Record<string, string> {
   const out: Record<string, string> = {};
   const ref = readSession(SESSION_KEY_REF);
