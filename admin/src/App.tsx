@@ -48,9 +48,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
       return (
         <div className="p-20 text-center font-label bg-surface min-h-screen flex flex-col items-center justify-center">
           <span className="material-symbols-outlined text-error text-5xl mb-4">report_problem</span>
-          <h1 className="text-on-background text-2xl font-bold mb-2 uppercase tracking-tighter">Tactical System Error</h1>
+          <h1 className="text-on-background text-2xl font-bold mb-2 uppercase tracking-tighter">Something went wrong</h1>
           <p className="text-on-surface-variant mb-6 font-body max-w-md mx-auto">
-            A critical failure occurred in the UI engine. This may be due to connectivity issues or a configuration mismatch.
+            Something went wrong loading the app. This may be due to connectivity issues or a configuration mismatch.
           </p>
           <div className="bg-surface-container-high p-4 rounded-lg text-left w-full max-w-2xl overflow-auto border border-error/20">
             <code className="text-[10px] text-error font-mono whitespace-pre-wrap">
@@ -61,7 +61,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
             onClick={() => window.location.reload()}
             className="mt-8 signature-gradient text-on-primary px-8 py-3 rounded-md font-headline font-bold shadow-lg uppercase tracking-widest text-xs"
           >
-            Re-Initialize System
+            Reload
           </button>
         </div>
       );
@@ -261,7 +261,7 @@ function AppContent() {
   if (tenantLoading) {
     return <div className="p-20 text-center font-label animate-pulse text-on-surface-variant flex flex-col items-center justify-center min-h-screen bg-surface">
       <span className="material-symbols-outlined text-4xl mb-4 animate-spin text-primary/20">sync</span>
-      SYNCHRONIZING TACTICAL DATA...
+      LOADING…
     </div>;
   }
 

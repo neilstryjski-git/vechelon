@@ -527,7 +527,7 @@ const RideLanding: React.FC = () => {
     <div className="space-y-12 py-12 animate-in fade-in duration-500">
       <div className="max-w-lg mx-auto text-center space-y-4">
         <div className="w-12 h-12 border-4 border-brand-primary/10 border-t-brand-primary rounded-full animate-spin mx-auto" />
-        <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant animate-pulse">Establishing Tactical Link...</p>
+        <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant animate-pulse">Loading…</p>
       </div>
       <RideCardSkeleton />
     </div>
@@ -574,7 +574,7 @@ const RideLanding: React.FC = () => {
             )}
             <div>
               <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant">
-                Tactical Mission Summary
+                Ride Summary
               </p>
               <h2 className="font-headline font-extrabold text-2xl tracking-tighter text-on-background uppercase italic">
                 {tenant?.name || 'VECHELON'}
@@ -595,7 +595,7 @@ const RideLanding: React.FC = () => {
               {participantCount !== undefined && (
                 <div className="flex items-center gap-2 mt-2">
                   <span className="font-label text-[9px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
-                    {participantCount} Operators
+                    {participantCount} Riders
                   </span>
                 </div>
               )}
@@ -605,7 +605,7 @@ const RideLanding: React.FC = () => {
             {summary?.post_ride_summary ? (
               <div className="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/10 space-y-4 shadow-ambient">
                 <p className="font-label text-[10px] uppercase tracking-widest text-brand-primary font-bold">
-                  After-Action Report
+                  Ride Recap
                 </p>
                 <p className="font-body text-sm text-on-background leading-relaxed whitespace-pre-line italic">
                   "{summary.post_ride_summary}"
@@ -614,7 +614,7 @@ const RideLanding: React.FC = () => {
             ) : (
               <div className="bg-surface-container-low/50 rounded-2xl p-12 border border-dashed border-outline-variant/20 text-center">
                 <span className="material-symbols-outlined text-on-surface-variant/20 text-4xl mb-3 animate-pulse">psychology</span>
-                <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/40">— AI Intelligence Processing —</p>
+                <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/40">— AI recap pending —</p>
               </div>
             )}
 
@@ -623,7 +623,7 @@ const RideLanding: React.FC = () => {
               className="flex items-center gap-2 font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant hover:text-brand-primary transition-colors"
             >
               <span className="material-symbols-outlined text-sm">arrow_back</span>
-              Return to Command Centre
+              Return to Dashboard
             </button>
           </div>
         </div>
@@ -688,7 +688,7 @@ const RideLanding: React.FC = () => {
           {isActive && (
             <div className="flex items-center gap-2 px-8 pt-6">
               <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-pulse shadow-[0_0_10px_rgba(0,110,53,0.5)]" />
-              <span className="font-label text-[10px] uppercase tracking-[0.2em] text-tertiary font-bold">Tactical Session Active</span>
+              <span className="font-label text-[10px] uppercase tracking-[0.2em] text-tertiary font-bold">Ride in Progress</span>
             </div>
           )}
 
@@ -861,7 +861,7 @@ const RideLanding: React.FC = () => {
                           type="text"
                           value={guestName}
                           onChange={(e) => setGuestName(e.target.value)}
-                          placeholder="Operator Name *"
+                          placeholder="Your name *"
                           className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all"
                         />
                         <input
@@ -879,7 +879,7 @@ const RideLanding: React.FC = () => {
                           <span className="material-symbols-outlined">
                             {rsvpDone ? 'check_circle' : (isActive ? 'play_circle' : 'event_available')}
                           </span>
-                          {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Synchronizing…' : (isActive ? 'Join Tactical Session' : 'Confirm RSVP')}
+                          {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Joining…' : (isActive ? 'Join Ride' : 'Confirm RSVP')}
                         </button>
                         {rsvpDone && guestEmail.trim() ? (
                           <p className="pt-2 text-center font-label text-[9px] uppercase tracking-widest text-on-surface-variant">
@@ -894,7 +894,7 @@ const RideLanding: React.FC = () => {
                               }}
                               className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant hover:text-brand-primary transition-colors"
                             >
-                              Already an operator? <span className="font-bold underline">Sign in</span>
+                              Already have an account? <span className="font-bold underline">Sign in</span>
                             </button>
                           </div>
                         )}
@@ -906,7 +906,7 @@ const RideLanding: React.FC = () => {
                     <div className="flex items-center justify-center gap-3 py-5 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 shadow-sm">
                       <span className="material-symbols-outlined text-2xl">check_circle</span>
                       <span className="font-headline font-bold uppercase tracking-[0.2em] text-xs">
-                        {isActive ? 'Operator Active' : 'RSVP Synchronized'}
+                        {isActive ? "You're in" : 'RSVP Confirmed'}
                       </span>
                     </div>
                     <button
@@ -917,7 +917,7 @@ const RideLanding: React.FC = () => {
                       className="w-full bg-surface-container-high text-on-surface py-4 rounded-xl font-label text-[10px] uppercase tracking-[0.2em] font-bold flex items-center justify-center gap-3 hover:bg-surface-container-highest transition-all border border-outline-variant/20 shadow-sm"
                     >
                       <span className="material-symbols-outlined text-lg">login</span>
-                      Authorize Account to Link History
+                      Sign in to save your ride history
                     </button>
                   </div>
                 )
@@ -927,11 +927,11 @@ const RideLanding: React.FC = () => {
                 <div className="space-y-4 p-6 bg-primary/5 rounded-2xl border border-primary/10">
                   <div className="flex items-center gap-3 text-primary">
                     <span className="material-symbols-outlined text-xl animate-pulse">pending</span>
-                    <span className="font-headline font-bold uppercase tracking-widest text-xs italic">Affiliation Pending</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-xs italic">Awaiting admin approval</span>
                   </div>
                   <p className="font-body text-sm text-on-surface-variant leading-relaxed">
-                    Your operator status is currently awaiting command validation. 
-                    Tactical RSVP access will unlock once your membership is activated.
+                    Your account is awaiting admin approval.
+                    RSVP access will unlock once your membership is activated.
                   </p>
                 </div>
               )}
@@ -941,7 +941,7 @@ const RideLanding: React.FC = () => {
                   <div className="flex items-center justify-center gap-3 py-5 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 shadow-sm animate-in zoom-in-95 duration-500">
                     <span className="material-symbols-outlined text-2xl">check_circle</span>
                     <span className="font-headline font-bold uppercase tracking-[0.2em] text-xs">
-                      {isActive ? 'Tactical Session Active' : 'RSVP Confirmed'}
+                      {isActive ? 'Ride in Progress' : 'RSVP Confirmed'}
                     </span>
                   </div>
                 ) : (
@@ -953,7 +953,7 @@ const RideLanding: React.FC = () => {
                     <span className="material-symbols-outlined">
                       {rsvpDone ? 'check_circle' : (isActive ? 'play_circle' : 'event_available')}
                     </span>
-                    {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Establishing Link…' : (isActive ? 'Join Mission' : 'Commit RSVP')}
+                    {rsvpDone ? 'RSVP Confirmed' : isJoining ? 'Joining…' : (isActive ? 'Join Ride' : 'RSVP')}
                   </button>
                 )
               )}

@@ -160,7 +160,7 @@ const RiderHome: React.FC = () => {
           </p>
         )}
         <p className="font-body text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
-          Tactical command for the {tenant?.name || 'club'} peloton. Coordinate rides, track your history, and stay mission-ready.
+          Welcome back to the {tenant?.name || 'club'} peloton. Manage your rides and ride history, all in one place.
         </p>
       </section>
 
@@ -235,7 +235,7 @@ const RiderHome: React.FC = () => {
                             className="flex-1 signature-gradient text-on-primary py-2.5 rounded-xl font-headline font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 text-[11px] uppercase tracking-widest"
                           >
                             <span className="material-symbols-outlined text-base">event_available</span>
-                            {joining ? 'Synchronizing…' : 'RSVP Now'}
+                            {joining ? 'Joining…' : 'RSVP Now'}
                           </button>
                         )}
                         <button
@@ -291,21 +291,21 @@ const RiderHome: React.FC = () => {
                 </div>
                 <div className="space-y-4 pt-2">
                   <p className="font-label text-[10px] text-on-surface-variant/60 italic leading-relaxed uppercase tracking-wide">
-                    Your membership is pending tactical activation.
-                    Full RSVP access will unlock once command validates your status.
+                    Your membership is pending admin approval.
+                    Full RSVP access will unlock once an admin approves your account.
                   </p>
                   <button
                     disabled
                     className="w-full bg-surface-container-high text-on-surface-variant/40 py-3 rounded-xl font-headline font-bold uppercase tracking-widest text-[10px] cursor-not-allowed border border-outline-variant/10"
                   >
-                    Awaiting Activation
+                    Awaiting Approval
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-2xl p-8 text-center border border-dashed border-outline-variant/30">
-              <p className="font-label text-xs text-on-surface-variant opacity-60">— No upcoming missions scheduled —</p>
+              <p className="font-label text-xs text-on-surface-variant opacity-60">— No upcoming rides scheduled —</p>
             </div>
           )}
         </section>

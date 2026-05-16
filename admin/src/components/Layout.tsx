@@ -73,7 +73,7 @@ const Layout: React.FC<LayoutProps> = ({ tenant }) => {
   };
 
   const baseLinks: { to: string; label: string; end?: boolean }[] = [
-    { to: '/', label: 'Command Centre', end: true },
+    { to: '/', label: 'Dashboard', end: true },
     { to: '/calendar', label: 'Calendar' },
     { to: '/routes', label: 'Route Library' },
   ];
