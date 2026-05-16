@@ -244,15 +244,15 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-10">
 
-      <PageHeader 
-        label="Operations Overview"
-        title="Command Centre"
+      <PageHeader
+        label="Overview"
+        title="Dashboard"
       >
         <div className="text-right hidden md:block">
           <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant block opacity-50 mb-1">System Status</span>
           <span className="font-label text-[10px] uppercase tracking-widest text-brand-primary flex items-center gap-2">
             <span className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-pulse" />
-            Live Deployment
+            Riding Now
           </span>
         </div>
       </PageHeader>
@@ -281,7 +281,7 @@ const Dashboard: React.FC = () => {
           <div className="space-y-2 text-center md:text-left">
             <h3 className="font-headline font-bold text-xl text-on-background">Claim your ride history</h3>
             <p className="font-body text-sm text-on-surface-variant max-w-md">
-              You've joined tactical sessions as a guest. Create a permanent account to preserve your pings, routes, and club achievements.
+              You've joined rides as a guest. Create an account to keep your ride history.
             </p>
           </div>
           <button 
@@ -312,8 +312,8 @@ const Dashboard: React.FC = () => {
           value={memberCounts?.affiliated ?? 0}
           isLoading={loadingMembers}
           subCounts={[
-            { label: 'Affiliated', value: memberCounts?.affiliated ?? 0, active: true },
-            { label: 'Pending',    value: memberCounts?.initiated  ?? 0, active: false },
+            { label: 'Approved',   value: memberCounts?.affiliated ?? 0, active: true },
+            { label: 'Awaiting',   value: memberCounts?.initiated  ?? 0, active: false },
           ]}
         />
       </div>
@@ -321,11 +321,11 @@ const Dashboard: React.FC = () => {
       {/* Tactical Testing Area (Mounting the End Ride Button) */}
       <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-2' : ''} gap-8`}>
         
-        {/* Active Rides Tactical Control */}
+        {/* Active Rides */}
         {isAdmin && (
           <section className="space-y-4">
             <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
-              Tactical Session Control
+              Active Rides
             </h3>
             <div className="space-y-4">
               {activeRidesList && activeRidesList.length > 0 ? (
@@ -384,7 +384,7 @@ const Dashboard: React.FC = () => {
               ) : (
                 <div className="bg-surface-container-lowest p-8 rounded-2xl shadow-ambient border border-surface-container-low/50 min-h-[200px] flex flex-col justify-center text-center space-y-4">
                   <p className="font-body text-sm text-on-surface-variant opacity-60 italic">
-                    No active tactical sessions detected.
+                    No active rides.
                   </p>
                   <div className="pt-4 opacity-30 grayscale pointer-events-none">
                      <EndRideButton rideId="test-mock-id" />
@@ -395,10 +395,10 @@ const Dashboard: React.FC = () => {
           </section>
         )}
 
-        {/* Live Tactical Intelligence (Interactive Map) */}
+        {/* Live Map */}
         <section className="space-y-4">
           <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold border-b border-surface-container-low pb-2">
-            Live Tactical Intelligence
+            Live Map
           </h3>
           <div className="bg-surface-container-lowest rounded-2xl shadow-ambient border border-surface-container-low/50 overflow-hidden flex flex-col h-[400px] relative font-label">
             {primaryRideId ? (
@@ -411,7 +411,7 @@ const Dashboard: React.FC = () => {
             ) : (
               <div className="p-12 text-center my-auto opacity-40">
                 <p className="font-label text-sm text-on-surface-variant tracking-tight">
-                  — No active tactical sessions to map —
+                  — No active rides on the map. —
                 </p>
               </div>
             )}

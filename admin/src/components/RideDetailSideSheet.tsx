@@ -160,7 +160,7 @@ const RideDetailSideSheet: React.FC = () => {
     setIsJoining(true);
     try {
       await joinRide(selectedRideId);
-      addToast(ride?.status === 'active' ? 'Joined tactical session.' : 'RSVP confirmed.', 'success');
+      addToast(ride?.status === 'active' ? 'Joined ride.' : 'RSVP confirmed.', 'success');
       queryClient.invalidateQueries({ queryKey: ['ride-participants', selectedRideId] });
       queryClient.invalidateQueries({ queryKey: ['my-participation', selectedRideId] });
     } catch (e: any) {
@@ -393,7 +393,7 @@ const RideDetailSideSheet: React.FC = () => {
         <div className="p-6 border-b border-surface-container-low flex justify-between items-center bg-surface-container-low/30">
           <div>
             <span className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-1">
-              Tactical Overview
+              Ride Details
             </span>
             <h2 className="font-headline font-bold text-xl text-on-background">
               {loadingRide ? 'Loading Ride...' : ride?.name || 'Ride Details'}
@@ -634,7 +634,7 @@ const RideDetailSideSheet: React.FC = () => {
                   }}
                 >
                   <span className="material-symbols-outlined">map</span>
-                  View on Tactical HUD
+                  View on Map
                 </button>
 
                 {isAdmin && (

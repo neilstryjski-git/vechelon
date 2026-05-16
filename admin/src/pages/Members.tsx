@@ -119,11 +119,11 @@ function tierLabel(role: AccountRole): string {
 }
 
 const statusConfig = (status: DisplayStatus) => {
-  if (status === 'affiliated') return { dot: 'bg-tertiary rounded-full',        label: 'Validated'  };
-  if (status === 'suspended')  return { dot: 'bg-amber-500 rounded-full',       label: 'Suspended'  };
+  if (status === 'affiliated') return { dot: 'bg-tertiary rounded-full',        label: 'Approved'   };
+  if (status === 'suspended')  return { dot: 'bg-amber-500 rounded-full',       label: 'Paused'     };
   if (status === 'archived')   return { dot: 'bg-outline-variant rounded-none', label: 'Archived'   };
   if (status === 'rsvpd')      return { dot: 'bg-primary rounded-full',         label: "RSVP'd"     };
-  return                              { dot: 'bg-error rounded-none',           label: 'Pending'    };
+  return                              { dot: 'bg-error rounded-none',           label: 'Awaiting'   };
 };
 
 // ---------------------------------------------------------------------------
@@ -271,7 +271,7 @@ const CONFIRM_COPY: Record<ConfirmActionType, { title: string; body: string; but
   },
   reactivate: {
     title:  'Reactivate Member',
-    body:   'This member will be moved to Pending status. An admin will need to affiliate them before they regain access.',
+    body:   'This member will be moved to Awaiting status. An admin will need to approve them before they regain access.',
     button: 'Reactivate',
     danger: false,
   },
@@ -371,10 +371,10 @@ function ChangeEmailModal({ member, isPending, onSubmit, onCancel }: ChangeEmail
 
 const TABS: { key: ActiveTab; label: string }[] = [
   { key: 'all',       label: 'All'       },
-  { key: 'validated', label: 'Validated' },
-  { key: 'pending',   label: 'Pending'   },
+  { key: 'validated', label: 'Approved'  },
+  { key: 'pending',   label: 'Awaiting'  },
   { key: 'rsvpd',     label: "RSVP'd"    },
-  { key: 'suspended', label: 'Suspended' },
+  { key: 'suspended', label: 'Paused'    },
   { key: 'archived',  label: 'Archived'  },
 ];
 
@@ -725,7 +725,7 @@ const Members: React.FC = () => {
               <p className="font-label text-[10px] text-on-surface-variant/60 mt-2">
                 {inviteRole === 'admin'
                   ? 'Admin can manage rides, members, and club settings.'
-                  : 'Member can view rides and RSVP. Their account is created as Validated.'}
+                  : 'Member can view rides and RSVP. Their account is created as Approved.'}
               </p>
             </div>
           </div>

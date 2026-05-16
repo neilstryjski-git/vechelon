@@ -365,7 +365,7 @@ const RideBuilder: React.FC = () => {
     navigate('/');
   };
 
-  if (isLoading) return <div className="p-12 animate-pulse text-center font-label uppercase">Initializing Tactical Builder...</div>;
+  if (isLoading) return <div className="p-12 animate-pulse text-center font-label uppercase">Loading ride builder…</div>;
 
   if (!ride) return (
     <div className="max-w-lg mx-auto text-center space-y-6 pt-16">
@@ -552,7 +552,7 @@ const RideBuilder: React.FC = () => {
           />
           
           <div className="absolute bottom-6 left-6 glass p-4 rounded-xl shadow-ambient border border-outline-variant/10 max-w-xs">
-            <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-2 font-bold">Tactical Instructions</p>
+            <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-2 font-bold">Instructions</p>
             <ul className="space-y-1.5 font-body text-xs text-on-surface-variant/80">
               <li className="flex gap-2"><span className="text-tertiary">●</span> Drag markers to adjust positions.</li>
               <li className="flex gap-2"><span className="text-primary">●</span> Click map to add a new Waypoint.</li>

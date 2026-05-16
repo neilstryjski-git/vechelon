@@ -94,7 +94,7 @@ const RiderLayout: React.FC = () => {
       {/* Pending Affiliation HUD — Tier 2 (initiated) only */}
       {userTier === 'initiated' && (
         <div className="bg-primary text-on-primary font-label text-[10px] uppercase tracking-[0.2em] text-center py-1.5 animate-pulse z-[60] relative">
-          Membership Pending — Awaiting Tactical Activation
+          Membership Pending — Awaiting admin approval
         </div>
       )}
 

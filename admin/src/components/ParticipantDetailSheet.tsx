@@ -100,7 +100,7 @@ const ParticipantDetailSheet: React.FC = () => {
                     </span>
                   </div>
                   <p className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant opacity-60">
-                    Tactical Status: <span className={participant.status === 'active' ? 'text-tertiary font-bold' : ''}>{participant.status}</span>
+                    Status: <span className={participant.status === 'active' ? 'text-tertiary font-bold' : ''}>{participant.status}</span>
                   </p>
                 </div>
                 <button 
@@ -151,7 +151,7 @@ const ParticipantDetailSheet: React.FC = () => {
                   <button 
                     className="w-full bg-error text-on-error py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-lg hover:opacity-90 transition-all active:scale-[0.98] uppercase tracking-widest text-sm"
                     onClick={() => {
-                      addToast(`Tactical unit dispatched to ${participant.display_name}.`, 'error');
+                      addToast(`Beacon sent to ${participant.display_name}.`, 'error');
                     }}
                   >
                     <span className="material-symbols-outlined">sos</span>

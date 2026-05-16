@@ -18,7 +18,7 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
   const { addToast } = useToast();
 
   const handleEndRide = async () => {
-    if (!window.confirm('Are you sure you want to end this tactical session?')) return;
+    if (!window.confirm('Are you sure you want to end this ride?')) return;
     
     setIsEnding(true);
     try {
@@ -57,7 +57,7 @@ const EndRideButton: React.FC<EndRideButtonProps> = ({ rideId }) => {
               : 'bg-error text-on-error hover:bg-error/90 active:scale-95'
           }`}
         >
-          {isEnding ? 'Finalizing Tactical Data...' : 'End Tactical Session'}
+          {isEnding ? 'Finalizing ride…' : 'End Ride'}
         </button>
       ) : (
         <div className="bg-surface-container-high p-6 rounded-lg border border-brand-primary/20 animate-in fade-in zoom-in duration-500">

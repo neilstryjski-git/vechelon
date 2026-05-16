@@ -225,10 +225,10 @@ const AuthPage: React.FC = () => {
           </div>
           <div>
             <h1 className="font-headline font-extrabold text-2xl tracking-tighter italic text-on-background uppercase mb-2">
-              Initializing Tactical Link
+              Signing you in
             </h1>
             <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant animate-pulse">
-              Synchronizing Encrypted Session...
+              Signing you in…
             </p>
           </div>
         </div>
@@ -274,7 +274,7 @@ const AuthPage: React.FC = () => {
           </>
         )}
         <p className="font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant mt-2">
-          Tactical Rider Portal
+          Vechelon Rider Portal
         </p>
       </div>
 
@@ -285,10 +285,10 @@ const AuthPage: React.FC = () => {
             <span className="material-symbols-outlined text-brand-primary text-4xl">mark_email_read</span>
           </div>
           <div className="space-y-3">
-            <h2 className="font-headline font-bold text-2xl text-on-background uppercase italic tracking-tighter italic">Mission Dispatch Sent</h2>
+            <h2 className="font-headline font-bold text-2xl text-on-background uppercase italic tracking-tighter italic">Magic link sent</h2>
             <p className="font-body text-sm text-on-surface-variant leading-relaxed">
-              A secure tactical link has been dispatched to <span className="font-bold text-on-background">{email}</span>. 
-              Check your comms to complete synchronization.
+              A magic link has been sent to <span className="font-bold text-on-background">{email}</span>.
+              Check your email to sign in.
             </p>
           </div>
           <div className="pt-4">
@@ -307,13 +307,13 @@ const AuthPage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2 px-1">
-                Operator Identity (Email)
+                Email address
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="operator@vechelon.app"
+                placeholder="rider@example.com"
                 required
                 autoFocus
                 className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all shadow-sm"
@@ -336,24 +336,24 @@ const AuthPage: React.FC = () => {
             {stage === 'sending' ? (
               <>
                 <span className="material-symbols-outlined text-xl animate-spin">sync</span>
-                Dispatching Link…
+                Sending…
               </>
             ) : (
               <>
                 <span className="material-symbols-outlined text-xl">encrypted</span>
-                Authorize Access
+                Send Magic Link
               </>
             )}
           </button>
 
           <div className="space-y-4">
             <p className="text-center font-label text-[9px] text-on-surface-variant/50 leading-relaxed uppercase tracking-widest">
-              Zero-Password Protocol Active<br />
-              Secure token will expire in 60 minutes
+              Passwordless sign-in<br />
+              Link expires in 60 minutes
             </p>
             <div className="w-12 h-0.5 bg-outline-variant/10 mx-auto rounded-full" />
             <p className="text-center font-label text-[8px] text-on-surface-variant/30 leading-relaxed uppercase tracking-[0.2em]">
-              New operators automatically registered<br />upon first authentication
+              New riders auto-registered<br />on first sign-in
             </p>
           </div>
         </form>
