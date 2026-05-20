@@ -1169,6 +1169,14 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                       </button>
                     </div>
                   )}
+
+                  {/* D45: explicit signal when no route is attached to form state,
+                      so the disabled Create button is self-explaining. */}
+                  {!selectedRoute && !pendingFile && (
+                    <p className="mt-2 font-label text-[9px] uppercase tracking-widest text-on-surface-variant/60">
+                      Attach a route to create this ride.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1330,7 +1338,18 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isPending || !name.trim() || (rideType === 'meetup' && (!meetupCoords || !meetupLabel.trim()))}
+                  // D45: gate Route rides on a route actually being attached to the
+                  // FORM state (selectedRoute/pendingFile), not just the uploader's
+                  // local preview. A Route/Meetup or tab toggle can clear the form's
+                  // file reference while the uploader preview lingers — without this
+                  // gate, Create stays clickable and fails late with a confusing
+                  // "a route or GPX file is required" error.
+                  disabled={
+                    isPending ||
+                    !name.trim() ||
+                    (rideType === 'meetup' && (!meetupCoords || !meetupLabel.trim())) ||
+                    (rideType === 'route' && !selectedRoute && !pendingFile)
+                  }
                   className="flex-1 signature-gradient text-on-primary py-3 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">
