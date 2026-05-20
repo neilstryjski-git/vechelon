@@ -185,7 +185,7 @@ const Dashboard: React.FC = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('rides')
-        .select('gpx_path, meetup_coords, meetup_label, start_coords, start_label')
+        .select('gpx_path, meetup_coords, meetup_label, start_coords, start_label, waypoints(coords, label, order_index)')
         .eq('id', primaryRideId!)
         .single();
       return data;
@@ -236,8 +236,24 @@ const Dashboard: React.FC = () => {
     };
   })();
 
+  // Waypoints saved in RideBuilder — render them on the HUD map so "View on
+  // Map" reflects the full planned geometry, not just the meetup pin.
+  const waypointMarkers = ((selectedRideData as any)?.waypoints ?? [])
+    .map((w: any) => {
+      const coords = parsePoint(w.coords);
+      if (!coords) return null;
+      return {
+        id: `wp-${w.order_index}-${primaryRideId}`,
+        position: coords,
+        label: w.label || 'Waypoint',
+        type: 'waypoint' as const,
+      };
+    })
+    .filter(Boolean);
+
   const allMarkers = [
     ...(meetupMarker ? [meetupMarker] : []),
+    ...(waypointMarkers as any[]),
     ...(participantMarkers as any[]),
   ];
 
