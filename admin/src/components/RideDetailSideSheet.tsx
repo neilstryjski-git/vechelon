@@ -626,16 +626,23 @@ const RideDetailSideSheet: React.FC = () => {
                   </div>
                 )}
 
-                <button
-                  className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98]"
-                  onClick={() => {
-                    closeSheet();
-                    navigate('/');
-                  }}
-                >
-                  <span className="material-symbols-outlined">map</span>
-                  View on Map
-                </button>
+                {/* View on Map navigates to the admin HUD ('/'), which only
+                    exists for admins — for riders '/' is RiderHome (no map), so
+                    the button was a dead-end. Riders already have direct Google
+                    Maps links for the Start and Meetup locations above, which
+                    covers their actual need. Admin-only. */}
+                {isAdmin && (
+                  <button
+                    className="w-full signature-gradient text-on-primary py-4 rounded-xl font-headline font-bold flex items-center justify-center gap-2 shadow-ambient hover:opacity-90 transition-all active:scale-[0.98]"
+                    onClick={() => {
+                      closeSheet();
+                      navigate('/');
+                    }}
+                  >
+                    <span className="material-symbols-outlined">map</span>
+                    View on Map
+                  </button>
+                )}
 
                 {isAdmin && (
                   <button
