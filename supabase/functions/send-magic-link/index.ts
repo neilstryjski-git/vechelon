@@ -52,7 +52,12 @@ serve(async (req) => {
     const tenant = tenantQuery.data
 
     const clubName = tenant?.name || 'Vechelon'
-    const clubLogo = tenant?.logo_url || ''
+    const rawLogoUrl = tenant?.logo_url || ''
+    // Relative paths (e.g. /portal/logo.png) can't be resolved by email clients.
+    // Prepend the tenant's origin so the <img> src is always absolute.
+    const clubLogo = rawLogoUrl.startsWith('/')
+      ? `${redirectURL.origin}${rawLogoUrl}`
+      : rawLogoUrl
     const brandColor = tenant?.primary_color || '#1c1c1c'
 
     const inputEmail = email.trim().toLowerCase()

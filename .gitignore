@@ -25,3 +25,6 @@ dist/
 dist_production/
 public/portal/
 .vercel
+
+# Windows/WSL Mark-of-the-Web cruft
+*:Zone.Identifier

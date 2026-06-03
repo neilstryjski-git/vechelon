@@ -30,3 +30,4 @@ dev_output.txt
 *.njsproj
 *.sln
 *.sw?
+.vercel
