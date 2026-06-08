@@ -10,6 +10,7 @@ import { buildRideUrl } from '../lib/portalBase';
 import { getRiderHash } from '../lib/riderHash';
 import Modal from './Modal';
 import RideFormModal from './RideFormModal';
+import CloneRideModal from './CloneRideModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,6 +80,7 @@ const RideDetailSideSheet: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
   const [showAllParticipants, setShowAllParticipants] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
   const [showQrOverlay, setShowQrOverlay] = useState(false);
@@ -353,6 +355,15 @@ const RideDetailSideSheet: React.FC = () => {
             finish_label:     ride.finish_label ?? '',
             external_url:     ride.external_url ?? '',
           }}
+        />
+      )}
+
+      {showCloneModal && (
+        <CloneRideModal
+          isOpen={showCloneModal}
+          sourceRideId={selectedRideId}
+          sourceName={ride?.name}
+          onClose={() => setShowCloneModal(false)}
         />
       )}
 
@@ -701,6 +712,13 @@ const RideDetailSideSheet: React.FC = () => {
                     >
                       <span className="material-symbols-outlined text-sm">edit_location_alt</span>
                       Edit Geometry & Crew
+                    </button>
+                    <button
+                      className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors"
+                      onClick={() => setShowCloneModal(true)}
+                    >
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      Duplicate Ride
                     </button>
                     <button
                       className="w-full bg-error/10 text-error py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-error/20 transition-colors"
