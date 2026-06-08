@@ -28,3 +28,4 @@ public/portal/
 
 # Windows/WSL Mark-of-the-Web cruft
 *:Zone.Identifier
+.stride/
