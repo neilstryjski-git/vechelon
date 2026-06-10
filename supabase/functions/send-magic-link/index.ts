@@ -19,7 +19,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { email, redirectTo } = await req.json()
+    const { email, redirectTo, slug: bodySlug } = await req.json()
     if (!email) throw new Error('Email is required')
     if (!redirectTo) throw new Error('redirectTo is required')
 
@@ -34,7 +34,11 @@ serve(async (req) => {
       throw new Error('Invalid redirectTo URL')
     }
 
-    const slug = extractSlug(redirectURL.hostname)
+    // Native deep links (e.g. rail3://auth) have no usable hostname to derive the
+    // tenant from, so the mobile caller passes the slug explicitly. Web requests
+    // keep deriving it from the subdomain — unchanged.
+    const isDeepLink = !/^https?:\/\//i.test(redirectTo)
+    const slug = isDeepLink ? (bodySlug ?? null) : extractSlug(redirectURL.hostname)
 
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -82,11 +86,22 @@ serve(async (req) => {
     // (Gmail, Outlook SafeLinks, etc.) cannot consume the one-time token by
     // pre-fetching the link. Scanners follow the portal URL but don't execute JS;
     // the portal JS auto-redirects the real user's browser to the OTP link instantly.
-    const clickThroughUrl = `${portalAuthBase}?c=${encodeURIComponent(btoa(magicLink))}`
+    // The ?c= click-through defeats email-scanner OTP pre-fetch — but it needs a
+    // JS web page to redirect, which a rail3:// deep link cannot run. So native
+    // deep links use the raw action_link (scanner protection is a separate
+    // production item for mobile); web keeps the click-through wrapper unchanged.
+    const clickThroughUrl = isDeepLink
+      ? magicLink
+      : `${portalAuthBase}?c=${encodeURIComponent(btoa(magicLink))}`
+
+    // On the staging/test project the EMAIL_TEST_BANNER edge secret is set so the
+    // email is unmistakably a test; it is unset on production (so prod is unchanged).
+    const testBanner = Deno.env.get('EMAIL_TEST_BANNER') === 'true'
 
     // 3. Send via Resend with dynamic branding
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1c1c1c; background-color: #f9f9f9;">
+        ${testBanner ? `<div style="background:#b91c1c;color:#fff;text-align:center;padding:12px;border-radius:10px;margin-bottom:16px;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">&#9888; Rail 3 TEST environment &mdash; not the live ${clubName} portal</div>` : ''}
         <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee;">
           ${clubLogo ? `<img src="${clubLogo}" alt="${clubName}" style="height: 40px; margin-bottom: 24px;">` : `<h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 24px 0;">${clubName.toUpperCase()}</h1>`}
 
@@ -116,7 +131,7 @@ serve(async (req) => {
 
     const { error: resendError } = await sendResendEmail({
       to: inputEmail,
-      subject: `Sign in to ${clubName}`,
+      subject: `${testBanner ? '[Rail 3 TEST] ' : ''}Sign in to ${clubName}`,
       html: emailHtml
     })
 
