@@ -1,0 +1,61 @@
+name: Rail 3 CI
+
+# Rail 3 integration-test harness (task W183).
+#
+# Runs the Rail 3 test suite against an EPHEMERAL LOCAL Supabase stack started
+# inside the CI runner — it never connects to the hosted production project
+# (drktcxggaizkbvqccfhp). This is the merge gate that lets Rail 3 do real
+# RLS/integration testing while keeping production untouched (free-tier-first
+# test strategy).
+#
+# Additive and Rail-3-scoped: this workflow does NOT build, gate, or alter the
+# existing admin/ web app — that ships via Vercel on push to master, unaffected.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/rail3-ci.yml'
+      - 'mobile/**'
+  workflow_dispatch:
+
+# Avoid piling up redundant runs on rapid pushes to the same PR.
+concurrency:
+  group: rail3-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  db-rls-gate:
+    name: Local Supabase + RLS isolation gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack (applies all migrations)
+        # `supabase start` brings up a local Postgres + Auth + Realtime in Docker
+        # and applies supabase/migrations. Nothing here touches the hosted project.
+        run: supabase start
+
+      - name: Run Rail 3 RLS isolation gate
+        run: |
+          # Resolve the LOCAL stack's DB connection string from the CLI itself.
+          eval "$(supabase status -o env)"
+          DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
+          echo "Running RLS gate against local stack ($DB_URL)"
+          case "$DB_URL" in
+            *127.0.0.1*|*localhost*) : ;;  # ok — local only
+            *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
+          esac
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rail3_rls_isolation.test.sql
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop --no-backup
