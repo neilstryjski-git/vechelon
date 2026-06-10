@@ -12,13 +12,17 @@ import {
 
 import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
+import { TENANT_SLUG } from '../lib/env';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error';
 
-// Passwordless magic-link sign-in. Sends Supabase's default (platform-branded)
-// auth email via signInWithOtp. New riders are auto-created on first sign-in
-// (shouldCreateUser defaults to true), matching the web portal's behaviour.
-// emailRedirectTo points at the app's deep link so the link returns to the app.
+// Passwordless magic-link sign-in. Routes through the send-magic-link edge
+// function (generateLink + Resend) — the SAME path production Vechelon uses —
+// NOT Supabase's built-in mailer (see the PoC-stays-aligned-to-production
+// principle). redirectTo is the app deep link so the link returns to the app;
+// slug brands the email for the right club. On a non-2xx the function's { error }
+// body is reachable only via error.context (supabase-js leaves `data` null), so we
+// read it from there — mirroring the web AuthPage error handling.
 const SignInScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [stage, setStage] = useState<Stage>('idle');
@@ -31,14 +35,24 @@ const SignInScreen: React.FC = () => {
     setStage('sending');
     setErrorMsg('');
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: { emailRedirectTo: authRedirectUrl },
+    const { error } = await supabase.functions.invoke('send-magic-link', {
+      body: { email: trimmed, redirectTo: authRedirectUrl, slug: TENANT_SLUG },
     });
 
     if (error) {
+      // The function returns 400 with { error: "<reason>" }; supabase-js surfaces
+      // the body only on error.context, not in `data`.
+      let msg = error.message;
+      try {
+        const body = await (
+          error as { context?: { json?: () => Promise<{ error?: string }> } }
+        ).context?.json?.();
+        if (body?.error) msg = body.error;
+      } catch {
+        // keep the generic message
+      }
       setStage('error');
-      setErrorMsg(error.message);
+      setErrorMsg(msg);
     } else {
       setStage('sent');
     }
