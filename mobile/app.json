@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Vechelon Rail 3",
+    "slug": "vechelon-rail3",
+    "scheme": "rail3",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "platforms": ["android"],
+    "android": {
+      "package": "ca.vechelon.rail3"
+    },
+    "plugins": [
+      "expo-dev-client"
+    ],
+    "extra": {
+      "eas": {}
+    }
+  }
+}
