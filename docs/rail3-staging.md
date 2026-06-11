@@ -22,7 +22,7 @@ Record after provisioning: **staging project ref**, **anon key**, **SMTP sender*
 |---|---|
 | Staging project ref | `xybgtbybdhxuwqjfcfkc` (created 2026-06-10, `us-east-1`, free, ACTIVE_HEALTHY) |
 | Staging URL | `https://xybgtbybdhxuwqjfcfkc.supabase.co` |
-| Staging anon key | held out of repo — goes in W187's gitignored `mobile/.env` |
+| Staging anon key | **publishable** key (`sb_publishable_…`, matches the web app's key format). Public by design (ships in every APK), so W187 commits it in `mobile/eas.json` → `build.<profile>.env` for self-configuring cloud builds. The DB password and `service_role` key stay out of the repo. |
 | DB password | stored by Sr PM (not retrievable from Supabase later) |
 | Test email sender | `__________` (distinct from prod `send.vechelon.ca` — set in step 3) |
 
@@ -108,3 +108,21 @@ Fill the table above (ref, anon key, sender) and commit this file.
 - **2-project free cap** — `rail3-staging` is the one reserved slot.
 - **Free projects pause after ~7 days idle** — wake staging before ride day.
 - After staging CLI work, **re-link to prod** so migrations don't push to the wrong ref.
+
+---
+
+## Mobile build & distribution *(W187)*
+
+The Rail 3 Expo app is pointed at this staging project by the `EXPO_PUBLIC_*`
+values committed in `mobile/eas.json` → `build.<profile>.env` (staging URL above,
+staging **publishable** key, `EXPO_PUBLIC_TENANT_SLUG=racer-sportif`). Cloud builds
+are self-configuring — no `eas env:create`. A gitignored `mobile/.env` carries the
+same values for local dev (`expo start` / `expo run:android`) only.
+
+Build + on-device install is documented step-by-step in **`mobile/README.md`
+§4–5**. For **UAT/field testing** use the `preview` profile — a self-contained APK
+(JS baked in) that installs via the EAS QR page and runs with nothing on your
+machine (no Metro, no tunnel). The `development` profile (dev client + Metro) is for
+day-to-day iteration. Both are internal-distribution APKs (no Play Store, no
+iOS-style device registration). Wake this staging project first if it's been idle
+>7 days, or magic-link sign-in fails on the device.
