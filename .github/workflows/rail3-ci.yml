@@ -56,6 +56,38 @@ jobs:
           esac
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rail3_rls_isolation.test.sql
 
+      # ── W182: DoD-12 behavioral isolation matrix (DB RLS + Broadcast authz) ──
+      # Runs through the real Realtime server, which the SQL gate above cannot
+      # reach — a Broadcast leak (G-1) would pass DB-only tests. The matrix
+      # SKIPs its Rail 3 assertions on branches without the held W169/W170
+      # migrations, so it is safe on every PR this workflow gates.
+      - name: Export local stack env for the isolation matrix
+        run: |
+          eval "$(supabase status -o env)"
+          case "$API_URL" in
+            *127.0.0.1*|*localhost*) : ;;  # ok — local only
+            *) echo "::error::Refusing to run: API_URL is not a local address ($API_URL)"; exit 1 ;;
+          esac
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install mobile dependencies
+        # No lockfile in mobile/ yet (EAS builds resolve fresh too) — plain install.
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+
+      - name: Run DoD-12 isolation matrix (W182)
+        working-directory: mobile
+        run: npm test
+
       - name: Stop local Supabase stack
         if: always()
         run: supabase stop --no-backup
