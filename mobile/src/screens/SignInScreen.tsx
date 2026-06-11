@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { supabase } from '../lib/supabase';
-import { authRedirectUrl } from '../lib/deepLinkAuth';
+import { authBounceUrl } from '../lib/deepLinkAuth';
 import { TENANT_SLUG } from '../lib/env';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error';
@@ -19,7 +19,8 @@ type Stage = 'idle' | 'sending' | 'sent' | 'error';
 // Passwordless magic-link sign-in. Routes through the send-magic-link edge
 // function (generateLink + Resend) — the SAME path production Vechelon uses —
 // NOT Supabase's built-in mailer (see the PoC-stays-aligned-to-production
-// principle). redirectTo is the app deep link so the link returns to the app;
+// principle). redirectTo is the https rail3-auth-bounce page (NOT rail3:// — Android
+// drops https→custom-scheme 302s, D48); the bounce page opens the app on a user tap.
 // slug brands the email for the right club. On a non-2xx the function's { error }
 // body is reachable only via error.context (supabase-js leaves `data` null), so we
 // read it from there — mirroring the web AuthPage error handling.
@@ -36,7 +37,7 @@ const SignInScreen: React.FC = () => {
     setErrorMsg('');
 
     const { error } = await supabase.functions.invoke('send-magic-link', {
-      body: { email: trimmed, redirectTo: authRedirectUrl, slug: TENANT_SLUG },
+      body: { email: trimmed, redirectTo: authBounceUrl, slug: TENANT_SLUG },
     });
 
     if (error) {

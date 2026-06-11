@@ -34,11 +34,12 @@ serve(async (req) => {
       throw new Error('Invalid redirectTo URL')
     }
 
-    // Native deep links (e.g. rail3://auth) have no usable hostname to derive the
-    // tenant from, so the mobile caller passes the slug explicitly. Web requests
-    // keep deriving it from the subdomain — unchanged.
+    // Prefer an explicitly-supplied slug from ANY caller. The Rail 3 native app now
+    // sends an https bounce-page redirectTo (no tenant hostname to derive from — D48),
+    // so it passes the slug in the body. Web callers (AuthPage/RideLanding) omit slug,
+    // so they fall through to subdomain derivation exactly as before — unchanged.
     const isDeepLink = !/^https?:\/\//i.test(redirectTo)
-    const slug = isDeepLink ? (bodySlug ?? null) : extractSlug(redirectURL.hostname)
+    const slug = bodySlug ?? (isDeepLink ? null : extractSlug(redirectURL.hostname))
 
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
