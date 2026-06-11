@@ -27,13 +27,13 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@supabase/supabase-js';
 
-const URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321';
+const SUPA_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321';
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // ── Guardrails ────────────────────────────────────────────────────────────────
-if (!/127\.0\.0\.1|localhost/.test(URL)) {
-  console.error(`Refusing to run: SUPABASE_URL is not a local address (${URL}).`);
+if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(new URL(SUPA_URL).hostname)) {
+  console.error(`Refusing to run: SUPABASE_URL is not a local address (${SUPA_URL}).`);
   console.error('This isolation matrix runs against the local stack only.');
   process.exit(1);
 }
@@ -44,7 +44,7 @@ if (!ANON_KEY || !SERVICE_KEY) {
   process.exit(1);
 }
 
-const admin = createClient(URL, SERVICE_KEY, { auth: { persistSession: false } });
+const admin = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
 // Unique suffix so reruns never collide on unique columns (tenants.slug, rides.qr_code).
 const RUN = `w182-${Date.now()}`;
@@ -62,7 +62,7 @@ const fx = {
 
 // Sign in a seeded user and return an authed client (its own auth storage).
 async function signedInClient(email, password) {
-  const client = createClient(URL, ANON_KEY, { auth: { persistSession: false } });
+  const client = createClient(SUPA_URL, ANON_KEY, { auth: { persistSession: false } });
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`);
   // Make sure the realtime connection authenticates as this user, not anon.
@@ -93,6 +93,13 @@ before(async () => {
   {
     const { error } = await admin.from('beacon_alerts').select('id').limit(1);
     fx.rail3SchemaPresent = !error;
+    if (error && process.env.EXPECT_RAIL3) {
+      // The workflow saw rail3 migrations on this branch, so an unreachable
+      // beacon_alerts is a real failure — never let it silently downgrade the
+      // full matrix to a green run of skips.
+      console.error(`EXPECT_RAIL3 is set but the schema probe failed: ${error.code ?? error.message}`);
+      process.exit(1);
+    }
     if (error) console.log(`beacon_alerts not reachable (${error.code ?? error.message}) — Rail 3 assertions will SKIP.`);
   }
 
@@ -133,8 +140,10 @@ before(async () => {
     .insert([
       // ride_type enum is {route, adhoc, meetup} — 'scheduled' was renamed by
       // migration 20260415000000 (the stale-enum trap PR #56 hit in seed.sql).
+      // Ride B is ADHOC so the Ad Hoc channel edge case is exercised directly:
+      // the cross-tenant deny AND the in-tenant subscribe both run on its channel.
       { tenant_id: fx.tenantA.id, name: `W182 ride A ${RUN}`, type: 'route', start_coords: '(45.50,-73.60)', qr_code: `${RUN}-qr-a`, created_by: fx.userA.id },
-      { tenant_id: fx.tenantB.id, name: `W182 ride B ${RUN}`, type: 'route', start_coords: '(45.51,-73.61)', qr_code: `${RUN}-qr-b`, created_by: fx.userB.id },
+      { tenant_id: fx.tenantB.id, name: `W182 ride B ${RUN}`, type: 'adhoc', start_coords: '(45.51,-73.61)', qr_code: `${RUN}-qr-b`, created_by: fx.userB.id },
     ])
     .select('id, tenant_id');
   assert.ifError(rErr);

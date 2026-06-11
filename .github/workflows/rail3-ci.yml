@@ -74,6 +74,12 @@ jobs:
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
+          # When this branch carries Rail 3 migrations the matrix must NOT be
+          # allowed to silently skip into a green run — the test hard-fails if
+          # the schema probe errors while EXPECT_RAIL3 is set.
+          if ls supabase/migrations/*rail3* >/dev/null 2>&1; then
+            echo "EXPECT_RAIL3=1" >> "$GITHUB_ENV"
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
