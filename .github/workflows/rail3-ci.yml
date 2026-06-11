@@ -17,6 +17,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
+      - 'supabase/seed.sql'   # seed runs on `supabase start` — it can break the gate (D49, #56)
       - '.github/workflows/rail3-ci.yml'
       - 'mobile/**'
   workflow_dispatch:
