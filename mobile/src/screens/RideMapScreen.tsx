@@ -1,12 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-map-clustering';
-import { PROVIDER_GOOGLE, Region, MapMarker } from 'react-native-maps';
+import { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 
+import { supabase } from '../lib/supabase';
 import { useRideDetails } from '../hooks/useRideDetails';
-import { useFleetPositions, useMyFleetIdentity } from '../hooks/useFleetPositions';
+import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import RiderMarker from '../components/RiderMarker';
@@ -36,8 +37,13 @@ const RideMapScreen: React.FC = () => {
   const rideId = route.params.rideId;
 
   const { ride, loading, error } = useRideDetails(rideId);
-  const { me } = useMyFleetIdentity(rideId);
-  const { fleet, myCoords, channelStatus } = useFleetPositions(rideId, me);
+  const [myRiderId, setMyRiderId] = useState<string | null>(null);
+  const { roster } = useRideRoster(rideId);
+  const { fleet, myCoords, channelStatus } = useFleetPositions(rideId, myRiderId, roster);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
+  }, []);
 
   const mapRef = useRef<RNMapView | null>(null);
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);
@@ -47,9 +53,11 @@ const RideMapScreen: React.FC = () => {
   const myRole = ride?.myRole ?? 'member';
 
   // §4.1: Captain/SAG see the whole fleet; Riders see Captain+SAG only.
+  // Defense-in-depth: the RLS-gated roster already bounds what a Rider can
+  // identify; this client-side filter re-asserts the §4.1 matrix on top.
   const visible = useMemo(
-    () => (me ? visibleParticipants(myRole, me.riderId, fleet) : []),
-    [me, myRole, fleet],
+    () => (myRiderId ? visibleParticipants(myRole, myRiderId, fleet) : []),
+    [myRiderId, myRole, fleet],
   );
 
   // R3-13/R3-14: indicator only when a finish exists AND is off-screen.
@@ -146,9 +154,10 @@ const RideMapScreen: React.FC = () => {
 
       {/* One-thumb reach (§5.1): bottom-right, 64dp. */}
       <TouchableOpacity
-        style={styles.centreButton}
+        style={[styles.centreButton, !myCoords && styles.centreButtonDisabled]}
         onPress={centreOnMe}
-        accessibilityLabel="Centre on my position"
+        disabled={!myCoords}
+        accessibilityLabel={myCoords ? 'Centre on my position' : 'Waiting for GPS fix'}
       >
         <Text style={styles.centreGlyph}>◎</Text>
       </TouchableOpacity>
@@ -208,6 +217,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  centreButtonDisabled: { opacity: 0.35 },
   centreGlyph: { color: '#FFFFFF', fontSize: 26 },
 });
 

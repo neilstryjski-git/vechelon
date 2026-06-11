@@ -69,9 +69,11 @@ test('R3-17: Rider cannot open the sheet for other riders, only Captain/SAG', ()
 
 test('Captain taps riders + SAG; SAG taps riders + Captain (§4.1)', () => {
   assert.equal(canOpenSheet('captain', 'member'), true);
+  assert.equal(canOpenSheet('captain', 'guest'), true);
   assert.equal(canOpenSheet('captain', 'support'), true);
   assert.equal(canOpenSheet('captain', 'captain'), false);
   assert.equal(canOpenSheet('support', 'member'), true);
+  assert.equal(canOpenSheet('support', 'guest'), true);
   assert.equal(canOpenSheet('support', 'captain'), true);
   assert.equal(canOpenSheet('support', 'support'), false);
 });

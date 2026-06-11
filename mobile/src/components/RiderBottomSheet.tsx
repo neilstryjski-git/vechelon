@@ -64,20 +64,20 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose }) => 
         {showPhone ? (
           <>
             <Text style={styles.phone}>{participant.phone}</Text>
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.copyButton}
-                onPress={() => void Clipboard.setStringAsync(participant.phone ?? '')}
-              >
-                <Text style={styles.copyText}>Copy Number</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dialButton}
-                onPress={() => void Linking.openURL(`tel:${participant.phone}`)}
-              >
-                <Text style={styles.dialText}>Dial</Text>
-              </TouchableOpacity>
-            </View>
+            {/* R3-16: Dial is FULL-WIDTH (the criterion is literal — reviewer
+                finding); Copy Number stacks above it as a secondary action. */}
+            <TouchableOpacity
+              style={styles.copyButton}
+              onPress={() => void Clipboard.setStringAsync(participant.phone ?? '')}
+            >
+              <Text style={styles.copyText}>Copy Number</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dialButton}
+              onPress={() => void Linking.openURL(`tel:${participant.phone}`)}
+            >
+              <Text style={styles.dialText}>Dial</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <Text style={styles.noPhone}>No contact available for your role.</Text>
@@ -130,25 +130,23 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginTop: 18,
   },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 18 },
   copyButton: {
-    flex: 1,
     borderColor: '#2C2C30',
     borderWidth: 1,
     borderRadius: 12,
-    minHeight: 64, // §5.1: ride control buttons ≥64dp
+    minHeight: 48, // §5.1 floor for the secondary action
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 18,
   },
   copyText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  // Full-width emphasis: Dial dominates the row (R3-16 full-width Dial).
   dialButton: {
-    flex: 2,
     backgroundColor: '#E11D2A',
     borderRadius: 12,
-    minHeight: 64,
+    minHeight: 64, // §5.1: ride control buttons ≥64dp; full row width (R3-16)
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 12,
   },
   dialText: {
     color: '#FFFFFF',
