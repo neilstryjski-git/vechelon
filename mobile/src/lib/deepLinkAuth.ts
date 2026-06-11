@@ -1,7 +1,6 @@
 import * as Linking from 'expo-linking';
 
 import { supabase } from './supabase';
-import { SUPABASE_URL } from './env';
 
 // Establishes a Supabase session from an inbound magic-link deep link.
 //
@@ -56,13 +55,9 @@ export async function createSessionFromUrl(url: string) {
 }
 
 // The app's own deep link (`rail3://auth` in a Dev/standalone build; the Expo dev
-// URL under `expo start`). The rail3-auth-bounce page launches the app at this
-// scheme on a user tap — see authBounceUrl below.
+// URL under `expo start`). Handed to send-magic-link as redirectTo purely to satisfy
+// Supabase's generateLink (it validates redirectTo against the uri_allow_list). With
+// the D48 OTP flow the user never follows the link — they type the 6-digit code from
+// the email into the app, which calls auth.verifyOtp — so Android never has to follow
+// an https→rail3:// redirect. createSessionFromUrl above is retained for completeness.
 export const authRedirectUrl = Linking.createURL('auth');
-
-// The magic-link redirect target we hand to send-magic-link. NOT the app scheme:
-// Android drops an https→rail3:// 302 redirect (D48), so Supabase redirects to this
-// https bounce page instead, which then opens the app via authRedirectUrl on a user
-// tap. This URL must be on the Supabase Auth redirect allowlist (uri_allow_list).
-// See supabase/functions/rail3-auth-bounce/index.ts.
-export const authBounceUrl = `${SUPABASE_URL}/functions/v1/rail3-auth-bounce`;

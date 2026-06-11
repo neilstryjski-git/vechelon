@@ -411,11 +411,6 @@ verify_jwt = false
 [functions.send-magic-link]
 verify_jwt = false
 
-# Rail 3 magic-link bounce page (D48). Loaded by the browser via a plain redirect
-# with no Authorization header, so it must be public.
-[functions.rail3-auth-bounce]
-verify_jwt = false
-
 [functions.guest-view-ride]
 verify_jwt = false
 
