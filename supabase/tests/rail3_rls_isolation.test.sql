@@ -5,66 +5,78 @@
 --
 -- Run with: psql "$DB_URL" -v ON_ERROR_STOP=1 -f <this file>
 -- ON_ERROR_STOP=1 means any RAISE EXCEPTION below fails the CI job — so this
--- file is a pass/fail merge gate, not a manual checklist (cf. the older,
--- comment-only rls_verification.sql in this directory).
+-- file is a pass/fail merge gate, not a manual checklist.
 --
--- Scope: this proves the HARNESS — real cross-tenant RLS denial, executed in
--- CI. The full Rail 3 behavioral isolation matrix (beacon_alerts / rider_states
--- cross-tenant + Broadcast deny) is task W182/3549 (DoD-12), which depends on
--- this harness and on the W169 Rail 3 schema. The assertions here deliberately
--- target schema-simple, self-scoped policies (id = auth.uid()) so the gate is
--- robust and does not hinge on the intricate ride-tier policies.
+-- RESILIENT: the Rail 3-table checks (beacon_alerts / rider_states) are guarded by
+-- to_regclass() existence, so this same gate passes BOTH on master (where the held
+-- Rail 3 schema migration is not yet applied — those tables are skipped) AND on a
+-- branch/deploy that has the schema (those tables are asserted). The full behavioral
+-- Broadcast-denial matrix is W182/3549.
 -- =====================================================================
 
 BEGIN;
 SET client_min_messages = warning;
 
--- ── 1. Structural guarantee: RLS is ENABLED on every tenant-scoped table ──────
--- A disabled RLS flag is the most basic isolation hole; assert it can never ship.
--- We check relrowsecurity (ENABLED), not relforcerowsecurity (FORCE), on purpose:
--- FORCE only matters for the table *owner*, and the behavioral assertions below run
--- as the non-owner `authenticated` role — exactly how PostgREST connects in prod —
--- so RLS is fully enforced there regardless of FORCE. FORCE is intentionally out of
--- scope for this gate.
+-- ── 1. Structural guarantee: RLS is ENABLED on every tenant-scoped table that EXISTS.
+-- An existing table with RLS off is the most basic isolation hole; absent tables (e.g.
+-- Rail 3 tables on master) are skipped rather than failing the gate.
 DO $$
 DECLARE
   tbl text;
-  tenant_scoped text[] := ARRAY['tenants','accounts','account_tenants','rides','ride_participants'];
+  rls boolean;
+  tenant_scoped text[] := ARRAY[
+    'tenants','accounts','account_tenants','rides','ride_participants',
+    'beacon_alerts','rider_states'
+  ];
 BEGIN
   FOREACH tbl IN ARRAY tenant_scoped LOOP
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relname = tbl AND c.relrowsecurity
-    ) THEN
+    SELECT c.relrowsecurity INTO rls
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = tbl;
+
+    IF rls IS NULL THEN
+      RAISE NOTICE 'table public.% absent — skipped (schema not applied here)', tbl;
+    ELSIF NOT rls THEN
       RAISE EXCEPTION 'RLS gate FAILED: row-level security is NOT enabled on public.%', tbl;
     END IF;
   END LOOP;
-  RAISE NOTICE 'RLS enabled on all tenant-scoped tables: OK';
+  RAISE NOTICE 'RLS enabled on all present tenant-scoped tables: OK';
 END $$;
 
 -- ── 2. Fixtures ───────────────────────────────────────────────────────────────
--- Load as the superuser (CI connects as postgres) with FK triggers disabled, so
--- we can seed accounts/memberships WITHOUT creating auth.users rows. NOT NULL and
--- CHECK constraints still apply; only referential triggers are suppressed.
+-- Load as the superuser (CI connects as postgres) with FK triggers disabled, so we
+-- can seed accounts/memberships WITHOUT creating auth.users rows. NOT NULL and CHECK
+-- constraints still apply; only referential triggers are suppressed.
 SET session_replication_role = 'replica';
 
--- Tenant A member and Tenant B member (membership = account_tenants, the current
--- source of truth for tenant scoping).
-INSERT INTO accounts (id, tenant_id, email, phone) VALUES
-  ('a1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'rls-a@test.local', '000'),
-  ('b1111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'rls-b@test.local', '000');
+-- Tenant A member and Tenant B member. Membership lives in account_tenants — the
+-- current source of truth (accounts.tenant_id/role/status were dropped by migration
+-- 20260411000000, so accounts is just id/email/phone here).
+INSERT INTO accounts (id, email, phone) VALUES
+  ('a1111111-1111-1111-1111-111111111111', 'rls-a@test.local', '000'),
+  ('b1111111-1111-1111-1111-111111111111', 'rls-b@test.local', '000');
 
 INSERT INTO account_tenants (account_id, tenant_id, role, status) VALUES
   ('a1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'member', 'affiliated'),
   ('b1111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member', 'affiliated');
 
+-- Rail 3 (W169) fixtures — only when the schema is present. A Tenant-B beacon + rider
+-- state that W169's tenant-scoped RLS must hide from a Tenant-A user.
+DO $$
+BEGIN
+  IF to_regclass('public.beacon_alerts') IS NOT NULL THEN
+    INSERT INTO beacon_alerts (id, tenant_id, ride_id, rider_id, triggered_at) VALUES
+      ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+       '11111111-1111-1111-1111-111111111111', 'b1111111-1111-1111-1111-111111111111', now());
+    INSERT INTO rider_states (id, tenant_id, ride_id, rider_id, state) VALUES
+      ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+       '11111111-1111-1111-1111-111111111111', 'b1111111-1111-1111-1111-111111111111', 'active');
+  END IF;
+END $$;
+
 SET session_replication_role = 'origin';
 
 -- ── 3. Behavioral cross-tenant denial, as an authenticated Tenant-A member ────
--- Become the authenticated role and present Tenant-A member's JWT. RLS now
--- evaluates exactly as it would for a real signed-in rider.
 SET LOCAL ROLE authenticated;
 SELECT set_config(
   'request.jwt.claims',
@@ -96,7 +108,22 @@ BEGIN
     RAISE EXCEPTION 'over-block: Tenant-A user cannot see their own account_tenants row (expected >= 1)';
   END IF;
 
-  RAISE NOTICE 'Cross-tenant denial + in-tenant access: OK';
+  -- (d)/(e) W169 Rail 3 tables — only asserted when present.
+  IF to_regclass('public.beacon_alerts') IS NOT NULL THEN
+    SELECT count(*) INTO n FROM beacon_alerts
+      WHERE tenant_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    IF n <> 0 THEN
+      RAISE EXCEPTION 'cross-tenant LEAK: Tenant-A user saw % beacon_alerts row(s) for Tenant B (expected 0)', n;
+    END IF;
+
+    SELECT count(*) INTO n FROM rider_states
+      WHERE tenant_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    IF n <> 0 THEN
+      RAISE EXCEPTION 'cross-tenant LEAK: Tenant-A user saw % rider_states row(s) for Tenant B (expected 0)', n;
+    END IF;
+  END IF;
+
+  RAISE NOTICE 'Cross-tenant denial + in-tenant access (incl. Rail 3 tables when present): OK';
 END $$;
 
 RESET ROLE;

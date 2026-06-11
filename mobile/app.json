@@ -7,15 +7,28 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "android": {
       "package": "ca.vechelon.rail3"
     },
     "plugins": [
-      "expo-dev-client"
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
     ],
     "extra": {
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "ed4b587b-124e-439f-9b2a-4fb683cf9def"
+      }
+    },
+    "owner": "neil-stryjski"
   }
 }

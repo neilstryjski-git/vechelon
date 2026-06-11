@@ -11,7 +11,8 @@ Bedrock trace: Pillar II §1 (PoC), §2 (Stack); LOE §4; ledger S0-004.
 ## Stack
 
 - Expo SDK 52 (React Native 0.76), TypeScript
-- `@supabase/supabase-js` — shared Vechelon project `drktcxggaizkbvqccfhp`
+- `@supabase/supabase-js` — `rail3-staging` project `xybgtbybdhxuwqjfcfkc` (NOT
+  prod — see `docs/rail3-staging.md`)
 - AsyncStorage session storage, PKCE flow, deep-link magic-link return
 - React Navigation (native-stack) auth gate
 - Distributed as an **Expo Dev Build** sideloaded APK — no Play Store (SD-003)
@@ -25,13 +26,23 @@ Bedrock trace: Pillar II §1 (PoC), §2 (Stack); LOE §4; ledger S0-004.
 
 ## 1. Configure environment
 
+**EAS cloud builds need no setup here** — the `EXPO_PUBLIC_*` values are committed
+in `eas.json` → `build.<profile>.env` (step 4), so `eas build` is self-configuring.
+
+A local `.env` is only needed for **local dev** (`npx expo start` / `expo
+run:android`), which reads `.env` rather than `eas.json`:
+
 ```sh
 cd mobile
 cp .env.example .env
-# edit .env — set EXPO_PUBLIC_SUPABASE_ANON_KEY (URL is already the shared project)
+# .env.example already has the rail3-staging URL + EXPO_PUBLIC_TENANT_SLUG;
+# set EXPO_PUBLIC_SUPABASE_ANON_KEY to the staging publishable key.
 ```
 
-`EXPO_PUBLIC_*` vars are inlined at build time. Never commit `.env` (gitignored).
+`EXPO_PUBLIC_*` vars are inlined at build time. `.env` is gitignored; the anon key
+is the staging project's **publishable** key (`sb_publishable_…`, matching the web
+app's key format) — get it from **Supabase → rail3-staging → Project Settings → API
+Keys**, or have the Sr PM hand it over.
 
 ## 2. Install dependencies
 
@@ -52,37 +63,68 @@ Without this, the link opens but Supabase rejects the redirect and no session is
 established. (Per-tenant/web redirect handling is a separate concern — the Rail 3
 deep-link scheme is additive to the existing web allowlist.)
 
-## 4. Build & run a Dev Build
+## 4. Build the app (EAS cloud build)
 
-A Dev Build (not Expo Go) is mandatory — background GPS and other native modules
-in later tasks cannot run in Expo Go.
+Two `eas.json` profiles, both `distribution: internal` (installable APK, no Play
+Store — SD-003). The non-secret `EXPO_PUBLIC_*` values (staging URL, publishable
+key, tenant slug) are committed in `eas.json` → `build.<profile>.env`, so cloud
+builds are **self-configuring** — no `eas env:create`, no uploaded `.env`. (The
+anon value is a *publishable* key — public by design, it ships in every APK
+regardless; only the DB password and `service_role` key stay out of the repo.)
 
-**Local (fastest if Android Studio is set up):**
+| Profile | `developmentClient` | JS bundle | Use it for |
+|---|---|---|---|
+| `preview` | no | baked into the APK | **UAT / field testing** — install and run, nothing on your machine |
+| `development` | yes | served by Metro at runtime | day-to-day dev with hot-reload (needs `expo start`) |
 
-```sh
-npx expo run:android        # builds the dev client and installs to the device
-```
-
-**Cloud (no local Android toolchain needed):**
-
-```sh
-eas build --profile development --platform android
-# download the APK from the EAS build page, then sideload it (step 5)
-```
-
-Then start the bundler and connect the device:
+**Recommended for UAT — `preview` (self-contained, simplest):**
 
 ```sh
-npx expo start --dev-client
+npm i -g eas-cli          # once
+eas login                 # your Expo account
+cd mobile
+eas init                  # first time — writes expo.extra.eas.projectId into app.json
+eas build --profile preview --platform android
 ```
 
-## 5. Sideload the APK onto a test device (S0-004)
+The build runs in the cloud (~10 min). When it finishes EAS prints a **build-details
+URL + QR code** (also at <https://expo.dev> → project → Builds). A `preview` APK has
+the JS baked in, so once installed it runs on its own — no bundler, no tunnel.
 
-1. Download the `.apk` from the EAS build (or find the locally built APK).
-2. Transfer it to the device (USB, or `adb install path/to/app.apk`).
-3. On the device, allow "install from unknown sources" if prompted.
-4. Open **Vechelon Rail 3**, then run `npx expo start --dev-client` on your
-   machine and scan/enter the dev URL to load the JS bundle.
+**For ongoing dev — `development` (dev client + Metro):**
+
+```sh
+eas build --profile development --platform android   # or: npx expo run:android (local)
+```
+
+A dev-client build loads its JS from a running bundler, so after installing you also
+run `npx expo start --dev-client` (add `--tunnel` if the device can't reach your
+machine on the LAN — e.g. from WSL). Use this only when you need hot-reload or the
+native modules that later Rail 3 tasks add.
+
+## 5. Install on the test device & verify — S0-004
+
+`distribution: internal` means EAS serves the APK behind an install page reachable
+by QR — no Play Store, no iOS-style device registration.
+
+1. On the **Android device**, scan the QR EAS printed (terminal or expo.dev →
+   Builds → this build → **Install**).
+2. The QR opens the install page → tap **Install/Download** → Chrome downloads the
+   `.apk`. (Or download the APK to your machine and `adb install -r app.apk`.)
+3. Tap the APK; allow **"install from unknown sources"** if Android prompts
+   (Settings → Apps → special access — one-time per source). **Vechelon Rail 3**
+   appears in the launcher.
+4. Open the app:
+   - **`preview` build:** runs immediately.
+   - **`development` build:** start `npx expo start --dev-client` (`--tunnel` on
+     WSL) and open the app to load the bundle.
+5. Sign in: enter your email → a **`[Rail 3 TEST]`**-branded email arrives (staging
+   `send-magic-link` + Resend). Tap the link **on the device** → it returns via the
+   `rail3://auth` deep link → you land on **Home**. (Deep-link return wired in W188.)
+
+> **Heads-up:** the free `rail3-staging` project **pauses after ~7 days idle** —
+> wake it in the Supabase dashboard before a test session, or magic-link sign-in
+> fails. The build itself (no Supabase calls) is unaffected.
 
 ## Verifying W168 acceptance criteria
 

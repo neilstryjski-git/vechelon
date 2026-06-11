@@ -45,7 +45,7 @@ VALUES (
 INSERT INTO rides (name, type, status, start_coords, qr_code, created_by, tenant_id)
 VALUES (
   'Sunday Morning Club Run',
-  'scheduled',
+  'route',
   'active',
   '(43.6532,-79.3832)',
   'MOCK_QR_ACTIVE',
@@ -57,7 +57,7 @@ VALUES (
 INSERT INTO rides (name, type, status, start_coords, qr_code, created_by, tenant_id, scheduled_start)
 VALUES (
   'Tuesday Tactical Sprints',
-  'scheduled',
+  'route',
   'created',
   '(43.6532,-79.3832)',
   'MOCK_QR_UPCOMING',
