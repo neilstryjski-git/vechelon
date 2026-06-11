@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
 import { TENANT_SLUG } from '../lib/env';
+import { useTheme } from '../theme/ThemeProvider';
 
 // Stages of the passwordless OTP flow:
 //   email    — collecting the address
@@ -36,10 +38,14 @@ const MAX_CODE_LENGTH = 10;
 // browser→app hop at all. redirectTo (rail3://auth) is sent only to satisfy
 // generateLink's allow-list validation; the user never follows it.
 const SignInScreen: React.FC = () => {
+  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<Stage>('email');
   const [errorMsg, setErrorMsg] = useState('');
+  // Fall back to the club wordmark if the branded logo URL fails to load.
+  const [logoFailed, setLogoFailed] = useState(false);
+  const showLogo = !!theme.logoUrl && !logoFailed;
 
   const trimmedEmail = email.trim().toLowerCase();
 
@@ -102,13 +108,14 @@ const SignInScreen: React.FC = () => {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.brand}>VECHELON</Text>
-        <Text style={styles.subtitle}>Enter your code</Text>
+        <Text style={styles.brand}>{theme.clubName.toUpperCase()}</Text>
+        <Text style={[styles.subtitle, { color: theme.accentColor }]}>
+          Enter your code
+        </Text>
 
         <Text style={styles.body}>
           We sent a code to {trimmedEmail}. Enter it below to sign in.
         </Text>
-
         <TextInput
           style={[styles.input, styles.codeInput]}
           value={code}
@@ -128,6 +135,7 @@ const SignInScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.button,
+            { backgroundColor: theme.primaryColor },
             (verifying || code.trim().length < MIN_CODE_LENGTH) && styles.buttonDisabled,
           ]}
           onPress={verifyCode}
@@ -147,7 +155,9 @@ const SignInScreen: React.FC = () => {
           }}
           disabled={verifying}
         >
-          <Text style={styles.link}>Use a different email</Text>
+          <Text style={[styles.link, { color: theme.primaryColor }]}>
+            Use a different email
+          </Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     );
@@ -159,8 +169,19 @@ const SignInScreen: React.FC = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.brand}>VECHELON</Text>
-      <Text style={styles.subtitle}>Rail 3 — Mobile Tactical</Text>
+      {showLogo ? (
+        <Image
+          source={{ uri: theme.logoUrl as string }}
+          style={styles.logo}
+          resizeMode="contain"
+          onError={() => setLogoFailed(true)}
+        />
+      ) : (
+        <Text style={styles.brand}>{theme.clubName.toUpperCase()}</Text>
+      )}
+      <Text style={[styles.subtitle, { color: theme.accentColor }]}>
+        Rail 3 — Mobile Tactical
+      </Text>
 
       <TextInput
         style={styles.input}
@@ -178,7 +199,11 @@ const SignInScreen: React.FC = () => {
       {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.button, sending && styles.buttonDisabled]}
+        style={[
+          styles.button,
+          { backgroundColor: theme.primaryColor },
+          sending && styles.buttonDisabled,
+        ]}
         onPress={sendCode}
         disabled={sending}
       >
@@ -210,6 +235,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontStyle: 'italic',
     letterSpacing: 1,
+  },
+  logo: {
+    width: 220,
+    height: 56,
   },
   subtitle: {
     color: '#9A9A9A',

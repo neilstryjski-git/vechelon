@@ -2,15 +2,20 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
+import { useTheme } from '../theme/ThemeProvider';
 
 // Placeholder authenticated surface. Proves the auth gate works end-to-end; the
 // live fleet map, beacon, and ride controls land in later Rail 3 tasks
 // (W172 / W173 / W175 etc.). For now: confirm who is signed in and allow sign-out.
 const HomeScreen: React.FC = () => {
   const { session, signOut } = useAuth();
+  const theme = useTheme();
 
   return (
     <View style={styles.container}>
+      <Text style={[styles.club, { color: theme.primaryColor }]}>
+        {theme.clubName.toUpperCase()}
+      </Text>
       <Text style={styles.label}>Signed in as</Text>
       <Text style={styles.email}>{session?.user.email ?? 'unknown'}</Text>
 
@@ -18,8 +23,13 @@ const HomeScreen: React.FC = () => {
         Rail 3 authenticated shell. Ride surfaces arrive in later tasks.
       </Text>
 
-      <TouchableOpacity style={styles.button} onPress={signOut}>
-        <Text style={styles.buttonText}>Sign Out</Text>
+      <TouchableOpacity
+        style={[styles.button, { borderColor: theme.primaryColor }]}
+        onPress={signOut}
+      >
+        <Text style={[styles.buttonText, { color: theme.primaryColor }]}>
+          Sign Out
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -32,6 +42,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
+  },
+  club: {
+    fontSize: 22,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    letterSpacing: 1,
+    marginBottom: 28,
   },
   label: {
     color: '#9A9A9A',
