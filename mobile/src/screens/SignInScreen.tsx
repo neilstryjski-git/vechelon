@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
 import { TENANT_SLUG } from '../lib/env';
+import { useTheme } from '../theme/ThemeProvider';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -24,9 +26,13 @@ type Stage = 'idle' | 'sending' | 'sent' | 'error';
 // body is reachable only via error.context (supabase-js leaves `data` null), so we
 // read it from there — mirroring the web AuthPage error handling.
 const SignInScreen: React.FC = () => {
+  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [stage, setStage] = useState<Stage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  // Fall back to the club wordmark if the branded logo URL fails to load.
+  const [logoFailed, setLogoFailed] = useState(false);
+  const showLogo = !!theme.logoUrl && !logoFailed;
 
   const handleSubmit = async () => {
     const trimmed = email.trim().toLowerCase();
@@ -67,7 +73,9 @@ const SignInScreen: React.FC = () => {
           device to sign in.
         </Text>
         <TouchableOpacity onPress={() => setStage('idle')}>
-          <Text style={styles.link}>Use a different email</Text>
+          <Text style={[styles.link, { color: theme.primaryColor }]}>
+            Use a different email
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -78,8 +86,19 @@ const SignInScreen: React.FC = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.brand}>VECHELON</Text>
-      <Text style={styles.subtitle}>Rail 3 — Mobile Tactical</Text>
+      {showLogo ? (
+        <Image
+          source={{ uri: theme.logoUrl as string }}
+          style={styles.logo}
+          resizeMode="contain"
+          onError={() => setLogoFailed(true)}
+        />
+      ) : (
+        <Text style={styles.brand}>{theme.clubName.toUpperCase()}</Text>
+      )}
+      <Text style={[styles.subtitle, { color: theme.accentColor }]}>
+        Rail 3 — Mobile Tactical
+      </Text>
 
       <TextInput
         style={styles.input}
@@ -97,7 +116,11 @@ const SignInScreen: React.FC = () => {
       {stage === 'error' ? <Text style={styles.error}>{errorMsg}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.button, stage === 'sending' && styles.buttonDisabled]}
+        style={[
+          styles.button,
+          { backgroundColor: theme.primaryColor },
+          stage === 'sending' && styles.buttonDisabled,
+        ]}
         onPress={handleSubmit}
         disabled={stage === 'sending'}
       >
@@ -129,6 +152,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontStyle: 'italic',
     letterSpacing: 1,
+  },
+  logo: {
+    width: 220,
+    height: 56,
   },
   subtitle: {
     color: '#9A9A9A',
