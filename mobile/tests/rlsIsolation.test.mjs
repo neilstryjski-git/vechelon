@@ -131,8 +131,10 @@ before(async () => {
   const { data: rides, error: rErr } = await admin
     .from('rides')
     .insert([
-      { tenant_id: fx.tenantA.id, name: `W182 ride A ${RUN}`, type: 'scheduled', start_coords: '(45.50,-73.60)', qr_code: `${RUN}-qr-a`, created_by: fx.userA.id },
-      { tenant_id: fx.tenantB.id, name: `W182 ride B ${RUN}`, type: 'scheduled', start_coords: '(45.51,-73.61)', qr_code: `${RUN}-qr-b`, created_by: fx.userB.id },
+      // ride_type enum is {route, adhoc, meetup} — 'scheduled' was renamed by
+      // migration 20260415000000 (the stale-enum trap PR #56 hit in seed.sql).
+      { tenant_id: fx.tenantA.id, name: `W182 ride A ${RUN}`, type: 'route', start_coords: '(45.50,-73.60)', qr_code: `${RUN}-qr-a`, created_by: fx.userA.id },
+      { tenant_id: fx.tenantB.id, name: `W182 ride B ${RUN}`, type: 'route', start_coords: '(45.51,-73.61)', qr_code: `${RUN}-qr-b`, created_by: fx.userB.id },
     ])
     .select('id, tenant_id');
   assert.ifError(rErr);
