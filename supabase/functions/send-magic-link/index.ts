@@ -107,7 +107,7 @@ serve(async (req) => {
     // Native (deep-link) callers get a 6-digit code to type into the app; web
     // callers get the click-through "Authorize Session" button (unchanged).
     const introCopy = isDeepLink
-      ? `Enter the 6-digit code below in the <strong>${clubName}</strong> Rail 3 app to authorize your session.`
+      ? `Enter the code below in the <strong>${clubName}</strong> Rail 3 app to authorize your session.`
       : `Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.`
 
     const ctaBlock = isDeepLink

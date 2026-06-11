@@ -21,6 +21,12 @@ import { TENANT_SLUG } from '../lib/env';
 //   verifying — calling auth.verifyOtp
 type Stage = 'email' | 'sending' | 'code' | 'verifying';
 
+// The email OTP length is a server-side Supabase setting (mailer_otp_length), not a
+// client constant — so don't hardcode a single length. Accept anything in this range
+// and let auth.verifyOtp do the real validation; the gate just needs a sane minimum.
+const MIN_CODE_LENGTH = 6;
+const MAX_CODE_LENGTH = 10;
+
 // Passwordless sign-in via a 6-digit email code. Routes through the send-magic-link
 // edge function (generateLink + Resend) — the SAME path production Vechelon uses —
 // NOT Supabase's built-in mailer (see the PoC-stays-aligned-to-production principle).
@@ -69,14 +75,14 @@ const SignInScreen: React.FC = () => {
 
   const verifyCode = async () => {
     const token = code.trim();
-    if (token.length < 6) return;
+    if (token.length < MIN_CODE_LENGTH) return;
 
     setStage('verifying');
     setErrorMsg('');
 
-    // type: 'email' verifies the 6-digit email OTP from generateLink. On success
-    // supabase-js sets the session and AuthContext's onAuthStateChange flips the
-    // gate — no navigation needed here.
+    // type: 'email' verifies the email OTP from generateLink. On success supabase-js
+    // sets the session and AuthContext's onAuthStateChange flips the gate — no
+    // navigation needed here.
     const { error } = await supabase.auth.verifyOtp({
       email: trimmedEmail,
       token,
@@ -100,27 +106,32 @@ const SignInScreen: React.FC = () => {
         <Text style={styles.subtitle}>Enter your code</Text>
 
         <Text style={styles.body}>
-          We sent a 6-digit code to {trimmedEmail}. Enter it below to sign in.
+          We sent a code to {trimmedEmail}. Enter it below to sign in.
         </Text>
 
         <TextInput
           style={[styles.input, styles.codeInput]}
           value={code}
-          onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
-          placeholder="000000"
+          onChangeText={(t) =>
+            setCode(t.replace(/[^0-9]/g, '').slice(0, MAX_CODE_LENGTH))
+          }
+          placeholder="••••••"
           placeholderTextColor="#7A7A7A"
           keyboardType="number-pad"
           autoFocus
-          maxLength={6}
+          maxLength={MAX_CODE_LENGTH}
           editable={!verifying}
         />
 
         {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
 
         <TouchableOpacity
-          style={[styles.button, (verifying || code.trim().length < 6) && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            (verifying || code.trim().length < MIN_CODE_LENGTH) && styles.buttonDisabled,
+          ]}
           onPress={verifyCode}
-          disabled={verifying || code.trim().length < 6}
+          disabled={verifying || code.trim().length < MIN_CODE_LENGTH}
         >
           {verifying ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -228,8 +239,8 @@ const styles = StyleSheet.create({
   },
   codeInput: {
     textAlign: 'center',
-    fontSize: 28,
-    letterSpacing: 8,
+    fontSize: 26,
+    letterSpacing: 6,
     fontWeight: '700',
   },
   button: {
