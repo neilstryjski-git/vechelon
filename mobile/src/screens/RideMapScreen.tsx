@@ -38,8 +38,13 @@ const RideMapScreen: React.FC = () => {
 
   const { ride, loading, error } = useRideDetails(rideId);
   const [myRiderId, setMyRiderId] = useState<string | null>(null);
-  const { roster } = useRideRoster(rideId);
-  const { fleet, myCoords, channelStatus } = useFleetPositions(rideId, myRiderId, roster);
+  const { roster, refetchRoster } = useRideRoster(rideId);
+  const { fleet, myCoords, channelStatus } = useFleetPositions(
+    rideId,
+    myRiderId,
+    roster,
+    refetchRoster,
+  );
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
