@@ -14,29 +14,43 @@ import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
 import { TENANT_SLUG } from '../lib/env';
 
-type Stage = 'idle' | 'sending' | 'sent' | 'error';
+// Stages of the passwordless OTP flow:
+//   email    — collecting the address
+//   sending  — invoking send-magic-link
+//   code     — collecting the 6-digit code from the email
+//   verifying — calling auth.verifyOtp
+type Stage = 'email' | 'sending' | 'code' | 'verifying';
 
-// Passwordless magic-link sign-in. Routes through the send-magic-link edge
-// function (generateLink + Resend) — the SAME path production Vechelon uses —
-// NOT Supabase's built-in mailer (see the PoC-stays-aligned-to-production
-// principle). redirectTo is the app deep link so the link returns to the app;
-// slug brands the email for the right club. On a non-2xx the function's { error }
-// body is reachable only via error.context (supabase-js leaves `data` null), so we
-// read it from there — mirroring the web AuthPage error handling.
+// The email OTP length is a server-side Supabase setting (mailer_otp_length), not a
+// client constant — so don't hardcode a single length. Accept anything in this range
+// and let auth.verifyOtp do the real validation; the gate just needs a sane minimum.
+const MIN_CODE_LENGTH = 6;
+const MAX_CODE_LENGTH = 10;
+
+// Passwordless sign-in via a 6-digit email code. Routes through the send-magic-link
+// edge function (generateLink + Resend) — the SAME path production Vechelon uses —
+// NOT Supabase's built-in mailer (see the PoC-stays-aligned-to-production principle).
+// generateLink also yields a 6-digit email_otp; the email shows that code, the user
+// types it here, and auth.verifyOtp establishes the session. This sidesteps D48 —
+// Android dropping the https→rail3:// magic-link redirect — because there is no
+// browser→app hop at all. redirectTo (rail3://auth) is sent only to satisfy
+// generateLink's allow-list validation; the user never follows it.
 const SignInScreen: React.FC = () => {
   const [email, setEmail] = useState('');
-  const [stage, setStage] = useState<Stage>('idle');
+  const [code, setCode] = useState('');
+  const [stage, setStage] = useState<Stage>('email');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = async () => {
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed) return;
+  const trimmedEmail = email.trim().toLowerCase();
+
+  const sendCode = async () => {
+    if (!trimmedEmail) return;
 
     setStage('sending');
     setErrorMsg('');
 
     const { error } = await supabase.functions.invoke('send-magic-link', {
-      body: { email: trimmed, redirectTo: authRedirectUrl, slug: TENANT_SLUG },
+      body: { email: trimmedEmail, redirectTo: authRedirectUrl, slug: TENANT_SLUG },
     });
 
     if (error) {
@@ -51,28 +65,95 @@ const SignInScreen: React.FC = () => {
       } catch {
         // keep the generic message
       }
-      setStage('error');
+      setStage('email');
       setErrorMsg(msg);
     } else {
-      setStage('sent');
+      setCode('');
+      setStage('code');
     }
   };
 
-  if (stage === 'sent') {
+  const verifyCode = async () => {
+    const token = code.trim();
+    if (token.length < MIN_CODE_LENGTH) return;
+
+    setStage('verifying');
+    setErrorMsg('');
+
+    // type: 'email' verifies the email OTP from generateLink. On success supabase-js
+    // sets the session and AuthContext's onAuthStateChange flips the gate — no
+    // navigation needed here.
+    const { error } = await supabase.auth.verifyOtp({
+      email: trimmedEmail,
+      token,
+      type: 'email',
+    });
+
+    if (error) {
+      setStage('code');
+      setErrorMsg(error.message);
+    }
+  };
+
+  if (stage === 'code' || stage === 'verifying') {
+    const verifying = stage === 'verifying';
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Magic link sent</Text>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Text style={styles.brand}>VECHELON</Text>
+        <Text style={styles.subtitle}>Enter your code</Text>
+
         <Text style={styles.body}>
-          A sign-in link was sent to {email.trim().toLowerCase()}. Open it on this
-          device to sign in.
+          We sent a code to {trimmedEmail}. Enter it below to sign in.
         </Text>
-        <TouchableOpacity onPress={() => setStage('idle')}>
+
+        <TextInput
+          style={[styles.input, styles.codeInput]}
+          value={code}
+          onChangeText={(t) =>
+            setCode(t.replace(/[^0-9]/g, '').slice(0, MAX_CODE_LENGTH))
+          }
+          placeholder="••••••"
+          placeholderTextColor="#7A7A7A"
+          keyboardType="number-pad"
+          autoFocus
+          maxLength={MAX_CODE_LENGTH}
+          editable={!verifying}
+        />
+
+        {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
+
+        <TouchableOpacity
+          style={[
+            styles.button,
+            (verifying || code.trim().length < MIN_CODE_LENGTH) && styles.buttonDisabled,
+          ]}
+          onPress={verifyCode}
+          disabled={verifying || code.trim().length < MIN_CODE_LENGTH}
+        >
+          {verifying ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Verify & Sign In</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            setErrorMsg('');
+            setStage('email');
+          }}
+          disabled={verifying}
+        >
           <Text style={styles.link}>Use a different email</Text>
         </TouchableOpacity>
-      </View>
+      </KeyboardAvoidingView>
     );
   }
 
+  const sending = stage === 'sending';
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -91,25 +172,25 @@ const SignInScreen: React.FC = () => {
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus
-        editable={stage !== 'sending'}
+        editable={!sending}
       />
 
-      {stage === 'error' ? <Text style={styles.error}>{errorMsg}</Text> : null}
+      {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.button, stage === 'sending' && styles.buttonDisabled]}
-        onPress={handleSubmit}
-        disabled={stage === 'sending'}
+        style={[styles.button, sending && styles.buttonDisabled]}
+        onPress={sendCode}
+        disabled={sending}
       >
-        {stage === 'sending' ? (
+        {sending ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
-          <Text style={styles.buttonText}>Send Magic Link</Text>
+          <Text style={styles.buttonText}>Send Code</Text>
         )}
       </TouchableOpacity>
 
       <Text style={styles.fine}>
-        Passwordless sign-in · link expires in 60 minutes
+        Passwordless sign-in · code expires in 60 minutes
       </Text>
     </KeyboardAvoidingView>
   );
@@ -138,7 +219,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 40,
   },
-  title: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginBottom: 12 },
   body: {
     color: '#B8B8B8',
     fontSize: 14,
@@ -157,6 +237,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
   },
+  codeInput: {
+    textAlign: 'center',
+    fontSize: 26,
+    letterSpacing: 6,
+    fontWeight: '700',
+  },
   button: {
     width: '100%',
     backgroundColor: '#E11D2A',
@@ -174,7 +260,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   error: { color: '#FF6B6B', fontSize: 12, marginTop: 12, textAlign: 'center' },
-  link: { color: '#E11D2A', fontSize: 13, marginTop: 8 },
+  link: { color: '#E11D2A', fontSize: 13, marginTop: 20 },
   fine: {
     color: '#5A5A5A',
     fontSize: 10,

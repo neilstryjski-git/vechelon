@@ -34,11 +34,12 @@ serve(async (req) => {
       throw new Error('Invalid redirectTo URL')
     }
 
-    // Native deep links (e.g. rail3://auth) have no usable hostname to derive the
-    // tenant from, so the mobile caller passes the slug explicitly. Web requests
-    // keep deriving it from the subdomain — unchanged.
+    // Prefer an explicitly-supplied slug from ANY caller. The Rail 3 native app sends
+    // a rail3:// deep-link redirectTo (no tenant hostname to derive from), so it passes
+    // the slug in the body. Web callers (AuthPage/RideLanding) omit slug, so they fall
+    // through to subdomain derivation exactly as before — unchanged.
     const isDeepLink = !/^https?:\/\//i.test(redirectTo)
-    const slug = isDeepLink ? (bodySlug ?? null) : extractSlug(redirectURL.hostname)
+    const slug = bodySlug ?? (isDeepLink ? null : extractSlug(redirectURL.hostname))
 
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -81,6 +82,11 @@ serve(async (req) => {
     if (linkError) throw linkError
 
     const magicLink = linkData.properties.action_link
+    // The same generateLink call also yields a 6-digit email OTP. The Rail 3 native
+    // app (isDeepLink) uses THIS code: the user types it into the app, which calls
+    // auth.verifyOtp — no browser→app hop, so it sidesteps Android dropping the
+    // https→rail3:// redirect (D48). Web keeps the click-through button below.
+    const otpCode = linkData.properties.email_otp
 
     // Wrap the raw OTP link behind a portal click-through URL so email scanners
     // (Gmail, Outlook SafeLinks, etc.) cannot consume the one-time token by
@@ -98,6 +104,24 @@ serve(async (req) => {
     // email is unmistakably a test; it is unset on production (so prod is unchanged).
     const testBanner = Deno.env.get('EMAIL_TEST_BANNER') === 'true'
 
+    // Native (deep-link) callers get a 6-digit code to type into the app; web
+    // callers get the click-through "Authorize Session" button (unchanged).
+    const introCopy = isDeepLink
+      ? `Enter the code below in the <strong>${clubName}</strong> Rail 3 app to authorize your session.`
+      : `Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.`
+
+    const ctaBlock = isDeepLink
+      ? `<div style="margin-bottom: 32px;">
+            <div style="display:inline-block; background:#f4f4f5; border:1px solid #e4e4e7; border-radius:12px; padding:18px 28px 18px 35px; font-size:34px; font-weight:800; letter-spacing:0.35em; color:${brandColor}; font-family:'Courier New',monospace;">
+              ${otpCode}
+            </div>
+          </div>`
+      : `<div style="margin-bottom: 32px;">
+            <a href="${clickThroughUrl}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
+              Authorize Session
+            </a>
+          </div>`
+
     // 3. Send via Resend with dynamic branding
     const emailHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1c1c1c; background-color: #f9f9f9;">
@@ -107,17 +131,13 @@ serve(async (req) => {
 
           <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Authorization Required</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #444; margin-bottom: 32px;">
-            Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.
+            ${introCopy}
           </p>
 
-          <div style="margin-bottom: 32px;">
-            <a href="${clickThroughUrl}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
-              Authorize Session
-            </a>
-          </div>
-          
+          ${ctaBlock}
+
           <p style="font-size: 12px; color: #888; margin-bottom: 0;">
-            This link will expire in 60 minutes. If you didn't request this email, you can safely ignore it.
+            This ${isDeepLink ? 'code' : 'link'} will expire in 60 minutes. If you didn't request this email, you can safely ignore it.
           </p>
         </div>
         
