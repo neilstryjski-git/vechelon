@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
+import { logMeasurement } from '../lib/measure';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -140,6 +141,13 @@ export function useFleetPositions(
   const [pings, setPings] = useState<Record<string, PositionPayload & { receivedAtMs: number }>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
   const lastSentRef = useRef(0);
+  // Live refs so the broadcast receive handler (subscribed once, on [channel])
+  // can read the current ride/rider for W180 latency logging WITHOUT re-binding
+  // the subscription (which would reset pings) when these props change.
+  const rideIdRef = useRef(rideId);
+  rideIdRef.current = rideId;
+  const myRiderIdRef = useRef(myRiderId);
+  myRiderIdRef.current = myRiderId;
 
   // Re-derive render states as time passes — a rider goes Stopped→…→Dark
   // precisely when NO data arrives, so something must still trigger renders.
@@ -157,7 +165,28 @@ export function useFleetPositions(
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
       const p = payload as PositionPayload;
       if (!p?.riderId || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
-      setPings((prev) => ({ ...prev, [p.riderId]: { ...p, receivedAtMs: Date.now() } }));
+      const receivedAtMs = Date.now();
+      setPings((prev) => ({ ...prev, [p.riderId]: { ...p, receivedAtMs } }));
+
+      // W180 PoC validation — broadcast fan-out latency. The payload's `ts` is the
+      // sender's send time (device clock); receivedAtMs is ours. The delta is the
+      // cross-device fan-out latency — it carries sender↔receiver CLOCK SKEW (the
+      // documented caveat: indicative, not skew-free). Each device's server offset
+      // (client_ts vs created_at) is derivable from its own sink rows for post-hoc
+      // correction. Fire-and-forget; writes only to the staging-only measurement sink.
+      const rid = rideIdRef.current;
+      if (rid && typeof p.ts === 'number') {
+        void logMeasurement({
+          rideId: rid,
+          kind: 'broadcast_latency',
+          value: receivedAtMs - p.ts,
+          payload: {
+            sender_id: p.riderId,
+            receiver_id: myRiderIdRef.current,
+            self: p.riderId === myRiderIdRef.current,
+          },
+        });
+      }
     });
     // Broadcast/Presence handlers may bind after subscribe() (useRideChannel
     // already subscribed); postgres_changes may not — none are used here.
