@@ -34,6 +34,8 @@ const AdHocCreator: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const theme = useTheme();
   const [phase, setPhase] = useState<'idle' | 'checking' | 'warn' | 'creating'>('idle');
+  // Why we're warning: a real conflict, or a failed check (fail-closed copy).
+  const [warnReason, setWarnReason] = useState<'conflict' | 'unverified'>('conflict');
   const [error, setError] = useState<string | null>(null);
 
   // Hidden QR: render the join URL off-screen, then toDataURL() captures the
@@ -95,11 +97,13 @@ const AdHocCreator: React.FC = () => {
       // FAIL CLOSED (review finding): a network blip must not silently bypass
       // one of Rail 3's two confirmation gates — warn as if a conflict exists.
       console.warn('[Rail3] proximity check failed — failing closed', qErr);
+      setWarnReason('unverified');
       setPhase('warn');
       return;
     }
     const starts = (data ?? []).map((r) => r.scheduled_start as string | null);
     if (adHocProximityConflict(starts, Date.now())) {
+      setWarnReason('conflict');
       setPhase('warn'); // Captain must explicitly confirm past the warning
       return;
     }
@@ -200,10 +204,13 @@ const AdHocCreator: React.FC = () => {
         <View style={styles.warnOverlay}>
           <Pressable style={styles.backdrop} onPress={() => setPhase('idle')} />
           <View style={styles.warnSheet}>
-            <Text style={styles.warnTitle}>A scheduled ride is close by</Text>
+            <Text style={styles.warnTitle}>
+              {warnReason === 'conflict' ? 'A scheduled ride is close by' : "Couldn't verify the schedule"}
+            </Text>
             <Text style={styles.warnBody}>
-              A scheduled ride exists within {AD_HOC_PROXIMITY_HOURS} hours. Starting an Ad Hoc
-              ride now may split the group. Create it anyway?
+              {warnReason === 'conflict'
+                ? `A scheduled ride exists within ${AD_HOC_PROXIMITY_HOURS} hours. Starting an Ad Hoc ride now may split the group. Create it anyway?`
+                : `The schedule check failed — a scheduled ride may exist within ${AD_HOC_PROXIMITY_HOURS} hours. Starting an Ad Hoc ride now may split the group. Create it anyway?`}
             </Text>
             <TouchableOpacity style={styles.warnConfirm} onPress={() => void create()}>
               <Text style={styles.warnConfirmText}>Create Ad Hoc Ride Anyway</Text>
