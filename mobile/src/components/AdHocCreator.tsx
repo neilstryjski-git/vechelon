@@ -38,16 +38,25 @@ const AdHocCreator: React.FC = () => {
 
   // Hidden QR: render the join URL off-screen, then toDataURL() captures the
   // PNG. The ref API is callback-based, so creation awaits a one-shot promise.
-  const [qrJob, setQrJob] = useState<{ url: string } | null>(null);
-  const qrResolveRef = useRef<((dataUrl: string) => void) | null>(null);
+  // Each capture is a TOKENED job (review finding): a late toDataURL callback
+  // from a timed-out attempt must never resolve a retry's promise with a QR
+  // encoding the old, never-inserted rideId — that would persist durable bad
+  // data the web also displays.
+  const [qrJob, setQrJob] = useState<{ url: string; token: number } | null>(null);
+  const qrJobTokenRef = useRef(0);
+  const qrResolveRef = useRef<{ token: number; resolve: (dataUrl: string) => void } | null>(null);
   const svgRef = useRef<{ toDataURL: (cb: (b64: string) => void) => void } | null>(null);
 
   useEffect(() => {
     if (!qrJob) return;
+    const { token } = qrJob;
     // Give the hidden QR a frame to mount before capturing.
     const t = setTimeout(() => {
       svgRef.current?.toDataURL((b64) => {
-        qrResolveRef.current?.(`data:image/png;base64,${b64}`);
+        const pending = qrResolveRef.current;
+        if (!pending || pending.token !== token) return; // stale job — drop it
+        qrResolveRef.current = null;
+        pending.resolve(`data:image/png;base64,${b64}`);
       });
     }, 50);
     return () => clearTimeout(t);
@@ -55,9 +64,19 @@ const AdHocCreator: React.FC = () => {
 
   const renderQrDataUrl = (url: string): Promise<string> =>
     new Promise((resolve, reject) => {
-      qrResolveRef.current = resolve;
-      setQrJob({ url });
-      setTimeout(() => reject(new Error('QR render timed out')), 5000);
+      const token = ++qrJobTokenRef.current;
+      const timeout = setTimeout(() => {
+        if (qrResolveRef.current?.token === token) qrResolveRef.current = null;
+        reject(new Error('QR render timed out'));
+      }, 5000);
+      qrResolveRef.current = {
+        token,
+        resolve: (dataUrl) => {
+          clearTimeout(timeout);
+          resolve(dataUrl);
+        },
+      };
+      setQrJob({ url, token });
     });
 
   const startCreate = async () => {
@@ -66,12 +85,19 @@ const AdHocCreator: React.FC = () => {
     // Scenario 12: any scheduled ride within ±2h means this is probably a
     // duplicate of the real ride — warn and require explicit confirmation.
     const windowMs = AD_HOC_PROXIMITY_HOURS * 3_600_000;
-    const { data } = await supabase
+    const { data, error: qErr } = await supabase
       .from('rides')
       .select('scheduled_start')
       .eq('status', 'created')
       .gte('scheduled_start', new Date(Date.now() - windowMs).toISOString())
       .lte('scheduled_start', new Date(Date.now() + windowMs).toISOString());
+    if (qErr) {
+      // FAIL CLOSED (review finding): a network blip must not silently bypass
+      // one of Rail 3's two confirmation gates — warn as if a conflict exists.
+      console.warn('[Rail3] proximity check failed — failing closed', qErr);
+      setPhase('warn');
+      return;
+    }
     const starts = (data ?? []).map((r) => r.scheduled_start as string | null);
     if (adHocProximityConflict(starts, Date.now())) {
       setPhase('warn'); // Captain must explicitly confirm past the warning
@@ -92,13 +118,22 @@ const AdHocCreator: React.FC = () => {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
       if (!userId) throw new Error('Not signed in.');
+      if (!TENANT_SLUG) {
+        // Without the build's club slug the join URL would encode an invalid
+        // host (https://.vechelon.ca/…) and persist it — refuse instead.
+        throw new Error('Tenant not configured — set EXPO_PUBLIC_TENANT_SLUG.');
+      }
+      // Membership PINNED to the build's club (review finding): a multi-club
+      // account must create the ride in the tenant whose slug the QR encodes,
+      // not an arbitrary membership row.
       const { data: membership } = await supabase
         .from('account_tenants')
-        .select('tenant_id')
+        .select('tenant_id, tenants!inner(slug)')
         .eq('account_id', userId)
+        .eq('tenants.slug', TENANT_SLUG)
         .limit(1)
         .maybeSingle();
-      if (!membership?.tenant_id) throw new Error('No club membership found.');
+      if (!membership?.tenant_id) throw new Error('No membership in this club.');
 
       const rideId = Crypto.randomUUID();
       const qrDataUrl = await renderQrDataUrl(buildRideJoinUrl(rideId, TENANT_SLUG));
