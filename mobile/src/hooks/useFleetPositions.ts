@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
 import { supabase } from '../lib/supabase';
-import { useRideChannel } from './useRideChannel';
+import type { RideChannelStatus } from './useRideChannel';
 import type { LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 
@@ -111,13 +113,17 @@ export function useFleetPositions(
   rideId: string | null,
   myRiderId: string | null,
   roster: RideRoster,
+  // The ride channel is created ONCE by the screen (useRideChannel) and shared
+  // with every consumer hook (positions here, beacons in useBeacons) — two
+  // useRideChannel calls would open two subscriptions to the same topic.
+  channel: RealtimeChannel | null,
+  status: RideChannelStatus,
   onUnknownRider?: () => void,
 ): {
   fleet: FleetParticipant[];
   myCoords: LatLng | null;
-  channelStatus: ReturnType<typeof useRideChannel>['status'];
+  channelStatus: RideChannelStatus;
 } {
-  const { channel, status } = useRideChannel(rideId);
   const [pings, setPings] = useState<Record<string, PositionPayload>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
   const lastSentRef = useRef(0);

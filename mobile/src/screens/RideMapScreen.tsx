@@ -7,12 +7,16 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 
 import { supabase } from '../lib/supabase';
 import { useRideDetails } from '../hooks/useRideDetails';
+import { useRideChannel } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
+import { useBeacons } from '../hooks/useBeacons';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
+import { canSeeBeacon, canCancelBeacon } from '../lib/beaconLogic';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import RiderMarker from '../components/RiderMarker';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
+import SupportBeacon from '../components/SupportBeacon';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 // W172 — the live fleet map. Full-bleed canvas, floating overlay controls
@@ -39,11 +43,29 @@ const RideMapScreen: React.FC = () => {
   const { ride, loading, error } = useRideDetails(rideId);
   const [myRiderId, setMyRiderId] = useState<string | null>(null);
   const { roster, refetchRoster } = useRideRoster(rideId);
+  // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
+  const { channel, status } = useRideChannel(rideId);
   const { fleet, myCoords, channelStatus } = useFleetPositions(
     rideId,
     myRiderId,
     roster,
+    channel,
+    status,
     refetchRoster,
+  );
+
+  // useBeacons reads coords on trigger (lat/long audit snapshot) via a ref so
+  // the callback identity stays stable across GPS updates.
+  const myCoordsRef = useRef<typeof myCoords>(null);
+  myCoordsRef.current = myCoords;
+  const getMyCoords = useCallback(() => myCoordsRef.current, []);
+  const { beacons, myBeacon, triggerBeacon, cancelBeacon, error: beaconError } = useBeacons(
+    rideId,
+    ride?.tenantId ?? null,
+    myRiderId,
+    channel,
+    status,
+    getMyCoords,
   );
 
   useEffect(() => {
@@ -125,14 +147,43 @@ const RideMapScreen: React.FC = () => {
         clusterColor="#E11D2A"
         spiralEnabled={false}
       >
-        {visible.map((p) => (
+        {visible.map((p) => {
+          const beacon = beacons[p.riderId];
+          // W173 pitfall (F-07 pending): beacons render for Captain/SAG + self
+          // ONLY — myRiderId-keyed self-rendering is handled below.
+          const showBeacon = Boolean(beacon) && myRiderId != null && canSeeBeacon(myRole, myRiderId, p.riderId);
+          return (
+            <RiderMarker
+              key={p.riderId}
+              participant={p}
+              // An active beacon makes the marker tappable for Captain/SAG so
+              // the sheet's Cancel Support is reachable (§4.1).
+              tappable={canOpenSheet(myRole, p.role) || (showBeacon && myRiderId != null && canCancelBeacon(myRole, myRiderId, p.riderId))}
+              beaconActive={showBeacon}
+              onPress={setSelected}
+            />
+          );
+        })}
+        {/* Self-view confirmation (Feature 2): the rider's own icon is the OS
+            blue dot, so an active own-beacon renders a pulsing marker at the
+            device position. Visible to self by definition. */}
+        {myBeacon && myCoords && myRiderId ? (
           <RiderMarker
-            key={p.riderId}
-            participant={p}
-            tappable={canOpenSheet(myRole, p.role)}
-            onPress={setSelected}
+            participant={{
+              riderId: myRiderId,
+              displayName: 'You',
+              role: myRole,
+              phone: null,
+              accountStatus: null,
+              state: 'active',
+              position: myCoords,
+              lastPingAt: Date.now(),
+            }}
+            tappable={false}
+            beaconActive
+            onPress={() => {}}
           />
-        ))}
+        ) : null}
       </MapView>
 
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}
@@ -157,6 +208,20 @@ const RideMapScreen: React.FC = () => {
         />
       ) : null}
 
+      {/* W173: the highest-priority single-tap action — bottom-left thumb reach. */}
+      <SupportBeacon
+        active={Boolean(myBeacon)}
+        onTrigger={() => void triggerBeacon()}
+        onCancel={() => {
+          if (myBeacon) void cancelBeacon(myBeacon);
+        }}
+      />
+      {beaconError ? (
+        <View style={styles.beaconErrorChip}>
+          <Text style={styles.beaconErrorText}>{beaconError}</Text>
+        </View>
+      ) : null}
+
       {/* One-thumb reach (§5.1): bottom-right, 64dp. */}
       <TouchableOpacity
         style={[styles.centreButton, !myCoords && styles.centreButtonDisabled]}
@@ -171,6 +236,12 @@ const RideMapScreen: React.FC = () => {
         participant={selected}
         myRole={myRole}
         onClose={() => setSelected(null)}
+        onCancelBeacon={
+          selected && myRiderId && beacons[selected.riderId] &&
+          canCancelBeacon(myRole, myRiderId, selected.riderId)
+            ? () => void cancelBeacon(beacons[selected.riderId])
+            : null
+        }
       />
     </View>
   );
@@ -223,6 +294,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centreButtonDisabled: { opacity: 0.35 },
+  beaconErrorChip: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: 124,
+    backgroundColor: '#7F1D1D',
+    borderRadius: 10,
+    padding: 12,
+  },
+  beaconErrorText: { color: '#FFFFFF', fontSize: 12, lineHeight: 17 },
   centreGlyph: { color: '#FFFFFF', fontSize: 26 },
 });
 

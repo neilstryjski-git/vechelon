@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
 
 import type { FleetParticipant } from '../lib/roleVisibility';
@@ -30,11 +30,28 @@ const ROLE_BADGE: Partial<Record<FleetParticipant['role'], string>> = {
 
 interface Props {
   participant: FleetParticipant;
-  tappable: boolean; // canOpenSheet(myRole, participant.role)
+  tappable: boolean; // canOpenSheet(myRole, participant.role) — OR an active beacon the viewer may cancel (W173)
+  // W173: pulsing high-visibility distress state. The CALLER gates this with
+  // canSeeBeacon (Captain/SAG + self only) — this component just renders it.
+  beaconActive?: boolean;
   onPress: (participant: FleetParticipant) => void;
 }
 
-const RiderMarker: React.FC<Props> = ({ participant, tappable, onPress }) => {
+const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onPress }) => {
+  const ring = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!beaconActive) {
+      ring.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(ring, { toValue: 1, duration: 900, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [beaconActive, ring]);
+
   if (!participant.position) return null;
   const s = STATE_STYLE[participant.state];
   const badge = ROLE_BADGE[participant.role];
@@ -53,7 +70,18 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, onPress }) => {
       }}
       tappable={tappable}
     >
-      <View style={[styles.markerWrap, { opacity: s.opacity }]}>
+      <View style={[styles.markerWrap, { opacity: beaconActive ? 1 : s.opacity }]}>
+        {beaconActive ? (
+          <Animated.View
+            style={[
+              styles.beaconRing,
+              {
+                opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }),
+                transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.8] }) }],
+              },
+            ]}
+          />
+        ) : null}
         <View
           style={[
             styles.dot,
@@ -100,6 +128,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  // Sunlight-readable distress ring (§5.1) — amber, expanding, unmistakable.
+  beaconRing: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderColor: '#F59E0B',
+    borderWidth: 4,
+  },
 });
 
 export default React.memo(RiderMarker);

@@ -48,7 +48,12 @@ export function useRideChannel(rideId: string | null): {
     const ch = supabase.channel(topic, {
       // private: true → realtime evaluates the realtime.messages RLS (the tenant gate).
       // self: true so the captain also sees their own broadcasts on the map.
-      config: { private: true, broadcast: { self: true } },
+      // ack: true → channel.send() resolves on SERVER acknowledgment instead of
+      // unconditionally 'ok' (realtime-js socket path). Load-bearing for W173:
+      // the Support Beacon's NO SIGNAL detection is only real with server acks.
+      // Position pings share the channel and are void-sent — the per-ping ack
+      // costs nothing client-side.
+      config: { private: true, broadcast: { self: true, ack: true } },
     });
 
     ch.subscribe((s, err) => {

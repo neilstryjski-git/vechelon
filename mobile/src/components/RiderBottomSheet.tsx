@@ -22,6 +22,9 @@ interface Props {
   participant: FleetParticipant | null;
   myRole: RideRole;
   onClose: () => void;
+  // W173: present when the participant has an active beacon AND the viewer may
+  // cancel it (canCancelBeacon — Captain/SAG; §4.1 "Cancel any rider's beacon").
+  onCancelBeacon?: (() => void) | null;
 }
 
 const ROLE_LABEL: Record<RideRole, string> = {
@@ -31,7 +34,7 @@ const ROLE_LABEL: Record<RideRole, string> = {
   guest: 'Guest Rider',
 };
 
-const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose }) => {
+const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCancelBeacon }) => {
   const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -60,6 +63,18 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose }) => 
           ) : null}
           <Text style={styles.metaChip}>{participant.state.toUpperCase()}</Text>
         </View>
+
+        {onCancelBeacon ? (
+          <TouchableOpacity
+            style={styles.cancelBeaconButton}
+            onPress={() => {
+              onCancelBeacon();
+              onClose();
+            }}
+          >
+            <Text style={styles.cancelBeaconText}>Cancel Support</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {showPhone ? (
           <>
@@ -156,6 +171,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   noPhone: { color: '#7A7A7A', fontSize: 14, marginTop: 16 },
+  // Distress action — visually distinct from contact actions (amber, 64dp).
+  cancelBeaconButton: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 12,
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  cancelBeaconText: {
+    color: '#0E0E10',
+    fontWeight: '800',
+    fontSize: 17,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
 });
 
 export default RiderBottomSheet;

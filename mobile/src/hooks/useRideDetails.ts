@@ -8,6 +8,7 @@ export interface RideDetails {
   id: string;
   name: string;
   status: string;
+  tenantId: string; // denormalized onto beacon_alerts rows (W173)
   finish: LatLng | null; // null ⇒ no Edge Indicator (R3-14, e.g. Ad Hoc rides)
   myRole: RideRole;
 }
@@ -40,7 +41,7 @@ export function useRideDetails(rideId: string | null): {
         supabase.auth.getUser(),
         supabase
           .from('rides')
-          .select('id, name, status, finish_coords')
+          .select('id, name, status, tenant_id, finish_coords')
           .eq('id', rideId)
           .maybeSingle(),
       ]);
@@ -69,6 +70,7 @@ export function useRideDetails(rideId: string | null): {
         id: rideRes.data.id,
         name: rideRes.data.name,
         status: rideRes.data.status,
+        tenantId: rideRes.data.tenant_id,
         finish: parsePoint(rideRes.data.finish_coords),
         myRole,
       });

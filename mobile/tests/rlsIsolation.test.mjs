@@ -74,7 +74,7 @@ async function signedInClient(email, password) {
 // A denied private-channel join surfaces as CHANNEL_ERROR (or TIMED_OUT).
 function subscribeStatus(client, topic, timeoutMs = 8000) {
   return new Promise((resolve) => {
-    const ch = client.channel(topic, { config: { private: true, broadcast: { self: true } } });
+    const ch = client.channel(topic, { config: { private: true, broadcast: { self: true, ack: true } } });
     const timer = setTimeout(() => {
       client.removeChannel(ch);
       resolve('TIMED_OUT');
@@ -245,7 +245,7 @@ test('cross-tenant Broadcast channel subscription is DENIED', async (t) => {
 test('in-tenant Broadcast channel subscription succeeds and can send', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
   const topic = `rail3:ride:${fx.rideB.id}`;
-  const ch = fx.userB.client.channel(topic, { config: { private: true, broadcast: { self: true } } });
+  const ch = fx.userB.client.channel(topic, { config: { private: true, broadcast: { self: true, ack: true } } });
   const status = await new Promise((resolve) => {
     const timer = setTimeout(() => resolve('TIMED_OUT'), 8000);
     ch.subscribe((s) => {
