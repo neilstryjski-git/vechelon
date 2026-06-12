@@ -64,6 +64,7 @@ const RideMapScreen: React.FC = () => {
     ride?.tenantId ?? null,
     myRiderId,
     channel,
+    status,
     getMyCoords,
   );
 

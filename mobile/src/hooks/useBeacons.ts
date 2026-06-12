@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import * as Haptics from 'expo-haptics';
 
 import { supabase } from '../lib/supabase';
+import type { RideChannelStatus } from './useRideChannel';
 import { buildCancelPatch, latencyDeltaMs } from '../lib/beaconLogic';
 import type { LatLng } from '../lib/geo';
 
@@ -42,6 +43,7 @@ export function useBeacons(
   tenantId: string | null,
   myRiderId: string | null,
   channel: RealtimeChannel | null,
+  channelStatus: RideChannelStatus,
   getMyCoords: () => LatLng | null,
 ): {
   // riderId -> active beacon. Consumers gate visibility with canSeeBeacon.
@@ -65,12 +67,16 @@ export function useBeacons(
     if (!rideId) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error: seedErr } = await supabase
         .from('beacon_alerts')
         .select('id, rider_id, triggered_at')
         .eq('ride_id', rideId)
         .is('beacon_cancelled_at', null);
-      if (cancelled || !data) return;
+      if (cancelled) return;
+      if (seedErr || !data) {
+        console.warn('[Rail3] beacon seed read failed', seedErr);
+        return;
+      }
       const seed: Record<string, ActiveBeacon> = {};
       for (const row of data) {
         seed[row.rider_id] = {
@@ -79,7 +85,9 @@ export function useBeacons(
           triggeredAt: Date.parse(row.triggered_at),
         };
       }
-      setBeacons(seed);
+      // Merge UNDER live state: a broadcast that arrived during this fetch
+      // (trigger broadcasts before inserting) must not be clobbered.
+      setBeacons((prev) => ({ ...seed, ...prev }));
     })();
     return () => {
       cancelled = true;
@@ -135,16 +143,30 @@ export function useBeacons(
       globalThis.crypto?.randomUUID?.() ??
       `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const sentAt = Date.now();
-    void channel.send({
-      type: 'broadcast',
+    const alertPayload = {
+      type: 'broadcast' as const,
       event: BEACON_EVENT,
       payload: { riderId: myRiderId, active: true, beaconId, sentAt } as BeaconPayload,
-    });
-    // Optimistic local state so the rider's own confirmation never waits.
+    };
+    // Optimistic local state so the rider's own confirmation never waits —
+    // but the ALERT must be acknowledged, not assumed (review critical): a
+    // dead-zone send failure with a pulsing icon is a false success on the
+    // one path the feature exists for. send() resolves 'ok'|'timed out'|'error';
+    // awaiting it does not delay the send itself.
     setBeacons((prev) => ({
       ...prev,
       [myRiderId]: { beaconId, riderId: myRiderId, triggeredAt: sentAt },
     }));
+    let sent = channelStatus === 'SUBSCRIBED' ? await channel.send(alertPayload) : 'error';
+    if (sent !== 'ok') {
+      sent = await channel.send(alertPayload); // one retry
+    }
+    if (sent !== 'ok') {
+      setError(
+        'NO SIGNAL — your beacon may NOT have reached the Captain/SAG. Keep the app open; it stays armed.',
+      );
+      console.error(`[Rail3] beacon alert send failed (${sent}), channel ${channelStatus}`);
+    }
 
     const coords = getMyCoords();
     const row = {
@@ -175,35 +197,63 @@ export function useBeacons(
       if (!myRiderId || !channel) return;
       setError(null);
 
-      const patch = buildCancelPatch(myRiderId, new Date()); // throws before ever writing null (SD-011)
-      const { error: updErr } = await supabase
-        .from('beacon_alerts')
-        .update(patch)
-        .eq('id', beacon.beaconId)
-        .is('beacon_cancelled_at', null); // idempotent under racing cancels
-      if (updErr) {
-        setError(`Beacon cancel failed: ${updErr.message}`);
-        console.error('[Rail3] beacon cancel update failed', updErr);
-        return; // no broadcast: maps must not clear a beacon whose audit row still says active
-      }
+      try {
+        const patch = buildCancelPatch(myRiderId, new Date()); // throws before ever writing null (SD-011)
+        const { data: touched, error: updErr } = await supabase
+          .from('beacon_alerts')
+          .update(patch)
+          .eq('id', beacon.beaconId)
+          .is('beacon_cancelled_at', null) // idempotent under racing cancels
+          .select('id');
+        if (updErr) {
+          setError(`Beacon cancel failed: ${updErr.message}`);
+          console.error('[Rail3] beacon cancel update failed', updErr);
+          return; // no broadcast: maps must not clear a beacon whose audit row still says active
+        }
+        if (!touched || touched.length === 0) {
+          // Already settled by a racing canceller (or no audit row exists):
+          // someone else's fan-out clears the maps and delivers the owner's
+          // haptic — re-broadcasting here would double both.
+          console.warn('[Rail3] beacon cancel matched no active row — already settled', beacon.beaconId);
+          setBeacons((prev) => {
+            const next = { ...prev };
+            delete next[beacon.riderId];
+            return next;
+          });
+          return;
+        }
 
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      void channel.send({
-        type: 'broadcast',
-        event: BEACON_EVENT,
-        payload: {
-          riderId: beacon.riderId,
-          active: false,
-          beaconId: beacon.beaconId,
-          cancelledBy: myRiderId,
-          sentAt: Date.now(),
-        } as BeaconPayload,
-      });
-      setBeacons((prev) => {
-        const next = { ...prev };
-        delete next[beacon.riderId];
-        return next;
-      });
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const fanout = {
+          type: 'broadcast' as const,
+          event: BEACON_EVENT,
+          payload: {
+            riderId: beacon.riderId,
+            active: false,
+            beaconId: beacon.beaconId,
+            cancelledBy: myRiderId,
+            sentAt: Date.now(),
+          } as BeaconPayload,
+        };
+        let sent = await channel.send(fanout);
+        if (sent !== 'ok') sent = await channel.send(fanout); // one retry
+        if (sent !== 'ok') {
+          // Audit row is settled (fail-safe direction) but other maps may
+          // still pulse until their next seed — say so.
+          setError('Beacon cancelled in the record, but other devices may still show it (no signal).');
+          console.error(`[Rail3] beacon cancel fan-out failed (${sent})`);
+        }
+        setBeacons((prev) => {
+          const next = { ...prev };
+          delete next[beacon.riderId];
+          return next;
+        });
+      } catch (e) {
+        // Includes the SD-011 guard throw — loud, never a stranded silent state.
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(`Beacon cancel failed: ${msg}`);
+        console.error('[Rail3] beacon cancel error', e);
+      }
     },
     [myRiderId, channel],
   );
