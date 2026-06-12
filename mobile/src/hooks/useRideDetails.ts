@@ -11,6 +11,7 @@ export interface RideDetails {
   status: string;
   tenantId: string; // denormalized onto beacon_alerts rows (W173)
   thresholds: StateThresholds; // per-tenant rider-state thresholds (W174)
+  qrCode: string | null; // rides.qr_code — full-screen display (W175/R3-27)
   finish: LatLng | null; // null ⇒ no Edge Indicator (R3-14, e.g. Ad Hoc rides)
   myRole: RideRole;
 }
@@ -45,7 +46,7 @@ export function useRideDetails(rideId: string | null): {
           .from('rides')
           // Single string literal — supabase-js infers row types from it.
           .select(
-            'id, name, status, tenant_id, finish_coords, tenants(rail3_stopped_threshold_minutes, rail3_inactive_threshold_minutes, rail3_dark_threshold_minutes)',
+            'id, name, status, tenant_id, finish_coords, qr_code, tenants(rail3_stopped_threshold_minutes, rail3_inactive_threshold_minutes, rail3_dark_threshold_minutes)',
           )
           .eq('id', rideId)
           .maybeSingle(),
@@ -76,6 +77,7 @@ export function useRideDetails(rideId: string | null): {
         name: rideRes.data.name,
         status: rideRes.data.status,
         tenantId: rideRes.data.tenant_id,
+        qrCode: rideRes.data.qr_code ?? null,
         // PostgREST embeds the FK'd tenants row; per-field default fallback.
         thresholds: thresholdsFromTenant(
           rideRes.data.tenants as Parameters<typeof thresholdsFromTenant>[0],

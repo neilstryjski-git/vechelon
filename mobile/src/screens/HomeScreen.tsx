@@ -13,6 +13,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
+import { TENANT_SLUG } from '../lib/env';
+import AdHocCreator from '../components/AdHocCreator';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
 interface ActiveRide {
@@ -34,6 +36,33 @@ const HomeScreen: React.FC = () => {
   const [rides, setRides] = useState<ActiveRide[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Ad Hoc creation (W175): Captain-only per §4.1, and rides INSERT is gated
+  // server-side by ride_admin_insert (is_tenant_admin) — same as prod, where
+  // ride creators are tenant admins. Show the control only to accounts that
+  // can actually use it (PoC captains are seeded as tenant admins).
+  const [canCreate, setCanCreate] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user || !mounted) return;
+      // Pinned to the build's club slug (multi-membership safe); without a
+      // slug the creator can't mint a valid join URL anyway, so stay hidden.
+      if (!TENANT_SLUG) return;
+      const { data } = await supabase
+        .from('account_tenants')
+        .select('role, tenants!inner(slug)')
+        .eq('account_id', auth.user.id)
+        .eq('tenants.slug', TENANT_SLUG)
+        .limit(1)
+        .maybeSingle();
+      if (mounted) setCanCreate(data?.role === 'admin');
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadRides = useCallback(async () => {
     const { data, error } = await supabase
@@ -87,9 +116,13 @@ const HomeScreen: React.FC = () => {
         }
         ListEmptyComponent={
           loaded ? (
-            <Text style={styles.empty}>
-              No live rides right now. Pull to refresh when your ride starts.
-            </Text>
+            <View>
+              <Text style={styles.empty}>
+                No live rides right now. Pull to refresh when your ride starts.
+              </Text>
+              {/* Feature 3: Ad Hoc creation is available when no ride is Active. */}
+              {canCreate ? <AdHocCreator /> : null}
+            </View>
           ) : null
         }
         renderItem={({ item }) => (
