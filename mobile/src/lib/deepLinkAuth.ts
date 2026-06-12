@@ -54,8 +54,10 @@ export async function createSessionFromUrl(url: string) {
   return null;
 }
 
-// The deep link the magic-link email should redirect back to. In a Dev Build this
-// resolves to `rail3://auth` (the scheme declared in app.json); under `expo start`
-// it resolves to the Expo dev URL. This exact value must be on the Supabase Auth
-// "Redirect URLs" allowlist for the magic link to return to the app (see README).
+// The app's own deep link (`rail3://auth` in a Dev/standalone build; the Expo dev
+// URL under `expo start`). Handed to send-magic-link as redirectTo purely to satisfy
+// Supabase's generateLink (it validates redirectTo against the uri_allow_list). With
+// the D48 OTP flow the user never follows the link — they type the 6-digit code from
+// the email into the app, which calls auth.verifyOtp — so Android never has to follow
+// an https→rail3:// redirect. createSessionFromUrl above is retained for completeness.
 export const authRedirectUrl = Linking.createURL('auth');
