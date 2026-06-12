@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../theme/ThemeProvider';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
 interface ActiveRide {
@@ -25,9 +26,10 @@ interface ActiveRide {
 // to the W172 fleet map. Ride DISCOVERY is a one-shot DB read (a meaningful
 // event); everything live on the map itself is Broadcast-only. RLS scopes the
 // list to the signed-in member's tenant — no tenant id is ever hardcoded here
-// (W178 pitfall: runtime lookup only).
+// (W178 pitfall: runtime lookup only). Branding via the W178 ThemeProvider.
 const HomeScreen: React.FC = () => {
   const { session, signOut } = useAuth();
+  const theme = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [rides, setRides] = useState<ActiveRide[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,13 +58,19 @@ const HomeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <Text style={[styles.club, { color: theme.primaryColor }]}>
+        {theme.clubName.toUpperCase()}
+      </Text>
       <View style={styles.header}>
         <View>
           <Text style={styles.label}>Signed in as</Text>
           <Text style={styles.email}>{session?.user.email ?? 'unknown'}</Text>
         </View>
-        <TouchableOpacity style={styles.signOut} onPress={signOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+        <TouchableOpacity
+          style={[styles.signOut, { borderColor: theme.primaryColor }]}
+          onPress={signOut}
+        >
+          <Text style={[styles.signOutText, { color: theme.primaryColor }]}>Sign Out</Text>
         </TouchableOpacity>
       </View>
 
@@ -71,7 +79,11 @@ const HomeScreen: React.FC = () => {
         data={rides}
         keyExtractor={(r) => r.id}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E11D2A" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.primaryColor}
+          />
         }
         ListEmptyComponent={
           loaded ? (
@@ -100,6 +112,13 @@ const HomeScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0E0E10', paddingHorizontal: 20, paddingTop: 64 },
+  club: {
+    fontSize: 22,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    letterSpacing: 1,
+    marginBottom: 20,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -109,14 +128,12 @@ const styles = StyleSheet.create({
   label: { color: '#9A9A9A', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' },
   email: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 4 },
   signOut: {
-    borderColor: '#2C2C30',
     borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
   signOutText: {
-    color: '#E11D2A',
     fontWeight: '700',
     fontSize: 11,
     letterSpacing: 1,
