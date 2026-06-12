@@ -49,6 +49,7 @@ const RideMapScreen: React.FC = () => {
     rideId,
     myRiderId,
     roster,
+    ride?.thresholds,
     channel,
     status,
     refetchRoster,

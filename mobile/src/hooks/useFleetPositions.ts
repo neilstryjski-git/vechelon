@@ -5,8 +5,14 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import type { RideChannelStatus } from './useRideChannel';
-import type { LatLng } from '../lib/geo';
+import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
+import {
+  SenderStateTracker,
+  deriveRenderState,
+  StateThresholds,
+  DEFAULT_THRESHOLDS,
+} from '../state/riderState';
 
 // Broadcast event name for position pings on the rail3:ride:<id> channel.
 export const POSITION_EVENT = 'pos';
@@ -98,6 +104,9 @@ export function useRideRoster(rideId: string | null): {
 }
 
 const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
+// Dark needs no inbound data to happen — re-derive every 15s (cheap: a state
+// bump re-runs the in-memory join; no DB, no network).
+const STATE_TICK_MS = 15000;
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
@@ -105,14 +114,17 @@ const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
 // from a rider NOT in the caller's roster are dropped: if the server didn't
 // let us identify them, we don't render them.
 //
-// Tactical-state TRANSITIONS (stopped/inactive/dark by threshold) are W174's
-// scope; until it lands every published ping carries state 'active' and the
-// renderer draws whatever state arrives, so W174 plugs in without touching
-// the map.
+// Tactical state (W174): the SENDER publishes Active/Stopped/Inactive computed
+// from its own movement (SenderStateTracker); DARK is derived RECEIVER-side
+// from ping staleness — a Dark rider can't broadcast, so it can never be
+// self-reported. A periodic tick re-derives so markers grey out with no new
+// data arriving. Transitions are passive: state feeds icons only, no alerts.
 export function useFleetPositions(
   rideId: string | null,
   myRiderId: string | null,
   roster: RideRoster,
+  // Per-tenant thresholds (tenants.rail3_*_threshold_minutes via useRideDetails).
+  thresholds: StateThresholds = DEFAULT_THRESHOLDS,
   // The ride channel is created ONCE by the screen (useRideChannel) and shared
   // with every consumer hook (positions here, beacons in useBeacons) — two
   // useRideChannel calls would open two subscriptions to the same topic.
@@ -124,9 +136,19 @@ export function useFleetPositions(
   myCoords: LatLng | null;
   channelStatus: RideChannelStatus;
 } {
-  const [pings, setPings] = useState<Record<string, PositionPayload>>({});
+  // Each ping is stored with its RECEIPT time: Dark staleness is measured on
+  // the receiver's clock (skew-free), never against the sender's `ts`.
+  const [pings, setPings] = useState<Record<string, PositionPayload & { receivedAtMs: number }>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
   const lastSentRef = useRef(0);
+
+  // Re-derive render states as time passes — a rider goes Stopped→…→Dark
+  // precisely when NO data arrives, so something must still trigger renders.
+  const [, setStateTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStateTick((n) => n + 1), STATE_TICK_MS);
+    return () => clearInterval(t);
+  }, []);
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {
@@ -136,7 +158,7 @@ export function useFleetPositions(
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
       const p = payload as PositionPayload;
       if (!p?.riderId || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
-      setPings((prev) => ({ ...prev, [p.riderId]: p }));
+      setPings((prev) => ({ ...prev, [p.riderId]: { ...p, receivedAtMs: Date.now() } }));
     });
     // Broadcast/Presence handlers may bind after subscribe() (useRideChannel
     // already subscribed); postgres_changes may not — none are used here.
@@ -147,6 +169,9 @@ export function useFleetPositions(
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
     let cancelled = false;
+    // Sender half of the W174 state machine — fresh per (ride, thresholds).
+    const tracker = new SenderStateTracker(thresholds);
+    let lastPublished: LatLng | null = null;
 
     (async () => {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
@@ -167,9 +192,16 @@ export function useFleetPositions(
           if (now - lastSentRef.current < PING_INTERVAL_MS) return;
           lastSentRef.current = now;
 
+          // W174 publish seam: state computed from own movement (Dark is
+          // receiver-derived and intentionally absent here).
+          const state = tracker.sample({
+            distanceFromLastM: lastPublished ? haversineDistanceM(lastPublished, coords) : Infinity,
+            atMs: now,
+          });
+          lastPublished = coords;
           const payload: PositionPayload = {
             riderId: myRiderId,
-            state: 'active',
+            state,
             lat: coords.lat,
             lng: coords.lng,
             ts: now,
@@ -185,7 +217,7 @@ export function useFleetPositions(
       cancelled = true;
       sub?.remove();
     };
-  }, [channel, status, rideId, myRiderId]);
+  }, [channel, status, rideId, myRiderId, thresholds]);
 
   // Join pings to the server-gated roster. Unknown riderIds are dropped — for
   // a Rider, "unknown" is exactly the set RLS hid (other riders), so the §4.1
@@ -205,7 +237,10 @@ export function useFleetPositions(
       role: entry.role,
       phone: entry.phone,
       accountStatus: entry.participantStatus,
-      state: p.state ?? 'active',
+      // W174 receiver half: staleness past the dark threshold overrides the
+      // last self-reported state; the marker stays greyed AT the last known
+      // position (p.lat/lng below) — exactly the committed Dark rendering.
+      state: deriveRenderState(p.state ?? 'active', p.receivedAtMs, Date.now(), thresholds),
       position: { lat: p.lat, lng: p.lng },
       lastPingAt: p.ts,
     });

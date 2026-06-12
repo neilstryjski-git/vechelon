@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { parsePoint, LatLng } from '../lib/geo';
 import type { RideRole } from '../lib/roleVisibility';
+import { StateThresholds, thresholdsFromTenant } from '../state/riderState';
 
 export interface RideDetails {
   id: string;
   name: string;
   status: string;
   tenantId: string; // denormalized onto beacon_alerts rows (W173)
+  thresholds: StateThresholds; // per-tenant rider-state thresholds (W174)
   finish: LatLng | null; // null ⇒ no Edge Indicator (R3-14, e.g. Ad Hoc rides)
   myRole: RideRole;
 }
@@ -41,7 +43,10 @@ export function useRideDetails(rideId: string | null): {
         supabase.auth.getUser(),
         supabase
           .from('rides')
-          .select('id, name, status, tenant_id, finish_coords')
+          // Single string literal — supabase-js infers row types from it.
+          .select(
+            'id, name, status, tenant_id, finish_coords, tenants(rail3_stopped_threshold_minutes, rail3_inactive_threshold_minutes, rail3_dark_threshold_minutes)',
+          )
           .eq('id', rideId)
           .maybeSingle(),
       ]);
@@ -71,6 +76,10 @@ export function useRideDetails(rideId: string | null): {
         name: rideRes.data.name,
         status: rideRes.data.status,
         tenantId: rideRes.data.tenant_id,
+        // PostgREST embeds the FK'd tenants row; per-field default fallback.
+        thresholds: thresholdsFromTenant(
+          rideRes.data.tenants as Parameters<typeof thresholdsFromTenant>[0],
+        ),
         finish: parsePoint(rideRes.data.finish_coords),
         myRole,
       });
