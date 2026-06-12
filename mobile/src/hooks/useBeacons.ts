@@ -149,25 +149,16 @@ export function useBeacons(
       payload: { riderId: myRiderId, active: true, beaconId, sentAt } as BeaconPayload,
     };
     // Optimistic local state so the rider's own confirmation never waits —
-    // but the ALERT must be acknowledged, not assumed (review critical): a
-    // dead-zone send failure with a pulsing icon is a false success on the
-    // one path the feature exists for. send() resolves 'ok'|'timed out'|'error';
-    // awaiting it does not delay the send itself.
+    // but the ALERT must be acknowledged, not assumed (review critical): with
+    // broadcast ack:true on the channel (useRideChannel), send() resolves on
+    // the SERVER's acknowledgment, so a dead-zone failure is detectable.
     setBeacons((prev) => ({
       ...prev,
       [myRiderId]: { beaconId, riderId: myRiderId, triggeredAt: sentAt },
     }));
-    let sent = channelStatus === 'SUBSCRIBED' ? await channel.send(alertPayload) : 'error';
-    if (sent !== 'ok') {
-      sent = await channel.send(alertPayload); // one retry
-    }
-    if (sent !== 'ok') {
-      setError(
-        'NO SIGNAL — your beacon may NOT have reached the Captain/SAG. Keep the app open; it stays armed.',
-      );
-      console.error(`[Rail3] beacon alert send failed (${sent}), channel ${channelStatus}`);
-    }
 
+    // Audit insert runs CONCURRENTLY with the send acknowledgment — the alert
+    // never blocks the audit, and the audit never blocks the alert.
     const coords = getMyCoords();
     const row = {
       id: beaconId,
@@ -178,17 +169,32 @@ export function useBeacons(
       long: coords?.lng ?? null,
       triggered_at: new Date(sentAt).toISOString(),
     };
-    let { error: insErr } = await supabase.from('beacon_alerts').insert(row);
-    if (insErr) {
-      ({ error: insErr } = await supabase.from('beacon_alerts').insert(row)); // one retry
+    const insertPromise = (async () => {
+      let { error: insErr } = await supabase.from('beacon_alerts').insert(row);
+      if (insErr) {
+        ({ error: insErr } = await supabase.from('beacon_alerts').insert(row)); // one retry
+      }
+      return insErr ?? null;
+    })();
+
+    let sent = channelStatus === 'SUBSCRIBED' ? await channel.send(alertPayload) : 'error';
+    if (sent !== 'ok') {
+      sent = await channel.send(alertPayload); // one retry (REST fallback when not joined)
     }
-    if (insErr) {
-      // The alert already fanned out — keep the beacon live, but say loudly
-      // that the audit record is missing.
+    const insErr = await insertPromise;
+
+    // Compose ONE truthful message — never let a softer failure overwrite
+    // NO SIGNAL with an 'alert sent' claim (review important #2).
+    if (sent !== 'ok' && insErr) {
+      setError('NO SIGNAL — your beacon did NOT go out. Retry when you have any signal.');
+    } else if (sent !== 'ok') {
+      setError('NO SIGNAL — your beacon may NOT have reached the Captain/SAG. Retry when you have signal.');
+    } else if (insErr) {
       setError(`Beacon alert sent, but the audit write failed: ${insErr.message}`);
-      console.error('[Rail3] beacon_alerts insert failed after retry', insErr);
     }
-  }, [rideId, tenantId, myRiderId, channel, getMyCoords]);
+    if (sent !== 'ok') console.error(`[Rail3] beacon alert send failed (${sent}), channel ${channelStatus}`);
+    if (insErr) console.error('[Rail3] beacon_alerts insert failed after retry', insErr);
+  }, [rideId, tenantId, myRiderId, channel, channelStatus, getMyCoords]);
 
   // R3-20/21/22: audit write FIRST with the acting user's UUID (own uuid on
   // self-cancel — never null), then fan out; medium haptic for the actor.
@@ -211,10 +217,26 @@ export function useBeacons(
           return; // no broadcast: maps must not clear a beacon whose audit row still says active
         }
         if (!touched || touched.length === 0) {
-          // Already settled by a racing canceller (or no audit row exists):
-          // someone else's fan-out clears the maps and delivers the owner's
-          // haptic — re-broadcasting here would double both.
-          console.warn('[Rail3] beacon cancel matched no active row — already settled', beacon.beaconId);
+          console.warn('[Rail3] beacon cancel matched no active row — settled or never audited', beacon.beaconId);
+          if (beacon.riderId === myRiderId) {
+            // OWN beacon with no active row = the trigger's audit insert never
+            // landed (compound dead-zone failure) — there is no racing actor
+            // whose fan-out will clear other maps, so still broadcast the
+            // cancel. A true racing self-cancel is impossible (we are the self).
+            void channel.send({
+              type: 'broadcast',
+              event: BEACON_EVENT,
+              payload: {
+                riderId: beacon.riderId,
+                active: false,
+                beaconId: beacon.beaconId,
+                cancelledBy: myRiderId,
+                sentAt: Date.now(),
+              } as BeaconPayload,
+            });
+          }
+          // Otherwise: settled by a racing canceller — their fan-out clears
+          // maps and delivers the owner's haptic; re-broadcasting doubles both.
           setBeacons((prev) => {
             const next = { ...prev };
             delete next[beacon.riderId];
