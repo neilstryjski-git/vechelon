@@ -17,6 +17,8 @@ import RiderMarker from '../components/RiderMarker';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
 import SupportBeacon from '../components/SupportBeacon';
+import FullScreenQR from '../components/FullScreenQR';
+import RideControls from './RideControls';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 // W172 — the live fleet map. Full-bleed canvas, floating overlay controls
@@ -77,6 +79,7 @@ const RideMapScreen: React.FC = () => {
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selected, setSelected] = useState<FleetParticipant | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const myRole = ride?.myRole ?? 'member';
 
@@ -192,14 +195,35 @@ const RideMapScreen: React.FC = () => {
         <TouchableOpacity style={styles.backChip} onPress={() => navigation.goBack()}>
           <Text style={styles.chipText}>‹ {ride.name}</Text>
         </TouchableOpacity>
-        {channelStatus !== 'SUBSCRIBED' ? (
-          <View style={styles.statusChip}>
-            <Text style={styles.chipText}>
-              {channelStatus === 'CHANNEL_ERROR' ? 'CHANNEL DENIED' : 'CONNECTING…'}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.topRight}>
+          {channelStatus !== 'SUBSCRIBED' ? (
+            <View style={styles.statusChip}>
+              <Text style={styles.chipText}>
+                {channelStatus === 'CHANNEL_ERROR' ? 'CHANNEL DENIED' : 'CONNECTING…'}
+              </Text>
+            </View>
+          ) : null}
+          {/* R3-27: QR display is available to ALL roles — any participant can
+              help a latecomer join. */}
+          <TouchableOpacity
+            style={styles.qrChip}
+            onPress={() => setQrOpen(true)}
+            accessibilityLabel="Show ride QR code"
+          >
+            <Text style={styles.chipText}>QR</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* §4.1: End Ride is Captain-only — SAG and Riders never mount this. */}
+      {myRole === 'captain' ? <RideControls rideId={ride.id} getMyCoords={getMyCoords} /> : null}
+
+      <FullScreenQR
+        visible={qrOpen}
+        qrCode={ride.qrCode}
+        rideName={ride.name}
+        onClose={() => setQrOpen(false)}
+      />
 
       {finishOffscreen ? (
         <EdgeIndicator
@@ -268,6 +292,16 @@ const styles = StyleSheet.create({
   },
   backChip: {
     backgroundColor: '#0E0E10E6',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  topRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  qrChip: {
+    backgroundColor: '#0E0E10E6',
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
     minHeight: 48,
