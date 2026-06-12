@@ -21,7 +21,6 @@ export const POSITION_EVENT = 'pos';
 // are W179's scope; these are the working defaults). Background GPS / screen-lock
 // continuation is W176/W179 — this hook publishes while the app is foregrounded.
 const PING_INTERVAL_MS = 5000;
-const PING_DISTANCE_M = 10;
 
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
@@ -168,6 +167,7 @@ export function useFleetPositions(
   useEffect(() => {
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
@@ -177,45 +177,68 @@ export function useFleetPositions(
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted' || cancelled) return;
 
+      // W174 publish seam: state computed from own movement (Dark is
+      // receiver-derived and intentionally absent here). Shared by the OS
+      // callback and the stationary heartbeat below.
+      const publishSample = (coords: LatLng, distanceFromLastM: number, now: number) => {
+        if (now - lastSentRef.current < PING_INTERVAL_MS) return;
+        lastSentRef.current = now;
+        const state = tracker.sample({ distanceFromLastM, atMs: now });
+        lastPublished = coords;
+        const payload: PositionPayload = {
+          riderId: myRiderId,
+          state,
+          lat: coords.lat,
+          lng: coords.lng,
+          ts: now,
+        };
+        // Ephemeral fan-out only — the send is RLS-authorized server-side
+        // (W170 rail3_broadcast_tenant_send). Never a DB write.
+        void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
+      };
+
+      let lastCallbackAtMs = 0;
       sub = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: PING_INTERVAL_MS,
-          distanceInterval: PING_DISTANCE_M,
+          // 0, NOT a distance filter (review finding): a distance filter
+          // suppresses OS callbacks while stationary — exactly the condition
+          // Stopped/Inactive describe — starving the state machine and making
+          // a stopped rider indistinguishable from a Dark one. Movement vs
+          // jitter is judged by MOVE_EPSILON_M in the tracker, not by the OS.
+          distanceInterval: 0,
         },
         (loc) => {
           const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
           setMyCoords(coords);
-
-          // Throttle sends independently of the OS callback cadence.
           const now = Date.now();
-          if (now - lastSentRef.current < PING_INTERVAL_MS) return;
-          lastSentRef.current = now;
-
-          // W174 publish seam: state computed from own movement (Dark is
-          // receiver-derived and intentionally absent here).
-          const state = tracker.sample({
-            distanceFromLastM: lastPublished ? haversineDistanceM(lastPublished, coords) : Infinity,
-            atMs: now,
-          });
-          lastPublished = coords;
-          const payload: PositionPayload = {
-            riderId: myRiderId,
-            state,
-            lat: coords.lat,
-            lng: coords.lng,
-            ts: now,
-          };
-          // Ephemeral fan-out only — the send is RLS-authorized server-side
-          // (W170 rail3_broadcast_tenant_send). Never a DB write.
-          void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
+          lastCallbackAtMs = now;
+          publishSample(
+            coords,
+            lastPublished ? haversineDistanceM(lastPublished, coords) : Infinity,
+            now,
+          );
         },
       );
+
+      // Stationary heartbeat: if the OS still withholds callbacks (OEM
+      // batching, Battery Saver — W177 territory), keep feeding the tracker
+      // zero-movement samples at the ping cadence so Stopped/Inactive can
+      // actually transition AND receivers keep getting pings (a silent sender
+      // would read as Dark, collapsing the Stopped-vs-Dark distinction).
+      heartbeat = setInterval(() => {
+        const now = Date.now();
+        if (now - lastCallbackAtMs < PING_INTERVAL_MS * 2) return; // OS is feeding us
+        if (!lastPublished) return; // no fix yet — nothing truthful to send
+        publishSample(lastPublished, 0, now);
+      }, PING_INTERVAL_MS);
     })();
 
     return () => {
       cancelled = true;
       sub?.remove();
+      if (heartbeat) clearInterval(heartbeat);
     };
   }, [channel, status, rideId, myRiderId, thresholds]);
 
