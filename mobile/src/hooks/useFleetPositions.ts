@@ -5,8 +5,14 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import type { RideChannelStatus } from './useRideChannel';
-import type { LatLng } from '../lib/geo';
+import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
+import {
+  SenderStateTracker,
+  deriveRenderState,
+  StateThresholds,
+  DEFAULT_THRESHOLDS,
+} from '../state/riderState';
 
 // Broadcast event name for position pings on the rail3:ride:<id> channel.
 export const POSITION_EVENT = 'pos';
@@ -15,7 +21,6 @@ export const POSITION_EVENT = 'pos';
 // are W179's scope; these are the working defaults). Background GPS / screen-lock
 // continuation is W176/W179 — this hook publishes while the app is foregrounded.
 const PING_INTERVAL_MS = 5000;
-const PING_DISTANCE_M = 10;
 
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
@@ -98,6 +103,9 @@ export function useRideRoster(rideId: string | null): {
 }
 
 const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
+// Dark needs no inbound data to happen — re-derive every 15s (cheap: a state
+// bump re-runs the in-memory join; no DB, no network).
+const STATE_TICK_MS = 15000;
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
@@ -105,14 +113,17 @@ const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
 // from a rider NOT in the caller's roster are dropped: if the server didn't
 // let us identify them, we don't render them.
 //
-// Tactical-state TRANSITIONS (stopped/inactive/dark by threshold) are W174's
-// scope; until it lands every published ping carries state 'active' and the
-// renderer draws whatever state arrives, so W174 plugs in without touching
-// the map.
+// Tactical state (W174): the SENDER publishes Active/Stopped/Inactive computed
+// from its own movement (SenderStateTracker); DARK is derived RECEIVER-side
+// from ping staleness — a Dark rider can't broadcast, so it can never be
+// self-reported. A periodic tick re-derives so markers grey out with no new
+// data arriving. Transitions are passive: state feeds icons only, no alerts.
 export function useFleetPositions(
   rideId: string | null,
   myRiderId: string | null,
   roster: RideRoster,
+  // Per-tenant thresholds (tenants.rail3_*_threshold_minutes via useRideDetails).
+  thresholds: StateThresholds = DEFAULT_THRESHOLDS,
   // The ride channel is created ONCE by the screen (useRideChannel) and shared
   // with every consumer hook (positions here, beacons in useBeacons) — two
   // useRideChannel calls would open two subscriptions to the same topic.
@@ -124,9 +135,19 @@ export function useFleetPositions(
   myCoords: LatLng | null;
   channelStatus: RideChannelStatus;
 } {
-  const [pings, setPings] = useState<Record<string, PositionPayload>>({});
+  // Each ping is stored with its RECEIPT time: Dark staleness is measured on
+  // the receiver's clock (skew-free), never against the sender's `ts`.
+  const [pings, setPings] = useState<Record<string, PositionPayload & { receivedAtMs: number }>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
   const lastSentRef = useRef(0);
+
+  // Re-derive render states as time passes — a rider goes Stopped→…→Dark
+  // precisely when NO data arrives, so something must still trigger renders.
+  const [, setStateTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStateTick((n) => n + 1), STATE_TICK_MS);
+    return () => clearInterval(t);
+  }, []);
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {
@@ -136,7 +157,7 @@ export function useFleetPositions(
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
       const p = payload as PositionPayload;
       if (!p?.riderId || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
-      setPings((prev) => ({ ...prev, [p.riderId]: p }));
+      setPings((prev) => ({ ...prev, [p.riderId]: { ...p, receivedAtMs: Date.now() } }));
     });
     // Broadcast/Presence handlers may bind after subscribe() (useRideChannel
     // already subscribed); postgres_changes may not — none are used here.
@@ -146,46 +167,86 @@ export function useFleetPositions(
   useEffect(() => {
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
+    // Sender half of the W174 state machine — fresh per (ride, thresholds).
+    const tracker = new SenderStateTracker(thresholds);
+    let lastPublished: LatLng | null = null;
 
     (async () => {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted' || cancelled) return;
 
+      // W174 publish seam: state computed from own movement (Dark is
+      // receiver-derived and intentionally absent here). Shared by the OS
+      // callback and the stationary heartbeat below.
+      const publishSample = (coords: LatLng, distanceFromLastM: number, now: number) => {
+        if (now - lastSentRef.current < PING_INTERVAL_MS) return;
+        lastSentRef.current = now;
+        const state = tracker.sample({ distanceFromLastM, atMs: now });
+        lastPublished = coords;
+        const payload: PositionPayload = {
+          riderId: myRiderId,
+          state,
+          lat: coords.lat,
+          lng: coords.lng,
+          ts: now,
+        };
+        // Ephemeral fan-out only — the send is RLS-authorized server-side
+        // (W170 rail3_broadcast_tenant_send). Never a DB write.
+        void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
+      };
+
+      let lastCallbackAtMs = 0;
       sub = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: PING_INTERVAL_MS,
-          distanceInterval: PING_DISTANCE_M,
+          // 0, NOT a distance filter (review finding): a distance filter
+          // suppresses OS callbacks while stationary — exactly the condition
+          // Stopped/Inactive describe — starving the state machine and making
+          // a stopped rider indistinguishable from a Dark one. Movement vs
+          // jitter is judged by MOVE_EPSILON_M in the tracker, not by the OS.
+          distanceInterval: 0,
         },
         (loc) => {
           const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
           setMyCoords(coords);
-
-          // Throttle sends independently of the OS callback cadence.
           const now = Date.now();
-          if (now - lastSentRef.current < PING_INTERVAL_MS) return;
-          lastSentRef.current = now;
-
-          const payload: PositionPayload = {
-            riderId: myRiderId,
-            state: 'active',
-            lat: coords.lat,
-            lng: coords.lng,
-            ts: now,
-          };
-          // Ephemeral fan-out only — the send is RLS-authorized server-side
-          // (W170 rail3_broadcast_tenant_send). Never a DB write.
-          void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
+          lastCallbackAtMs = now;
+          publishSample(
+            coords,
+            lastPublished ? haversineDistanceM(lastPublished, coords) : Infinity,
+            now,
+          );
         },
       );
+      if (cancelled) {
+        // Effect tore down while the watcher await was in flight — don't leak
+        // the watcher or start a heartbeat the cleanup can no longer reach.
+        sub.remove();
+        return;
+      }
+
+      // Stationary heartbeat: if the OS still withholds callbacks (OEM
+      // batching, Battery Saver — W177 territory), keep feeding the tracker
+      // zero-movement samples at the ping cadence so Stopped/Inactive can
+      // actually transition AND receivers keep getting pings (a silent sender
+      // would read as Dark, collapsing the Stopped-vs-Dark distinction).
+      heartbeat = setInterval(() => {
+        const now = Date.now();
+        if (now - lastCallbackAtMs < PING_INTERVAL_MS * 2) return; // OS is feeding us
+        if (!lastPublished) return; // no fix yet — nothing truthful to send
+        publishSample(lastPublished, 0, now);
+      }, PING_INTERVAL_MS);
     })();
 
     return () => {
       cancelled = true;
       sub?.remove();
+      if (heartbeat) clearInterval(heartbeat);
     };
-  }, [channel, status, rideId, myRiderId]);
+  }, [channel, status, rideId, myRiderId, thresholds]);
 
   // Join pings to the server-gated roster. Unknown riderIds are dropped — for
   // a Rider, "unknown" is exactly the set RLS hid (other riders), so the §4.1
@@ -205,7 +266,10 @@ export function useFleetPositions(
       role: entry.role,
       phone: entry.phone,
       accountStatus: entry.participantStatus,
-      state: p.state ?? 'active',
+      // W174 receiver half: staleness past the dark threshold overrides the
+      // last self-reported state; the marker stays greyed AT the last known
+      // position (p.lat/lng below) — exactly the committed Dark rendering.
+      state: deriveRenderState(p.state ?? 'active', p.receivedAtMs, Date.now(), thresholds),
       position: { lat: p.lat, lng: p.lng },
       lastPingAt: p.ts,
     });
