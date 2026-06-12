@@ -221,6 +221,12 @@ export function useFleetPositions(
           );
         },
       );
+      if (cancelled) {
+        // Effect tore down while the watcher await was in flight — don't leak
+        // the watcher or start a heartbeat the cleanup can no longer reach.
+        sub.remove();
+        return;
+      }
 
       // Stationary heartbeat: if the OS still withholds callbacks (OEM
       // batching, Battery Saver — W177 territory), keep feeding the tracker

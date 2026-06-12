@@ -35,9 +35,10 @@ export const DEFAULT_THRESHOLDS: StateThresholds = {
   darkMinutes: 15,
 };
 
-// Movement below this distance between pings is GPS jitter, not riding.
-// expo-location's distanceInterval is 10 m, so a genuine movement ping always
-// clears it; a stationary device's wander does not.
+// Movement below this distance between accepted samples is GPS jitter, not
+// riding. At the ~5s publish cadence this implies a ~2 m/s detection floor —
+// cycling always clears it; a parked device's wander (and a slow bike-walk)
+// does not. Tunable; cadence/epsilon validation is W179's scope.
 export const MOVE_EPSILON_M = 10;
 
 const minToMs = (m: number) => m * 60_000;
