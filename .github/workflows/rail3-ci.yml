@@ -13,7 +13,9 @@ name: Rail 3 CI
 
 on:
   pull_request:
-    branches: [master]
+    # 'W*' gates STACKED Rail 3 PRs (e.g. W173 -> W172) — the held-chain
+    # branches are the effective integration target until the promotion gate.
+    branches: [master, 'W*']
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
