@@ -37,6 +37,11 @@ const FALLBACK_REGION: Region = {
   longitudeDelta: 0.5,
 };
 
+// Starting frame ~25m radius (street level) once the device position is known
+// (≈ latitudeDelta 0.0006 at mid-latitudes). Used by the auto-centre and the
+// Centre button (D53).
+const START_ZOOM_DELTA = 0.0006;
+
 const RideMapScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'RideMap'>>();
   const navigation = useNavigation();
@@ -97,15 +102,34 @@ const RideMapScreen: React.FC = () => {
     ? initialBearingDeg({ lat: region.latitude, lng: region.longitude }, ride.finish)
     : 0;
 
-  // R3-12: Centre button returns the camera to the device's current position.
+  // R3-12: Centre button returns the camera to the device's current position,
+  // zoomed to the ~25m starting frame.
   const centreOnMe = useCallback(() => {
     if (!myCoords) return;
     mapRef.current?.animateToRegion(
       {
         latitude: myCoords.lat,
         longitude: myCoords.lng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+        latitudeDelta: START_ZOOM_DELTA,
+        longitudeDelta: START_ZOOM_DELTA,
+      },
+      300,
+    );
+  }, [myCoords]);
+
+  // D53: auto-centre on the device the first time a GPS fix arrives, at the same
+  // ~25m radius. FALLBACK_REGION is only a neutral placeholder until then — the
+  // original "immediately replaced by device position" was never implemented.
+  const hasAutoCentredRef = useRef(false);
+  useEffect(() => {
+    if (!myCoords || hasAutoCentredRef.current) return;
+    hasAutoCentredRef.current = true;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: myCoords.lat,
+        longitude: myCoords.lng,
+        latitudeDelta: START_ZOOM_DELTA,
+        longitudeDelta: START_ZOOM_DELTA,
       },
       300,
     );
@@ -132,9 +156,12 @@ const RideMapScreen: React.FC = () => {
       onLayout={(e) => setMapSize(e.nativeEvent.layout)}
     >
       <MapView
-        ref={(r: RNMapView) => {
-          mapRef.current = r;
-        }}
+        // D53: pass the ref OBJECT (not a callback). react-native-map-clustering
+        // does `if (ref) ref.current = map` on the forwarded ref — that works for
+        // a ref object but silently drops a CALLBACK ref (sets `.current` on the
+        // function instead of calling it), which left mapRef null and made
+        // animateToRegion a no-op (dead Centre button + no auto-centre).
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}
         initialRegion={FALLBACK_REGION}
