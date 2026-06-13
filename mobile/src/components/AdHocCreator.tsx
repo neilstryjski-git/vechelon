@@ -11,8 +11,10 @@ import { TENANT_SLUG } from '../lib/env';
 import { useTheme } from '../theme/ThemeProvider';
 import {
   adHocProximityConflict,
+  adHocRideName,
   adHocRideRow,
   buildRideJoinUrl,
+  randomRideWord,
   AD_HOC_PROXIMITY_HOURS,
 } from '../lib/rideControlsLogic';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -162,6 +164,7 @@ const AdHocCreator: React.FC = () => {
         coords,
         qrDataUrl,
         at: new Date(),
+        name: adHocRideName(randomRideWord()),
       });
       const { error: insErr } = await supabase.from('rides').insert(row);
       if (insErr) throw new Error(`Could not create the ride: ${insErr.message}`);

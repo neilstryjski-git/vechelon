@@ -52,9 +52,29 @@ export function adHocProximityConflict(
   });
 }
 
-// Ad Hoc ride name auto-populates from the current date (Pillar II Feature 3).
-export function adHocRideName(at: Date): string {
-  return `Ad Hoc Ride — ${at.toISOString().slice(0, 10)}`;
+// A small curated list of friendly, distinct words for Ad Hoc ride names.
+// A bare date collides the moment a captain starts more than one ride in a day
+// (and reads the same on every card); a random word is unique enough at a
+// glance and friendlier on the fleet list — e.g. "Ad Hoc Ride — Trampoline".
+export const AD_HOC_RIDE_WORDS = [
+  'Trampoline', 'Avalanche', 'Boomerang', 'Compass', 'Lantern', 'Meteor',
+  'Cyclone', 'Galaxy', 'Harbour', 'Igloo', 'Jubilee', 'Kestrel',
+  'Lighthouse', 'Mango', 'Nebula', 'Otter', 'Pelican', 'Quartz',
+  'Rocket', 'Saffron', 'Tundra', 'Umbrella', 'Velvet', 'Walrus',
+  'Yodel', 'Zephyr', 'Bumblebee', 'Cinnamon', 'Domino', 'Falcon',
+  'Glacier', 'Hammock', 'Jigsaw', 'Kayak', 'Lollipop', 'Maverick',
+] as const;
+
+// Pick a random ride word. `rng` is injectable so the picker stays testable.
+export function randomRideWord(rng: () => number = Math.random): string {
+  return AD_HOC_RIDE_WORDS[Math.floor(rng() * AD_HOC_RIDE_WORDS.length)];
+}
+
+// Ad Hoc ride name (Pillar II Feature 3) — a friendly random word instead of a
+// date stamp. The caller picks the word (via randomRideWord) and passes it so
+// this stays a pure formatter.
+export function adHocRideName(word: string): string {
+  return `Ad Hoc Ride — ${word}`;
 }
 
 // The row an Ad Hoc creation inserts. Same schema/lifecycle as scheduled rides
@@ -82,11 +102,12 @@ export function adHocRideRow(args: {
   coords: LatLng;
   qrDataUrl: string;
   at: Date;
+  name: string;
 }): AdHocRideRow {
   return {
     id: args.rideId,
     tenant_id: args.tenantId,
-    name: adHocRideName(args.at),
+    name: args.name,
     type: 'adhoc',
     status: 'active',
     start_coords: `(${args.coords.lng},${args.coords.lat})`,
