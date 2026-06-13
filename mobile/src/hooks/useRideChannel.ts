@@ -45,28 +45,46 @@ export function useRideChannel(rideId: string | null): {
     }
 
     const topic = rail3RideTopic(rideId);
-    const ch = supabase.channel(topic, {
-      // private: true → realtime evaluates the realtime.messages RLS (the tenant gate).
-      // self: true so the captain also sees their own broadcasts on the map.
-      // ack: true → channel.send() resolves on SERVER acknowledgment instead of
-      // unconditionally 'ok' (realtime-js socket path). Load-bearing for W173:
-      // the Support Beacon's NO SIGNAL detection is only real with server acks.
-      // Position pings share the channel and are void-sent — the per-ping ack
-      // costs nothing client-side.
-      config: { private: true, broadcast: { self: true, ack: true } },
-    });
+    let ch: RealtimeChannel | null = null;
+    let cancelled = false;
 
-    ch.subscribe((s, err) => {
-      setStatus(s as RideChannelStatus);
-      if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
-        // A cross-tenant / no-membership rider is denied here (server-side gate).
-        console.warn(`[Rail3] ride channel "${topic}" subscription ${s}`, err);
+    // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which
+    // needs the signed-in user's JWT ON THE REALTIME SOCKET so get_my_tenant_id()
+    // resolves. supabase-js auto-syncs that token, but NOT reliably right after a fresh
+    // sign-in (e.g. a 2nd rider who just signed in / auto-joined via W191) — the socket
+    // can still be anon when the channel subscribes, so the tenant send/receive policies
+    // fail: that rider neither broadcasts nor receives, and the Captain never sees them
+    // (cross-device fleet appears broken). Set the auth EXPLICITLY from the current
+    // session before subscribing.
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (data.session?.access_token) {
+        supabase.realtime.setAuth(data.session.access_token);
       }
-    });
-    setChannel(ch);
+      ch = supabase.channel(topic, {
+        // private: true → realtime evaluates the realtime.messages RLS (the tenant gate).
+        // self: true so the captain also sees their own broadcasts on the map.
+        // ack: true → channel.send() resolves on SERVER acknowledgment instead of
+        // unconditionally 'ok' (realtime-js socket path). Load-bearing for W173:
+        // the Support Beacon's NO SIGNAL detection is only real with server acks.
+        // Position pings share the channel and are void-sent — the per-ping ack
+        // costs nothing client-side.
+        config: { private: true, broadcast: { self: true, ack: true } },
+      });
+      ch.subscribe((s, err) => {
+        setStatus(s as RideChannelStatus);
+        if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
+          // A cross-tenant / no-membership rider is denied here (server-side gate).
+          console.warn(`[Rail3] ride channel "${topic}" subscription ${s}`, err);
+        }
+      });
+      setChannel(ch);
+    })();
 
     return () => {
-      supabase.removeChannel(ch);
+      cancelled = true;
+      if (ch) supabase.removeChannel(ch);
       setChannel(null);
       setStatus(null);
     };
