@@ -80,6 +80,33 @@ const RideMapScreen: React.FC = () => {
     void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
   }, []);
 
+  // D54: self-enrol the opener as a ride participant if they aren't one yet.
+  // The fleet renders only riders in the (RLS-gated) roster, so a tenant member
+  // who merely opens a ride they're not in would be invisible to the Captain and
+  // have their own pings dropped. participant_insert_policy permits self-RSVP
+  // (account_id = auth.uid()); role 'member' (the Captain self-RSVPs separately).
+  // This is the staging in-app join — the prod-web QR is unnecessary for it.
+  useEffect(() => {
+    if (!myRiderId || !rideId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data: existing } = await supabase
+        .from('ride_participants')
+        .select('account_id')
+        .eq('ride_id', rideId)
+        .eq('account_id', myRiderId)
+        .maybeSingle();
+      if (cancelled || existing) return;
+      const { error: rsvpErr } = await supabase
+        .from('ride_participants')
+        .insert({ ride_id: rideId, account_id: myRiderId, role: 'member', status: 'rsvpd' });
+      if (rsvpErr) console.warn('[Rail3] self-RSVP failed', rsvpErr);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myRiderId, rideId]);
+
   const mapRef = useRef<RNMapView | null>(null);
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
