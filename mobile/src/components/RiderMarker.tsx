@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
 
@@ -52,6 +52,25 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
     return () => loop.stop();
   }, [beaconActive, ring]);
 
+  // CRITICAL (cross-device fleet bug): react-native-maps renders a custom marker
+  // child to a BITMAP on Android. With tracksViewChanges permanently false, that
+  // snapshot is taken before the dot <View> has laid out → a BLANK, frozen marker
+  // (every rider's dot was invisible; only a beacon's re-render forced a repaint,
+  // which is why a dot appeared only under SOS). Track changes until the view has
+  // painted (and continuously while a beacon ring animates), then freeze for map
+  // performance. Re-track briefly whenever the dot's bitmap actually changes
+  // (tactical state / role badge); coordinate moves don't need a re-snapshot.
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  useEffect(() => {
+    if (beaconActive) {
+      setTracksViewChanges(true); // keep repainting so the pulse animates
+      return;
+    }
+    setTracksViewChanges(true);
+    const t = setTimeout(() => setTracksViewChanges(false), 700);
+    return () => clearTimeout(t);
+  }, [beaconActive, participant.state, participant.role]);
+
   if (!participant.position) return null;
   const s = STATE_STYLE[participant.state];
   const badge = ROLE_BADGE[participant.role];
@@ -62,7 +81,7 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
         latitude: participant.position.lat,
         longitude: participant.position.lng,
       }}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
       // Role gate, not a style choice: non-tappable markers must not open a
       // sheet even via the native press path (R3-10/R3-17).
       onPress={() => {
