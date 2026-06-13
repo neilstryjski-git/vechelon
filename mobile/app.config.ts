@@ -14,6 +14,16 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 //    with W176/W179 (Foreground Service explainer / background GPS validation).
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...(config as ExpoConfig),
+  // Build fingerprint for remote build identification (staging measurement sink).
+  // EAS sets these env vars during the build; baked into extra so the running app
+  // can report exactly which build it is (maps the APK/commit to a device's rows
+  // in analytics_events). Null on local dev builds. NON-secret — git SHA + EAS ids.
+  extra: {
+    ...config.extra,
+    buildId: process.env.EAS_BUILD_ID ?? null,
+    gitCommit: process.env.EAS_BUILD_GIT_COMMIT_HASH ?? null,
+    buildProfile: process.env.EAS_BUILD_PROFILE ?? null,
+  },
   android: {
     ...config.android,
     config: {

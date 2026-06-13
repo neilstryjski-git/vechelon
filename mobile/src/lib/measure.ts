@@ -1,6 +1,18 @@
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 
 import { supabase } from './supabase';
+
+// Build fingerprint, resolved ONCE per run. extra.* is baked at build time by
+// app.config.ts from EAS env vars; version is the app version string. Lets us
+// determine EXACTLY which build a given device is running, remotely, from the
+// sink — critical for triaging field bugs (e.g. 'is this device on the fix?').
+const BUILD_INFO = {
+  app_version: Constants.expoConfig?.version ?? null,
+  build_id: (Constants.expoConfig?.extra?.buildId as string | null) ?? null,
+  git_commit: (Constants.expoConfig?.extra?.gitCommit as string | null) ?? null,
+  build_profile: (Constants.expoConfig?.extra?.buildProfile as string | null) ?? null,
+} as const;
 
 // Rail 3 PoC measurement sink (W189 / Pillar II §2 Performance NFRs — PoC tooling).
 //
@@ -117,6 +129,7 @@ export async function logMeasurement(args: LogMeasurementArgs): Promise<void> {
         manufacturer: Device.manufacturer ?? null,
         os: Device.osName ?? null,
         os_version: Device.osVersion ?? null,
+        ...BUILD_INFO, // app_version / build_id / git_commit / build_profile
         ...(args.payload ? { payload: args.payload } : {}),
       },
     });

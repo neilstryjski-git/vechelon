@@ -13,6 +13,7 @@ import { useBeacons } from '../hooks/useBeacons';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { canSeeBeacon, canCancelBeacon } from '../lib/beaconLogic';
 import { initialBearingDeg, regionContains } from '../lib/geo';
+import { logMeasurement } from '../lib/measure';
 import RiderMarker from '../components/RiderMarker';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
@@ -79,6 +80,16 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
   }, []);
+
+  // One build-stamped row per ride-open, so we can determine which build a device
+  // is running EVEN when it never receives a ping (every measurement now carries
+  // the build fingerprint; this guarantees at least one row exists per session).
+  const stampedRef = useRef(false);
+  useEffect(() => {
+    if (stampedRef.current || !rideId || !myRiderId) return;
+    stampedRef.current = true;
+    void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'ride_map_open' } });
+  }, [rideId, myRiderId]);
 
   // D54: self-enrol the opener as a ride participant if they aren't one yet.
   // The fleet renders only riders in the (RLS-gated) roster, so a tenant member
