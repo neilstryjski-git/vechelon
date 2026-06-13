@@ -24,6 +24,13 @@ export default defineConfig({
         short_name: 'VEcheLOn',
         description: 'Tactical Command Centre for Group Rides',
         theme_color: '#000000',
+        // display:'browser' makes the app NON-installable, so browsers no longer
+        // offer the "Install VEcheLOn Admin" prompt to visitors (incl. riders who
+        // land on the portal/QR) — the installable admin PWA is deprecated. The
+        // service worker (offline cache + autoUpdate) is unaffected; only
+        // installability is removed (install needs display standalone/fullscreen/
+        // minimal-ui).
+        display: 'browser',
         icons: [
           {
             src: 'pwa-192x192.png',
