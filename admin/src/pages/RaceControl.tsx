@@ -72,6 +72,12 @@ export default function RaceControl() {
 
   const liveCount = markers.filter((m) => !m.stale).length;
 
+  const selectedRider = useMemo(
+    () => visible.find((p) => p.riderId === selectedId) ?? null,
+    [visible, selectedId],
+  );
+  const canContactSelected = selectedRider ? canSeePhone(OPERATOR_ROLE, selectedRider.role) : false;
+
   if (!rideId) {
     return (
       <div className="p-20 text-center font-label text-error">No ride selected.</div>
@@ -129,6 +135,49 @@ export default function RaceControl() {
                 <span className="font-label text-[10px] uppercase tracking-widest bg-surface-container-high/90 text-on-surface-variant px-3 py-1.5 rounded-full">
                   Waiting for riders to go live…
                 </span>
+              </div>
+            )}
+            {selectedRider && (
+              <div className="absolute bottom-3 left-3 right-3 md:right-auto md:w-80 bg-surface border border-outline-variant/50 rounded-lg shadow-lg p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-on-surface truncate">{selectedRider.displayName}</p>
+                    <p className="font-label text-[9px] uppercase tracking-wider text-on-surface-variant/70 mt-0.5">
+                      {ROLE_LABEL[selectedRider.role]} ·{' '}
+                      <span className={isStalePing(selectedRider.lastPingAt, now) ? 'text-error/80' : 'text-green-600'}>
+                        {isStalePing(selectedRider.lastPingAt, now) ? 'Stale' : 'Live'}
+                      </span>{' '}
+                      · {secondsAgo(selectedRider.lastPingAt, now)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="text-on-surface-variant/60 hover:text-on-surface shrink-0"
+                    aria-label="Close"
+                  >
+                    <span className="material-symbols-outlined text-lg">close</span>
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {canContactSelected && selectedRider.email && (
+                    <a href={`mailto:${selectedRider.email}`} className="flex items-center gap-2 text-xs text-primary hover:underline break-all">
+                      <span className="material-symbols-outlined text-sm shrink-0">mail</span>
+                      {selectedRider.email}
+                    </a>
+                  )}
+                  {canContactSelected && selectedRider.phone && (
+                    <a href={`tel:${selectedRider.phone}`} className="flex items-center gap-2 text-xs text-primary hover:underline">
+                      <span className="material-symbols-outlined text-sm shrink-0">call</span>
+                      {selectedRider.phone}
+                    </a>
+                  )}
+                  {canContactSelected && !selectedRider.email && !selectedRider.phone && (
+                    <p className="text-[10px] text-on-surface-variant/60 font-label uppercase tracking-wider">No contact on file</p>
+                  )}
+                  {!canContactSelected && (
+                    <p className="text-[10px] text-on-surface-variant/60 font-label uppercase tracking-wider">Contact hidden for this role</p>
+                  )}
+                </div>
               </div>
             )}
           </div>

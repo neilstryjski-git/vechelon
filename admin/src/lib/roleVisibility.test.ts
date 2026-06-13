@@ -14,6 +14,7 @@ function p(riderId: string, role: RideRole): FleetParticipant {
     displayName: riderId,
     role,
     phone: '555',
+    email: `${riderId}@club.test`,
     accountStatus: 'active',
     state: 'active',
     position: { lat: 0, lng: 0 },
