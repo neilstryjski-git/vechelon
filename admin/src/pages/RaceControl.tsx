@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { useAppStore } from '../store/useAppStore';
 import {
   useRideRoster,
   useFleetPositions,
@@ -40,8 +39,6 @@ function secondsAgo(lastPingAt: number | null, now: number): string {
 
 export default function RaceControl() {
   const { rideId } = useParams<{ rideId: string }>();
-  const isAdmin = useAppStore((s) => s.isAdmin);
-  const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
 
   const { roster, refetchRoster } = useRideRoster(rideId ?? null);
   const { fleet, channelStatus } = useFleetPositions(rideId ?? null, roster, refetchRoster);
@@ -74,18 +71,6 @@ export default function RaceControl() {
   );
 
   const liveCount = markers.filter((m) => !m.stale).length;
-
-  // Admin-only surface. Riders never reach race control (it exposes the full
-  // fleet + contact details that §4.1 reserves for command roles).
-  if (!isAdmin && !isPlatformAdmin) {
-    return (
-      <div className="p-20 text-center font-label text-on-surface-variant flex flex-col items-center justify-center min-h-[60vh]">
-        <span className="material-symbols-outlined text-4xl mb-3 text-on-surface-variant/40">lock</span>
-        <p className="text-[11px] uppercase tracking-widest font-bold">Race Control is for organizers</p>
-        <p className="text-xs mt-2 opacity-70">This live fleet view is restricted to club admins.</p>
-      </div>
-    );
-  }
 
   if (!rideId) {
     return (

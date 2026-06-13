@@ -26,6 +26,8 @@ import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
 import PlatformAdminApp from './pages/PlatformAdminApp';
 import RaceControl from './pages/RaceControl';
+import RaceControlIndex from './pages/RaceControlIndex';
+import RaceControlGate from './components/RaceControlGate';
 
 // W190: the Rail 3 web fleet view ("Race Control") consumes the staging-only
 // rail3:ride:<id> Broadcast channel. The route is registered only when
@@ -297,9 +299,12 @@ function AppContent() {
           <Route path="settings"  element={<ClubSettings />}    />
           <Route path="ride/:rideId" element={<RideLanding />}  />
 
-          {/* W190: Rail 3 web fleet view — gated off in prod (see RAIL3_FLEET_ENABLED) */}
+          {/* W190/W192: Rail 3 web fleet view — gated off in prod (see RAIL3_FLEET_ENABLED) */}
           {RAIL3_FLEET_ENABLED && (
-            <Route path="race-control/:rideId" element={<RaceControl />} />
+            <>
+              <Route path="race-control" element={<RaceControlGate><RaceControlIndex /></RaceControlGate>} />
+              <Route path="race-control/:rideId" element={<RaceControlGate><RaceControl /></RaceControlGate>} />
+            </>
           )}
 
           {/* Catch-all */}
