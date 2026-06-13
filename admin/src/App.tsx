@@ -20,7 +20,7 @@ import { useTierDetection } from './hooks/useTierDetection';
 import { usePlatformAdminCheck } from './hooks/usePlatformAdminCheck';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
-import { extractSlug } from './lib/extractSlug';
+import { resolveTenantSlug } from './lib/extractSlug';
 import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
@@ -172,7 +172,9 @@ function AppContent() {
   // single source of truth for which tenant the app loads. Apex, admin.*,
   // localhost, vercel previews, and unrelated domains all resolve to null —
   // those contexts render ClubNotFound (no fallback to "first tenant").
-  const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
+  // W192: VITE_TENANT_SLUG_OVERRIDE (unset in prod) lets a staging deployment
+  // on a non-vechelon.ca host pin a tenant; resolveTenantSlug applies it.
+  const slug = React.useMemo(() => resolveTenantSlug(window.location.hostname), []);
 
   // W129: admin.vechelon.ca is the Platform Admin surface. Short-circuit
   // here before slug===null falls through to ClubNotFound.
