@@ -60,7 +60,9 @@ const AdHocCreator: React.FC = () => {
         qrResolveRef.current = null;
         pending.resolve(`data:image/png;base64,${b64}`);
       });
-    }, 50);
+      // D51: give the on-screen-but-transparent QR more time to mount + paint
+      // before capturing — 50ms was too tight on some Android OEMs.
+    }, 250);
     return () => clearTimeout(t);
   }, [qrJob]);
 
@@ -140,7 +142,18 @@ const AdHocCreator: React.FC = () => {
       if (!membership?.tenant_id) throw new Error('No membership in this club.');
 
       const rideId = Crypto.randomUUID();
-      const qrDataUrl = await renderQrDataUrl(buildRideJoinUrl(rideId, TENANT_SLUG));
+      const joinUrl = buildRideJoinUrl(rideId, TENANT_SLUG);
+
+      // D51: the off-screen QR PNG capture must NEVER block creating the ride.
+      // Try to capture it up front; if it times out / fails, create the ride
+      // anyway with an empty qr_code and re-attach the PNG in the background — a
+      // captain can always start (and run) a ride even when the capture flakes.
+      let qrDataUrl = '';
+      try {
+        qrDataUrl = await renderQrDataUrl(joinUrl);
+      } catch (qrErr) {
+        console.warn('[Rail3] QR capture failed up front — creating ride without it (D51)', qrErr);
+      }
 
       const row = adHocRideRow({
         rideId,
@@ -152,6 +165,19 @@ const AdHocCreator: React.FC = () => {
       });
       const { error: insErr } = await supabase.from('rides').insert(row);
       if (insErr) throw new Error(`Could not create the ride: ${insErr.message}`);
+
+      // Best-effort late re-attach of the join QR if the up-front capture failed,
+      // so the stored qr_code eventually matches the web PNG convention without
+      // ever having blocked ride creation.
+      if (!qrDataUrl) {
+        void renderQrDataUrl(joinUrl)
+          .then((late) =>
+            supabase.from('rides').update({ qr_code: late }).eq('id', rideId),
+          )
+          .catch(() => {
+            /* leave qr_code empty — the ride still runs; QR can be regenerated */
+          });
+      }
 
       // Self-RSVP as captain (participant_insert_policy branch 1) so the map
       // roster knows who runs this ride.
@@ -241,7 +267,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   error: { color: '#F87171', fontSize: 13, marginTop: 10 },
-  hiddenQr: { position: 'absolute', left: -1000, top: -1000, opacity: 0 },
+  // D51: kept in the on-screen paint tree (top/left 0) but fully transparent and
+  // behind everything. A view positioned far off-screen (left:-1000) is culled on
+  // some Android OEMs, so react-native-svg's toDataURL callback never fires.
+  hiddenQr: { position: 'absolute', left: 0, top: 0, opacity: 0, zIndex: -1 },
   warnOverlay: { ...StyleSheet.absoluteFillObject, position: 'absolute', zIndex: 10 },
   backdrop: { flex: 1, backgroundColor: '#00000099' },
   warnSheet: {
