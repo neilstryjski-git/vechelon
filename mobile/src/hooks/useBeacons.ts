@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import * as Haptics from 'expo-haptics';
+import * as Crypto from 'expo-crypto';
 
 import { supabase } from '../lib/supabase';
 import type { RideChannelStatus } from './useRideChannel';
@@ -139,9 +140,11 @@ export function useBeacons(
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-    const beaconId =
-      globalThis.crypto?.randomUUID?.() ??
-      `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // expo-crypto, NOT globalThis.crypto (D52): Hermes has no Web Crypto, so
+    // globalThis.crypto.randomUUID is undefined and the old fallback produced a
+    // non-UUID string that the uuid `id` column rejected — failing both the audit
+    // insert and the cancel's .eq('id', …).
+    const beaconId = Crypto.randomUUID();
     const sentAt = Date.now();
     const alertPayload = {
       type: 'broadcast' as const,
