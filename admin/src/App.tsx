@@ -25,6 +25,13 @@ import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
 import PlatformAdminApp from './pages/PlatformAdminApp';
+import RaceControl from './pages/RaceControl';
+
+// W190: the Rail 3 web fleet view ("Race Control") consumes the staging-only
+// rail3:ride:<id> Broadcast channel. The route is registered only when
+// VITE_RAIL3_FLEET_ENABLED is set, so it stays INERT in production (where the
+// W170 channel-authorization policy does not yet exist) until Rail 3 promotion.
+const RAIL3_FLEET_ENABLED = import.meta.env.VITE_RAIL3_FLEET_ENABLED === 'true';
 
 // W140: store now initializes currentTenantId to null. The AdaptiveLayout
 // effect and the broadcast_copy guard short-circuit on null, so no placeholder
@@ -287,6 +294,11 @@ function AppContent() {
           <Route path="profile"   element={<Profile />}          />
           <Route path="settings"  element={<ClubSettings />}    />
           <Route path="ride/:rideId" element={<RideLanding />}  />
+
+          {/* W190: Rail 3 web fleet view — gated off in prod (see RAIL3_FLEET_ENABLED) */}
+          {RAIL3_FLEET_ENABLED && (
+            <Route path="race-control/:rideId" element={<RaceControl />} />
+          )}
 
           {/* Catch-all */}
           <Route path="*" element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
