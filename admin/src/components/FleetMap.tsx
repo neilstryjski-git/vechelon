@@ -148,12 +148,16 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className =
   return (
     <div className={`relative ${className}`}>
       <div ref={mapRef} className="w-full h-full" />
-      {isLoaded && markers.length > 0 ? (
+      {isLoaded ? (
+        // Always visible once the map loads (discoverable), disabled when there's no
+        // fleet to fit. Prominent: solid primary chip + icon, not a faint corner label.
         <button
           type="button"
           onClick={fitToMarkers}
-          className="absolute top-3 right-3 z-10 bg-surface-container-high/90 text-on-surface-variant text-[10px] font-bold uppercase tracking-widest px-3 py-2 rounded-lg shadow hover:bg-surface-container-highest"
+          disabled={markers.length === 0}
+          className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-primary text-white text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg shadow-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
+          <span className="material-symbols-outlined text-base">center_focus_strong</span>
           Fit all riders
         </button>
       ) : null}
