@@ -66,10 +66,22 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
       setTracksViewChanges(true); // keep repainting so the pulse animates
       return;
     }
+    // Re-arm a fresh bitmap snapshot whenever the marker's visual inputs change
+    // — mount, tactical state, role badge, AND every position update. Android can
+    // take >1s to paint a custom marker child the first time; freezing too early
+    // (the original bug) left it permanently blank. A generous 1.5s window plus
+    // re-arming on each ping means a marker that missed its first paint becomes
+    // visible on the next position update, then freezes for map performance.
     setTracksViewChanges(true);
-    const t = setTimeout(() => setTracksViewChanges(false), 700);
+    const t = setTimeout(() => setTracksViewChanges(false), 1500);
     return () => clearTimeout(t);
-  }, [beaconActive, participant.state, participant.role]);
+  }, [
+    beaconActive,
+    participant.state,
+    participant.role,
+    participant.position?.lat,
+    participant.position?.lng,
+  ]);
 
   if (!participant.position) return null;
   const s = STATE_STYLE[participant.state];

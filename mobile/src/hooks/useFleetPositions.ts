@@ -277,6 +277,27 @@ export function useFleetPositions(
     };
   }, [channel, status, rideId, myRiderId, thresholds]);
 
+  // Staging diagnostic: log who is RECEIVED (pings) vs known to the ROSTER vs
+  // surviving into the FLEET (received AND in roster), whenever those sets
+  // change — so we can tell REMOTELY whether a rider is dropped at the roster
+  // join (a roster miss) or makes it into the fleet (then any no-show is a pure
+  // render issue). Fires only on set changes, so it's not per-ping spam.
+  const pingKeys = Object.keys(pings).sort().join(',');
+  const rosterKeys = Object.keys(roster).sort().join(',');
+  useEffect(() => {
+    if (!rideId) return;
+    const pIds = pingKeys ? pingKeys.split(',') : [];
+    const rIds = rosterKeys ? rosterKeys.split(',') : [];
+    const fIds = pIds.filter((id) => roster[id]);
+    void logMeasurement({
+      rideId,
+      kind: 'app_state_change',
+      payload: { event: 'fleet_compose', pings: pIds, roster: rIds, fleet: fIds },
+    });
+    // roster intentionally omitted from deps — keyed via rosterKeys string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pingKeys, rosterKeys, rideId]);
+
   // Join pings to the server-gated roster. Unknown riderIds are dropped — for
   // a Rider, "unknown" is exactly the set RLS hid (other riders), so the §4.1
   // visibility boundary holds even before the client-side role filter runs.
