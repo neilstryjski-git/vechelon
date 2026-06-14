@@ -7,6 +7,7 @@ import * as Crypto from 'expo-crypto';
 import QRCode from 'react-native-qrcode-svg';
 
 import { supabase } from '../lib/supabase';
+import { selfRsvpWithIdentity } from '../lib/rideJoin';
 import { TENANT_SLUG } from '../lib/env';
 import { useTheme } from '../theme/ThemeProvider';
 import {
@@ -183,10 +184,13 @@ const AdHocCreator: React.FC = () => {
       }
 
       // Self-RSVP as captain (participant_insert_policy branch 1) so the map
-      // roster knows who runs this ride.
-      const { error: partErr } = await supabase
-        .from('ride_participants')
-        .insert({ ride_id: rideId, account_id: userId, role: 'captain', status: 'rsvpd' });
+      // roster knows who runs this ride. W195: hydrate display_name/email from
+      // accounts so Race Control shows the captain's real name, not 'Rider'.
+      const { error: partErr } = await selfRsvpWithIdentity({
+        rideId,
+        accountId: userId,
+        role: 'captain',
+      });
       if (partErr) console.warn('[Rail3] captain self-RSVP failed', partErr);
 
       setPhase('idle');

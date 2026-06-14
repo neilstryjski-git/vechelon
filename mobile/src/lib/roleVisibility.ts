@@ -13,7 +13,7 @@
 // ride_participants.role enum (existing prod schema). 'support' is SAG.
 export type RideRole = 'member' | 'captain' | 'support' | 'guest';
 
-export type TacticalState = 'active' | 'stopped' | 'inactive' | 'dark';
+export type TacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'dormant';
 
 export interface FleetParticipant {
   riderId: string;

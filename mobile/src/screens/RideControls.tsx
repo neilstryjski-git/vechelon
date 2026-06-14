@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
+import { RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { endRidePatch } from '../lib/rideControlsLogic';
 import type { LatLng } from '../lib/geo';
 
@@ -20,9 +22,12 @@ import type { LatLng } from '../lib/geo';
 interface Props {
   rideId: string;
   getMyCoords: () => LatLng | null;
+  // Shared ride channel (useRideChannel) — used to broadcast the end so other
+  // participants leave the live map (D57).
+  channel: RealtimeChannel | null;
 }
 
-const RideControls: React.FC<Props> = ({ rideId, getMyCoords }) => {
+const RideControls: React.FC<Props> = ({ rideId, getMyCoords, channel }) => {
   const navigation = useNavigation();
   const [confirming, setConfirming] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -36,21 +41,39 @@ const RideControls: React.FC<Props> = ({ rideId, getMyCoords }) => {
       .from('rides')
       .update(endRidePatch(new Date(), getMyCoords()))
       .eq('id', rideId)
-      .eq('status', 'active') // idempotent: a ride already Saved is not re-ended
+      .eq('status', 'active') // idempotent: a ride already Saved matches 0 rows
       .select('id');
 
-    if (updErr || !data || data.length === 0) {
-      // RLS (ride_admin_modify: tenant admin OR created_by) or already saved.
-      setError(updErr?.message ?? 'Could not end the ride — check your permissions.');
+    // D60: a real RLS/permission failure is `updErr`. 0 rows with NO error just
+    // means the ride was ALREADY saved (the idempotent guard) — that's success,
+    // not a permission problem, so don't show the scary message; just leave.
+    if (updErr) {
+      // RLS (ride_admin_modify: tenant admin OR created_by) or a true write error.
+      setError(updErr.message || 'Could not end the ride — check your permissions.');
       setEnding(false);
       return;
     }
 
-    // Queue the AI summary — existing edge function, fire-and-forget (R3-26:
+    const closedNow = (data?.length ?? 0) > 0;
+
+    // Queue the AI summary ONLY when THIS call actually closed the ride (D60: not
+    // on an already-saved no-op). Existing edge function, fire-and-forget (R3-26:
     // "queued for async generation"; no in-app notification to anyone).
-    supabase.functions
-      .invoke('generate-ride-summary', { body: { rideId } })
-      .catch((e) => console.warn('[Rail3] generate-ride-summary invoke failed', e));
+    if (closedNow) {
+      supabase.functions
+        .invoke('generate-ride-summary', { body: { rideId } })
+        .catch((e) => console.warn('[Rail3] generate-ride-summary invoke failed', e));
+    }
+
+    // D57: tell other participants the ride ended so their map reacts in real time.
+    // Sent whether we closed it now or found it already saved (either way it's over).
+    // Ephemeral + best-effort (ack:true → awaits server receipt); a fresh open also
+    // reads ride.status as a fallback.
+    try {
+      await channel?.send({ type: 'broadcast', event: RIDE_ENDED_EVENT, payload: { rideId } });
+    } catch (e) {
+      console.warn('[Rail3] ride_ended broadcast failed', e);
+    }
 
     setConfirming(false);
     setEnding(false);

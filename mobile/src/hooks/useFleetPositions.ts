@@ -136,6 +136,11 @@ export function useFleetPositions(
   channel: RealtimeChannel | null,
   status: RideChannelStatus,
   onUnknownRider?: () => void,
+  // True once the rider has seen the W176 explainer and granted BACKGROUND
+  // location (owned by RideMapScreen, D63). Gates the AppState background handoff
+  // below so we never request background permission or start the foreground
+  // service inline (that staging-only shortcut is removed for promotion).
+  backgroundReady = false,
 ): {
   fleet: FleetParticipant[];
   myCoords: LatLng | null;
@@ -145,6 +150,10 @@ export function useFleetPositions(
   // the receiver's clock (skew-free), never against the sender's `ts`.
   const [pings, setPings] = useState<Record<string, PositionPayload & { receivedAtMs: number }>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
+  // Live ref to the latest fix so the AppState handoff can attach a last-known
+  // position to the "going dormant" ping without re-binding on every GPS update.
+  const myCoordsRef = useRef<LatLng | null>(null);
+  myCoordsRef.current = myCoords;
   const lastSentRef = useRef(0);
   // Live refs so the broadcast receive handler (subscribed once, on [channel])
   // can read the current ride/rider for W180 latency logging WITHOUT re-binding
@@ -202,7 +211,6 @@ export function useFleetPositions(
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
-    let appStateSub: { remove: () => void } | null = null;
     let cancelled = false;
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
@@ -212,25 +220,10 @@ export function useFleetPositions(
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted' || cancelled) return;
 
-      // W179: ask for BACKGROUND location so we can keep transmitting when the
-      // phone is pocketed. Best-effort — if denied, foreground-only still works
-      // (the rider just goes Dark to the fleet while backgrounded). Then hand off
-      // foreground↔background by AppState: foreground uses the socket path below;
-      // when the app leaves the foreground we start the foreground-service task
-      // that REST-broadcasts (and stop it on return), so the two never overlap.
-      const { status: bgPerm } = await Location.requestBackgroundPermissionsAsync().catch(
-        () => ({ status: 'denied' as Location.PermissionStatus }),
-      );
-      if (cancelled) return;
-      if (bgPerm === 'granted') {
-        appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-          if (next === 'active') {
-            void stopRail3BackgroundLocation();
-          } else {
-            void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
-          }
-        });
-      }
+      // BACKGROUND-location permission + the AppState foreground↔background
+      // handoff live in a SEPARATE effect (D63), gated on the W176 explainer flow
+      // via `backgroundReady`. This effect owns ONLY the foreground socket publish
+      // path — no inline background request (that staging shortcut is gone).
 
       // W174 publish seam: state computed from own movement (Dark is
       // receiver-derived and intentionally absent here). Shared by the OS
@@ -300,11 +293,49 @@ export function useFleetPositions(
       cancelled = true;
       sub?.remove();
       if (heartbeat) clearInterval(heartbeat);
-      appStateSub?.remove();
+    };
+  }, [channel, status, rideId, myRiderId, thresholds]);
+
+  // Background handoff (W194 + D63) + Sleeping signal. On AppState SETTLING into
+  // 'background' (W194 hardening: '=== background', NOT '!== active', so an iOS
+  // 'inactive' flap can't churn this):
+  //   • backgroundReady (rider saw the W176 explainer + granted BACKGROUND) → start
+  //     the foreground-service task that keeps REST-broadcasting (kept alive while
+  //     pocketed); stop it on return so the foreground socket path resumes — the two
+  //     never overlap.
+  //   • NOT backgroundReady (foreground-only / bg denied) → no tracking takes over,
+  //     so fire ONE best-effort "dormant" ping with the last fix: tells the fleet the
+  //     rider went to SLEEP on purpose (calm), instead of letting them decay into the
+  //     alarming Dark. Graceful-background only — an OEM kill never reaches this
+  //     handler, so a true unexpected death still derives Dark (the wanted distinction).
+  //     A later Active ping on reopen wakes them automatically.
+  useEffect(() => {
+    if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
+    const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') {
+        void stopRail3BackgroundLocation();
+      } else if (next === 'background') {
+        if (backgroundReady) {
+          void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
+        } else {
+          const c = myCoordsRef.current;
+          if (c) {
+            void channel.send({
+              type: 'broadcast',
+              event: POSITION_EVENT,
+              payload: { riderId: myRiderId, state: 'dormant', lat: c.lat, lng: c.lng, ts: Date.now() },
+            });
+          }
+        }
+      }
+      // 'inactive' is a transient iOS state — ignored.
+    });
+    return () => {
+      appStateSub.remove();
       // Leaving the ride (or losing the channel) → stop background transmission.
       void stopRail3BackgroundLocation();
     };
-  }, [channel, status, rideId, myRiderId, thresholds]);
+  }, [backgroundReady, channel, status, rideId, myRiderId]);
 
   // Staging diagnostic: log who is RECEIVED (pings) vs known to the ROSTER vs
   // surviving into the FLEET (received AND in roster), whenever those sets

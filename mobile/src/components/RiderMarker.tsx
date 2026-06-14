@@ -9,6 +9,8 @@ import type { FleetParticipant } from '../lib/roleVisibility';
 //   Stopped  → green, reduced opacity
 //   Inactive → hollow green (outline only)
 //   Dark     → greyed at last known position (clear change, not a tonal shift)
+//   Sleeping → calm VIOLET (rider gracefully backgrounded, app asleep — expected,
+//              distinct from the alarming grey Dark)
 //   SOS      → solid RED (reserved for distress; overrides the state colour)
 // Colour is GREEN for peers so red stays exclusively a distress signal, and so
 // peers read distinct from the viewer's own OS blue dot.
@@ -22,6 +24,9 @@ import type { FleetParticipant } from '../lib/roleVisibility';
 // also keeps peers visually distinct from self. Dark = grey (a clear change).
 const RIDER_GREEN = '#16A34A';
 const SOS_RED = '#E11D2A';
+// Sleeping: a calm violet — distinct from active green, Dark grey, SOS red, and the
+// viewer's own OS-blue dot, so "asleep" never reads as "lost" or "distress".
+const SLEEP_VIOLET = '#8B5CF6';
 
 const STATE_STYLE: Record<
   FleetParticipant['state'],
@@ -31,6 +36,7 @@ const STATE_STYLE: Record<
   stopped: { fill: RIDER_GREEN, border: '#FFFFFF', opacity: 0.55, hollow: false },
   inactive: { fill: 'transparent', border: RIDER_GREEN, opacity: 1, hollow: true },
   dark: { fill: '#6B6B70', border: '#3A3A3E', opacity: 1, hollow: false },
+  dormant: { fill: SLEEP_VIOLET, border: '#FFFFFF', opacity: 0.85, hollow: false },
 };
 
 const ROLE_BADGE: Partial<Record<FleetParticipant['role'], string>> = {

@@ -17,6 +17,11 @@ export function rail3RideTopic(rideId: string): string {
   return `rail3:ride:${rideId}`;
 }
 
+// D57 — broadcast event the captain emits when ending a ride, so other participants'
+// RideMapScreen leaves the live map in real time (ride end is ephemeral, no DB read
+// per client; a fresh open also reads ride.status as a fallback).
+export const RIDE_ENDED_EVENT = 'ride_ended';
+
 // Subscribes to a ride's live Broadcast channel, tenant-authorized at the realtime
 // layer (W170 / Sprint-0 gap G-1). The channel is PRIVATE, so Supabase Realtime checks
 // the realtime.messages RLS policies — which only let a rider whose tenant matches the

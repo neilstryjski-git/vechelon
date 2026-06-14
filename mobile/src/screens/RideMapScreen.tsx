@@ -1,13 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-map-clustering';
 import { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import * as Location from 'expo-location';
 
 import { supabase } from '../lib/supabase';
+import { selfRsvpWithIdentity } from '../lib/rideJoin';
+import {
+  promptOemExclusionOnFirstJoin,
+  promptIfBatterySaverOn,
+  acquireRideWakelock,
+  releaseRideWakelock,
+} from '../lib/batteryGuards';
+import FirstRideExplainer from '../components/FirstRideExplainer';
 import { useRideDetails } from '../hooks/useRideDetails';
-import { useRideChannel } from '../hooks/useRideChannel';
+import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
 import { useBeacons } from '../hooks/useBeacons';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
@@ -53,6 +62,8 @@ const RideMapScreen: React.FC = () => {
   const { roster, refetchRoster } = useRideRoster(rideId);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
   const { channel, status } = useRideChannel(rideId);
+  // D63: enabled only after the W176 explainer flow grants BACKGROUND location.
+  const [backgroundReady, setBackgroundReady] = useState(false);
   const { fleet, myCoords, channelStatus } = useFleetPositions(
     rideId,
     myRiderId,
@@ -61,6 +72,7 @@ const RideMapScreen: React.FC = () => {
     channel,
     status,
     refetchRoster,
+    backgroundReady,
   );
 
   // useBeacons reads coords on trigger (lat/long audit snapshot) via a ref so
@@ -108,15 +120,54 @@ const RideMapScreen: React.FC = () => {
         .eq('account_id', myRiderId)
         .maybeSingle();
       if (cancelled || existing) return;
-      const { error: rsvpErr } = await supabase
-        .from('ride_participants')
-        .insert({ ride_id: rideId, account_id: myRiderId, role: 'member', status: 'rsvpd' });
+      // W195: hydrate display_name/email from accounts so the captain + web Race
+      // Control see a real name, not the 'Rider' fallback.
+      const { error: rsvpErr } = await selfRsvpWithIdentity({
+        rideId,
+        accountId: myRiderId,
+        role: 'member',
+      });
       if (rsvpErr) console.warn('[Rail3] self-RSVP failed', rsvpErr);
     })();
     return () => {
       cancelled = true;
     };
   }, [myRiderId, rideId]);
+
+  // D63 — after the W176 first-ride explainer is acknowledged, request BACKGROUND
+  // location with proper rationale, fire the W177 battery advisories, hold the ride
+  // wakelock, and (on grant) enable the background AppState handoff. The explainer
+  // calls onDismiss immediately when it was already seen, so returning riders still
+  // (re)establish background tracking each ride. Graceful denial (§5): if BACKGROUND
+  // is denied, foreground-only tracking still runs — we just never flip backgroundReady.
+  const handleExplainerDismiss = useCallback(async () => {
+    if (!myRiderId) return;
+    // Android requires FOREGROUND before BACKGROUND — request it first (idempotent
+    // if the publish hook already prompted).
+    const { status: fg } = await Location.requestForegroundPermissionsAsync().catch(
+      () => ({ status: 'denied' as Location.PermissionStatus }),
+    );
+    if (fg !== 'granted') return;
+    const { status: bg } = await Location.requestBackgroundPermissionsAsync().catch(
+      () => ({ status: 'denied' as Location.PermissionStatus }),
+    );
+    // W177 advisories fired AT JOIN (when the rider commits to a tracked ride) — the
+    // conventional "you're starting an activity that needs background power" moment,
+    // not reactively at screen-lock. One-time OEM battery-exclusion + a Battery-Saver
+    // check (only alerts if it's actually on). Android-only no-ops elsewhere; both
+    // advisory, never blocking.
+    void promptOemExclusionOnFirstJoin(myRiderId);
+    void promptIfBatterySaverOn('join');
+    void acquireRideWakelock();
+    setBackgroundReady(bg === 'granted');
+  }, [myRiderId]);
+
+  // Release the ride wakelock when leaving the ride.
+  useEffect(() => {
+    return () => {
+      releaseRideWakelock();
+    };
+  }, []);
 
   const mapRef = useRef<RNMapView | null>(null);
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);
@@ -125,6 +176,35 @@ const RideMapScreen: React.FC = () => {
   const [qrOpen, setQrOpen] = useState(false);
 
   const myRole = ride?.myRole ?? 'member';
+
+  // D57 — leave the live map when the ride ends. The captain ends it itself (in
+  // RideControls) and navigates there; only NON-captains react here. Guard against
+  // double-firing once we've left.
+  const leftEndedRef = useRef(false);
+
+  // (a) Live: the captain's RIDE_ENDED_EVENT broadcast. Bind only once the ride is
+  // loaded (so myRole is final, not the pre-load 'member') and never for the captain.
+  useEffect(() => {
+    if (!channel || !ride || myRole === 'captain') return;
+    channel.on('broadcast', { event: RIDE_ENDED_EVENT }, () => {
+      if (leftEndedRef.current) return;
+      leftEndedRef.current = true;
+      Alert.alert('Ride ended', 'The captain has ended this ride.');
+      navigation.goBack();
+    });
+  }, [channel, ride, myRole, navigation]);
+
+  // (b) Fresh open of an already-saved ride: a non-captain who opens a ride that is
+  // no longer Active gets the same leave-the-map treatment (the broadcast is
+  // ephemeral, so a late joiner relies on ride.status).
+  useEffect(() => {
+    if (!ride || myRole === 'captain' || leftEndedRef.current) return;
+    if (ride.status !== 'active') {
+      leftEndedRef.current = true;
+      Alert.alert('Ride ended', 'This ride has already ended.');
+      navigation.goBack();
+    }
+  }, [ride, myRole, navigation]);
 
   // §4.1: Captain/SAG see the whole fleet; Riders see Captain+SAG only.
   // Defense-in-depth: the RLS-gated roster already bounds what a Rider can
@@ -268,20 +348,26 @@ const RideMapScreen: React.FC = () => {
               </Text>
             </View>
           ) : null}
-          {/* R3-27: QR display is available to ALL roles — any participant can
-              help a latecomer join. */}
+          {/* D58: QR hidden for the PoC. buildRideJoinUrl points at the PROD web
+              host (vechelon.ca), which 404s on the staging field test, and testers
+              join via the in-app ride button (tap-to-join, D54), so the QR is
+              redundant. The real fix (QR → rail3://ride/<id> app deep link) is
+              deferred to promotion — tracked as a W197 blocker. To restore: re-add
+              the QR chip below (state qrOpen / FullScreenQR are kept wired).
           <TouchableOpacity
             style={styles.qrChip}
             onPress={() => setQrOpen(true)}
             accessibilityLabel="Show ride QR code"
           >
             <Text style={styles.chipText}>QR</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
 
       {/* §4.1: End Ride is Captain-only — SAG and Riders never mount this. */}
-      {myRole === 'captain' ? <RideControls rideId={ride.id} getMyCoords={getMyCoords} /> : null}
+      {myRole === 'captain' ? (
+        <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} />
+      ) : null}
 
       <FullScreenQR
         visible={qrOpen}
@@ -333,6 +419,12 @@ const RideMapScreen: React.FC = () => {
             : null
         }
       />
+
+      {/* W176 first-ride explainer: self-gates (shows once per rider), then its
+          onDismiss drives the D63 background-permission + W177 battery flow. */}
+      {myRiderId ? (
+        <FirstRideExplainer riderId={myRiderId} onDismiss={handleExplainerDismiss} />
+      ) : null}
     </View>
   );
 };

@@ -19,7 +19,11 @@
 // Transitions are passive — no automated alerts anywhere (pitfall 1); state
 // feeds the icon only.
 
-export type RiderTacticalState = 'active' | 'stopped' | 'inactive' | 'dark';
+// 'dormant' (Sleeping): SENDER-declared — the rider gracefully backgrounded with no
+// background tracking taking over (foreground-only / bg permission denied). It's the
+// calm, expected counterpart to Dark: "I pocketed my phone," not "we lost them." An
+// OEM-killed/crashed app can't send it, so a true unexpected death still derives Dark.
+export type RiderTacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'dormant';
 
 // Per-tenant thresholds (tenants.rail3_*_threshold_minutes — W169 schema).
 // Defaults mirror the column defaults; never hardcode at call sites.
@@ -99,6 +103,10 @@ export function deriveRenderState(
   thresholds: StateThresholds = DEFAULT_THRESHOLDS,
 ): RiderTacticalState {
   if (lastPingAtMs === null) return 'dark'; // never heard from — fail dark, not active
+  // Sleeping is sender-declared and STICKY: the rider told us they backgrounded on
+  // purpose, so it never escalates to the concerning Dark on staleness. A later Active
+  // ping (reopen) clears it automatically.
+  if (reportedState === 'dormant') return 'dormant';
   if (nowMs - lastPingAtMs >= minToMs(thresholds.darkMinutes)) return 'dark';
   return reportedState;
 }

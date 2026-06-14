@@ -2,7 +2,7 @@
 // URL/URLSearchParams exist in the Hermes runtime (supabase-js relies on them).
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, processLock } from '@supabase/supabase-js';
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured } from './env';
 
@@ -29,6 +29,19 @@ export const supabase = createClient(
       persistSession: true,
       detectSessionInUrl: false,
       flowType: 'pkce',
+      // W194 hardening: serialize token refreshes through an in-memory lock. The
+      // foreground app and the headless background-location TaskManager task
+      // (lib/backgroundLocation.ts) both construct this client over ONE shared
+      // AsyncStorage session; a single-use refresh-token rotation racing across
+      // them is the prime suspect for a sender "going Dark" ~1h into a ride. With
+      // a lock, each refresh re-loads the session from storage before rotating, so
+      // a holder picks up another's freshly-rotated token instead of replaying a
+      // consumed one. CAVEAT: processLock is per-JS-context (in-memory) and the
+      // FGS task runs in a SEPARATE context — this fully serializes WITHIN each
+      // context and leans on the AppState foreground/background handoff to keep the
+      // two contexts from refreshing at once. Residual cross-context race is the #1
+      // thing the >60-min token-survival field test (§5) must watch.
+      lock: processLock,
     },
   },
 );
