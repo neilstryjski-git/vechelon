@@ -10,8 +10,13 @@
     "platforms": [
       "android"
     ],
+    "icon": "./assets/rs78.png",
     "android": {
-      "package": "ca.vechelon.rail3"
+      "package": "ca.vechelon.rail3",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/rs78.png",
+        "backgroundColor": "#1A1A1A"
+      }
     },
     "plugins": [
       "expo-dev-client",

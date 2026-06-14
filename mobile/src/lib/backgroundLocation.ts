@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { supabase } from './supabase';
+import { logMeasurement } from './measure';
 import { rail3RideTopic } from '../hooks/useRideChannel';
 
 // Mirror of useFleetPositions.POSITION_EVENT — inlined to avoid a circular import
@@ -77,6 +78,10 @@ TaskManager.defineTask(RAIL3_BG_LOCATION_TASK, async ({ data, error }) => {
         ],
       }),
     });
+    // W202 (PoC/staging-only sink): record the BACKGROUND send. This is the half that
+    // proves token survival WHILE POCKETED — the send + this sink write share the same
+    // refreshed token, so a gap in bg gps_ping rows pinpoints a background refresh failure.
+    void logMeasurement({ rideId: ctx.rideId, kind: 'gps_ping', payload: { src: 'bg' } });
   } catch (e) {
     console.warn('[Rail3][bg] broadcast failed', e);
   }

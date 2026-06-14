@@ -171,6 +171,9 @@ const RideMapScreen: React.FC = () => {
 
   const mapRef = useRef<RNMapView | null>(null);
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);
+  // D56: whether the camera is following the device dot. A manual pan disengages it
+  // (so you can look around); the Centre button re-engages. On from the first fix.
+  const [following, setFollowing] = useState(true);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selected, setSelected] = useState<FleetParticipant | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -224,6 +227,7 @@ const RideMapScreen: React.FC = () => {
   // zoomed to the ~25m starting frame.
   const centreOnMe = useCallback(() => {
     if (!myCoords) return;
+    setFollowing(true); // D56: tapping Centre re-engages follow
     mapRef.current?.animateToRegion(
       {
         latitude: myCoords.lat,
@@ -235,23 +239,56 @@ const RideMapScreen: React.FC = () => {
     );
   }, [myCoords]);
 
-  // D53: auto-centre on the device the first time a GPS fix arrives, at the same
-  // ~25m radius. FALLBACK_REGION is only a neutral placeholder until then — the
-  // original "immediately replaced by device position" was never implemented.
-  const hasAutoCentredRef = useRef(false);
+  // Fit-all (W201): frame the whole role-VISIBLE fleet + self. CRITICAL — built from
+  // `visible` (the §4.1 role-gated set), NEVER raw `fleet`: a Rider's frame must only
+  // ever include Captain+SAG, or the camera BOUNDS would leak peer positions even
+  // though no marker renders (QA R3-FIT-B). Self (the OS blue dot, absent from
+  // `visible`) is added so you always see yourself relative to the fleet (R3-FIT-F).
+  const fitAllCoords = useMemo(() => {
+    const cs = visible
+      .filter((p) => p.position)
+      .map((p) => ({ latitude: p.position!.lat, longitude: p.position!.lng }));
+    if (myCoords) cs.push({ latitude: myCoords.lat, longitude: myCoords.lng });
+    return cs;
+  }, [visible, myCoords]);
+
+  const fitAll = useCallback(() => {
+    if (fitAllCoords.length === 0) return;
+    setFollowing(false); // D56: framing the fleet disengages dot-follow so it can't yank back
+    if (fitAllCoords.length === 1) {
+      // One point: fitToCoordinates over-zooms to max — use the street-level frame.
+      const c = fitAllCoords[0];
+      mapRef.current?.animateToRegion(
+        { latitude: c.latitude, longitude: c.longitude, latitudeDelta: START_ZOOM_DELTA, longitudeDelta: START_ZOOM_DELTA },
+        300,
+      );
+      return;
+    }
+    mapRef.current?.fitToCoordinates(fitAllCoords, {
+      // Keep markers clear of the floating chrome (top bar + bottom buttons).
+      edgePadding: { top: 120, right: 64, bottom: 150, left: 64 },
+      animated: true,
+    });
+  }, [fitAllCoords]);
+
+  // D56 (subsumes the D53 one-time auto-centre): keep the device dot in view while
+  // riding. When following, re-centre on each new fix — street zoom (~25m) on the FIRST
+  // fix, preserving the operator's current zoom thereafter. A manual pan disengages
+  // following; the Centre button re-engages it. regionRef gives the live zoom without
+  // re-running this effect on every camera move.
+  const regionRef = useRef(region);
+  regionRef.current = region;
+  const hasInitialCentredRef = useRef(false);
   useEffect(() => {
-    if (!myCoords || hasAutoCentredRef.current) return;
-    hasAutoCentredRef.current = true;
+    if (!following || !myCoords) return;
+    const latDelta = hasInitialCentredRef.current ? regionRef.current.latitudeDelta : START_ZOOM_DELTA;
+    const lngDelta = hasInitialCentredRef.current ? regionRef.current.longitudeDelta : START_ZOOM_DELTA;
+    hasInitialCentredRef.current = true;
     mapRef.current?.animateToRegion(
-      {
-        latitude: myCoords.lat,
-        longitude: myCoords.lng,
-        latitudeDelta: START_ZOOM_DELTA,
-        longitudeDelta: START_ZOOM_DELTA,
-      },
+      { latitude: myCoords.lat, longitude: myCoords.lng, latitudeDelta: latDelta, longitudeDelta: lngDelta },
       300,
     );
-  }, [myCoords]);
+  }, [myCoords, following]);
 
   if (loading) {
     return (
@@ -284,6 +321,9 @@ const RideMapScreen: React.FC = () => {
         provider={PROVIDER_GOOGLE}
         initialRegion={FALLBACK_REGION}
         onRegionChangeComplete={setRegion}
+        // D56: a manual pan disengages dot-follow (programmatic animateToRegion does NOT
+        // fire onPanDrag, so following only stops on a real user gesture).
+        onPanDrag={() => setFollowing(false)}
         // Own blue dot in ALL states — the OS location dot, not a marker
         // (Feature 4: even a Dark rider sees their own true position).
         showsUserLocation
@@ -408,6 +448,16 @@ const RideMapScreen: React.FC = () => {
         <Text style={styles.centreGlyph}>◎</Text>
       </TouchableOpacity>
 
+      {/* W201 fit-all-riders: stacked above the Centre button; disabled with no fleet. */}
+      <TouchableOpacity
+        style={[styles.fitAllButton, fitAllCoords.length === 0 && styles.centreButtonDisabled]}
+        onPress={fitAll}
+        disabled={fitAllCoords.length === 0}
+        accessibilityLabel="Fit all riders in view"
+      >
+        <Text style={styles.centreGlyph}>⛶</Text>
+      </TouchableOpacity>
+
       <RiderBottomSheet
         participant={selected}
         myRole={myRole}
@@ -486,6 +536,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centreButtonDisabled: { opacity: 0.35 },
+  fitAllButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: 116,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#0E0E10E6',
+    borderColor: '#FFFFFF',
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   beaconErrorChip: {
     position: 'absolute',
     left: 18,

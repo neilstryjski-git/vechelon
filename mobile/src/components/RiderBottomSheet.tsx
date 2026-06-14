@@ -47,7 +47,11 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
 
   if (!participant) return null;
 
-  const showPhone = canSeePhone(myRole, participant.role) && Boolean(participant.phone);
+  // D60-style truthfulness: separate a ROLE restriction from simply having no number
+  // on file. A Captain/SAG who CAN see a rider but the rider has no phone must not be
+  // told it's "your role" (the reported bug). Role gate first, then data.
+  const roleCanSeeContact = canSeePhone(myRole, participant.role);
+  const showPhone = roleCanSeeContact && Boolean(participant.phone);
   const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [320, 0] });
 
   return (
@@ -94,8 +98,10 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
               <Text style={styles.dialText}>Dial</Text>
             </TouchableOpacity>
           </>
+        ) : roleCanSeeContact ? (
+          <Text style={styles.noPhone}>No contact on file.</Text>
         ) : (
-          <Text style={styles.noPhone}>No contact available for your role.</Text>
+          <Text style={styles.noPhone}>Contact hidden for this role.</Text>
         )}
       </Animated.View>
     </View>

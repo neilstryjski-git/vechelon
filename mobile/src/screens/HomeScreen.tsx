@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../auth/AuthContext';
@@ -75,9 +75,13 @@ const HomeScreen: React.FC = () => {
     setLoaded(true);
   }, []);
 
-  useEffect(() => {
-    void loadRides();
-  }, [loadRides]);
+  // Refetch on every focus (not just mount) so returning from an ended ride drops it
+  // off the list right away — no manual pull-to-refresh needed (field-test UX fix).
+  useFocusEffect(
+    useCallback(() => {
+      void loadRides();
+    }, [loadRides]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

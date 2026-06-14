@@ -243,6 +243,10 @@ export function useFleetPositions(
         // Ephemeral fan-out only — the send is RLS-authorized server-side
         // (W170 rail3_broadcast_tenant_send). Never a DB write.
         void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
+        // W202 (PoC/staging-only sink): record the SENDER's own send so token-survival
+        // is measurable from the sender, not just flaky receivers. Both this send AND
+        // this sink write need a valid token — a gap = the token refresh failed.
+        void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'fg', state } });
       };
 
       let lastCallbackAtMs = 0;

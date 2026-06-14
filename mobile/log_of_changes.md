@@ -152,3 +152,82 @@ background transition. tsc clean; riderState + mapLogic tests pass.
 **WEB FOLLOW-UP (separate Vercel deploy, no EAS cost):** admin Race Control's FleetMap
 colours markers by a `stale` boolean only, and admin `TacticalState`/`deriveRenderState`
 lack `dormant` — so web won't show Sleeping distinctly until ported.
+
+---
+
+## 2026-06-14 — Field-test fix: RiderBottomSheet contact message (D60-style)
+
+gmail (captain) clicking rogers (member) showed "No contact available for your role" —
+wrong: canSeePhone(captain, member) is true; the real cause was rogers had no phone on
+file. Split the message (matches web Race Control): role allows but no data -> "No
+contact on file"; role-denied -> "Contact hidden for this role". (Root data gap also
+fixed: rogers' accounts/active-ride contact backfilled.) NOT rebuilt — batched for the
+next consolidated field-test build. tsc clean.
+
+---
+
+## 2026-06-14 — Field-test UX: captain ride-list refetch on focus
+
+End Ride persists fine (ride -> saved, actual_end set, other riders kicked via D57), but
+the captain's HomeScreen only fetched active rides on mount / pull-to-refresh, so a
+just-ended ride lingered as "active" until manual refresh. HomeScreen now uses
+useFocusEffect -> loadRides() on every focus, so returning from an ended ride drops it
+immediately. Decision: NO email on the mobile contact sheet (dial-only; emergencies are
+calls, not emails) — RiderBottomSheet stays phone-only. Batched for the next build; tsc clean.
+
+---
+
+## 2026-06-14 — RS "78" app logo + square logo box
+
+logo_url repointed (runtime, staging tenants row) to the RS "78" mark hosted in staging
+Supabase storage (public bucket 'branding'/rs78.png, 475x475). SignInScreen styles.logo
+220x56 -> 112x112 square so the square mark renders properly (resizeMode contain). PoC is
+pinned to RS's square mark; adaptive sizing for wordmark tenants is a Rail 3a concern.
+Batched for the next build; logo_url swap is live at runtime now (renders small on the
+current wordmark-box build until this lands). tsc clean.
+
+---
+
+## 2026-06-14 — CORRECTION: RS78 is the APP LAUNCHER ICON, not the in-app logo
+
+Earlier I mistakenly swapped the in-app sign-in logo to the 78 + squared its box. Sr PM
+clarified: keep the WORDMARK in-app (liked); use the 78 to replace the generic Android
+LAUNCHER icon. Reverted: tenants.logo_url -> wordmark (racer-sportif-logo.png, runtime,
+live now); SignInScreen styles.logo -> 220x56. Set the app icon (build-time): app.json
+icon + android.adaptiveIcon.foregroundImage = ./assets/rs78.png, backgroundColor #1A1A1A
+(matches the dark disc; reads clean under any OEM icon mask). Asset: mobile/assets/rs78.png
+(475x475 — works; 1024x1024 would be crisper, optional). Icon is baked into the APK ->
+appears after the next build. (Unused RS78 left in staging storage 'branding' bucket; harmless.)
+tsc clean.
+
+---
+
+## 2026-06-14 — RC1: Fit-all-riders (W201) + gps_ping instrumentation (W202)
+
+**Fit-all (W201)** — Three Amigos passed + Sr PM ratified (Bedrock-neutral, not a Pillar
+amendment). RideMapScreen: `fitAll` animates `mapRef.fitToCoordinates(coords,{edgePadding})`
+(rides the D53 ref fix). Coords built from the role-gated `visible` set (NEVER raw `fleet` —
+QA: a Rider's frame must only include Captain+SAG or the camera BOUNDS leak peer positions)
++ self (myCoords). 0 coords → button disabled; 1 coord → animateToRegion at START_ZOOM_DELTA
+(avoids over-zoom). New 64dp button stacked above the Centre button (glyph ⛶). Role result:
+Rider → leader+support+self; Captain/SAG → all riders+self.
+
+**gps_ping (W202)** — PoC/staging-only sender-side send log (rides logMeasurement, already
+staging-only). `useFleetPositions.publishSample` logs gps_ping{src:'fg'} per foreground send;
+`backgroundLocation.ts` logs gps_ping{src:'bg'} per background send. Both the send and the
+sink-write need a valid token, so a gap in gmail-authored gps_ping across the 5-min refreshes
+pinpoints a token-refresh failure — makes the next walk's W194 token-survival check conclusive
+(immune to flaky receivers; positions are broadcast-only with no DB row otherwise).
+
+tsc clean (pre-existing deepLinkAuth only).
+
+---
+
+## 2026-06-14 — RC1: D56 follow-me (keep the dot in view)
+
+RideMapScreen: replaced the D53 one-time auto-centre with a follow effect. `following`
+(default on) re-centres on each new fix — street zoom (~25m) on the FIRST fix, preserving
+the operator's current zoom after (read via regionRef so the effect doesn't re-run on every
+camera move). A manual pan (MapView onPanDrag) disengages following; the Centre button
+re-engages it (setFollowing(true)); fit-all (W201) disengages it so it can't yank back to
+the dot after framing the fleet. tsc clean.
