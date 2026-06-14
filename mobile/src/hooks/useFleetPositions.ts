@@ -230,6 +230,9 @@ export function useFleetPositions(
       // receiver-derived and intentionally absent here). Shared by the OS
       // callback and the stationary heartbeat below.
       const publishSample = (coords: LatLng, distanceFromLastM: number, now: number) => {
+        // RC3: the FGS owns broadcasting while backgrounded; this socket path owns the
+        // foreground. Guard so the two (both alive for the whole ride) never double-send.
+        if (AppState.currentState !== 'active') return;
         if (now - lastSentRef.current < PING_INTERVAL_MS) return;
         lastSentRef.current = now;
         const state = tracker.sample({ distanceFromLastM, atMs: now });
@@ -301,48 +304,51 @@ export function useFleetPositions(
     };
   }, [channel, status, rideId, myRiderId, thresholds]);
 
-  // Background handoff (W194 + D63) + Sleeping signal. On AppState SETTLING into
-  // 'background' (W194 hardening: '=== background', NOT '!== active', so an iOS
-  // 'inactive' flap can't churn this):
-  //   • backgroundReady (rider saw the W176 explainer + granted BACKGROUND) → start
-  //     the foreground-service task that keeps REST-broadcasting (kept alive while
-  //     pocketed); stop it on return so the foreground socket path resumes — the two
-  //     never overlap.
-  //   • NOT backgroundReady (foreground-only / bg denied) → no tracking takes over,
-  //     so fire ONE best-effort "dormant" ping with the last fix: tells the fleet the
-  //     rider went to SLEEP on purpose (calm), instead of letting them decay into the
-  //     alarming Dark. Graceful-background only — an OEM kill never reaches this
-  //     handler, so a true unexpected death still derives Dark (the wanted distinction).
-  //     A later Active ping on reopen wakes them automatically.
+  // RC3 (Option A) — start the foreground-service location stream WHILE FOREGROUND, at
+  // the start of tracking, and keep it running for the WHOLE ride. Android 12+ refuses to
+  // START an FGS once the app is already backgrounded (the exact rejection the field walk's
+  // `bg_start ok:false` log captured), so the old "start it at screen-lock" handoff could
+  // never have worked. Started here — the app IS foregrounded when a ride is joined — it
+  // legally keeps delivering location across the lock (persistent notification for the ride,
+  // mandatory on modern Android). The task broadcasts ONLY while backgrounded (guarded in
+  // the task), so it never doubles with the foreground socket path above. Stopped when the
+  // rider leaves the ride / the channel drops. start/stop are idempotent, so re-mounts are
+  // harmless.
+  useEffect(() => {
+    if (!backgroundReady || status !== 'SUBSCRIBED' || !rideId || !myRiderId) return;
+    void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
+    return () => {
+      void stopRail3BackgroundLocation();
+    };
+  }, [backgroundReady, status, rideId, myRiderId]);
+
+  // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
+  // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,
+  // not the freeze-racing websocket) "dormant" ping with the last fix — the fleet sees them
+  // go to SLEEP on purpose (calm violet), not decay into the alarming Dark. backgroundReady
+  // riders are already covered by the whole-ride FGS above, so they skip this. An OEM kill
+  // never reaches this handler, so a true unexpected death still derives Dark (the wanted
+  // distinction); a later Active ping on reopen wakes them. '=== background' (not '!= active')
+  // so an iOS 'inactive' flap can't churn it.
   useEffect(() => {
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') {
-        void stopRail3BackgroundLocation();
-      } else if (next === 'background') {
-        const c = myCoordsRef.current;
-        // PoC/staging instrumentation: record which handoff branch we take AND its
-        // inputs the instant we background. With this, a future walk's sink tells us
-        // — without eyeballing a notification — whether backgroundReady was true (FGS
-        // branch) or false (dormant branch), and whether we even had a fix to send.
-        void logMeasurement({
-          rideId,
-          kind: 'app_state_change',
-          payload: { event: 'handoff', branch: backgroundReady ? 'fgs' : 'dormant', backgroundReady, hadCoords: !!c },
-        });
-        if (backgroundReady) {
-          void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
-        } else if (c) {
-          // REST (not the websocket) so it escapes before the JS engine freezes on lock.
-          void sendDormantPing({ rideId, riderId: myRiderId, lat: c.lat, lng: c.lng });
-        }
+      if (next !== 'background') return;
+      const c = myCoordsRef.current;
+      // PoC/staging instrumentation: record which branch we take and its inputs the instant
+      // we background, so the sink tells us — without eyeballing a notification — exactly
+      // what happened on each screen-lock.
+      void logMeasurement({
+        rideId,
+        kind: 'app_state_change',
+        payload: { event: 'handoff', branch: backgroundReady ? 'fgs' : 'dormant', backgroundReady, hadCoords: !!c },
+      });
+      if (!backgroundReady && c) {
+        void sendDormantPing({ rideId, riderId: myRiderId, lat: c.lat, lng: c.lng });
       }
-      // 'inactive' is a transient iOS state — ignored.
     });
     return () => {
       appStateSub.remove();
-      // Leaving the ride (or losing the channel) → stop background transmission.
-      void stopRail3BackgroundLocation();
     };
   }, [backgroundReady, channel, status, rideId, myRiderId]);
 

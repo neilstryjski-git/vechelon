@@ -1,6 +1,7 @@
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { supabase } from './supabase';
@@ -49,6 +50,13 @@ TaskManager.defineTask(RAIL3_BG_LOCATION_TASK, async ({ data, error }) => {
     return;
   }
   if (!ctx.rideId || !ctx.riderId) return;
+
+  // Double-send guard (RC3): the FGS now runs for the WHOLE ride (started in the
+  // foreground — Android 12+ forbids starting it from the background), so this task
+  // fires in the foreground too. While the UI is foregrounded, the socket path in
+  // useFleetPositions owns broadcasting (it carries the tactical state machine), so
+  // the FGS only BROADCASTS once we're actually backgrounded — the two never overlap.
+  if (AppState.currentState === 'active') return;
 
   const sent = await restBroadcast(ctx.rideId, {
     riderId: ctx.riderId,

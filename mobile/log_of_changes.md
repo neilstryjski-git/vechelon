@@ -277,3 +277,30 @@ mount — so the first lock was still driven by the fragile explainer path.
   (the bg_start instrumentation answers it).
 
 tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.
+
+## RC3 — FGS started in foreground, runs whole ride (Option A) (2026-06-14)
+
+RC2.1 (build f8978857) instrumentation gave the definitive root cause: bg_start ok:false,
+"ExpoLocation.startLocationUpdatesAsync rejected → Couldn't start the foreground service.
+Foreground service cannot be started when the application is in [background]." Android 12+
+forbids STARTING an FGS from the background, and the old code only tried to start it AT the
+screen-lock (background) moment — so it could never succeed. backgroundReady was true, branch
+was fgs, perms granted — all correct; the timing was illegal.
+
+Sr PM ratified Option A (background tracking is the only option that meets the requirement):
+- useFleetPositions: NEW effect starts the FGS while FOREGROUND (backgroundReady && SUBSCRIBED),
+  runs the whole ride, stops on leave/channel-drop (idempotent, re-mount safe). Removed the
+  start-on-background / stop-on-active toggling. The remaining AppState effect is now the
+  dormant-only fallback for foreground-only riders (REST Sleeping ping). publishSample (socket
+  path) guarded to AppState==='active' only.
+- backgroundLocation: FGS task now returns early when AppState.currentState==='active' — it
+  broadcasts ONLY while backgrounded, so it never doubles with the foreground socket path
+  (both are alive the whole ride now). Persistent notification shows for the whole ride
+  (mandatory on modern Android for background location; industry standard — Strava/RWGPS).
+
+Real-world validation (Neil): Ride with GPS keeps recording the route while the screen is
+locked (FGS running) but the live map "flies"/catches up on unlock (UI suspended) — exactly
+the FGS behavior, and exactly our accepted design (sender stays live to the fleet; the locked
+rider's OWN map view may be stale until reopen).
+
+tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.
