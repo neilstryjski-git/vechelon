@@ -180,16 +180,21 @@ const RideMapScreen: React.FC = () => {
     setBackgroundReady(bg === 'granted');
   }, [myRiderId, rideId]);
 
-  // Re-check background permission whenever the app returns to foreground. The
-  // rider may have just granted "Allow all the time" in system Settings (the only
-  // place Android 11+ allows it) — flip backgroundReady on so the NEXT screen-lock
-  // takes the foreground-service branch instead of the dormant fallback.
+  // Derive backgroundReady from the OS permission as GROUND TRUTH — on mount AND
+  // whenever the app returns to foreground — NOT solely from the one-shot request in
+  // handleExplainerDismiss (which races myRiderId / the already-seen explainer, so a
+  // pre-granted "Allow all the time" could be missed for the whole session — the
+  // field-walk symptom). AppState listeners don't fire on mount, so the initial
+  // check() is essential; the 'active' re-check also catches a grant just made in
+  // system Settings. This makes the FGS branch deterministic when the grant exists.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s !== 'active') return;
+    const check = () =>
       Location.getBackgroundPermissionsAsync()
         .then(({ status }) => setBackgroundReady(status === 'granted'))
         .catch(() => {});
+    void check(); // initial — listener below only fires on CHANGES
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void check();
     });
     return () => sub.remove();
   }, []);

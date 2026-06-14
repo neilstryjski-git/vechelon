@@ -259,3 +259,21 @@ branch → which sent over the WEBSOCKET and lost the race against JS-freeze on 
 
 Pure JS/TS (no native/config change) but needs a new APK (no EAS Update/OTA configured).
 tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.
+
+## RC2.1 — backgroundReady from OS ground truth on mount (2026-06-14)
+
+Neil confirmed "Allow all the time" was set BEFORE the failed walk → during the walk the OS
+grant existed, so backgroundReady SHOULD have been true and the FGS SHOULD have started — it
+didn't (no notification). Shifts weight toward the FGS silently failing to start (H2), but a
+live H1 variant remains: backgroundReady could be false despite the grant if
+handleExplainerDismiss raced myRiderId (early-returns) or onDismiss didn't fire. RC2 v1
+(build 383ad37f) only re-checked on AppState 'active' TRANSITIONS — listeners don't fire on
+mount — so the first lock was still driven by the fragile explainer path.
+
+- RideMapScreen: the bg-permission effect now runs an initial check() on mount AND on each
+  'active', deriving backgroundReady from getBackgroundPermissionsAsync (OS truth), decoupled
+  from the explainer. Makes the FGS branch deterministic whenever the grant exists → next walk
+  is a CLEAN test of whether startLocationUpdatesAsync actually starts the FGS on Android 16
+  (the bg_start instrumentation answers it).
+
+tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.
