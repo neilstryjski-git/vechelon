@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-map-clustering';
 import { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
@@ -151,6 +151,24 @@ const RideMapScreen: React.FC = () => {
     const { status: bg } = await Location.requestBackgroundPermissionsAsync().catch(
       () => ({ status: 'denied' as Location.PermissionStatus }),
     );
+    // PoC/staging instrumentation: capture the actual grant result so the sink shows
+    // — per device/OS — whether riders are reaching "Allow all the time" at all.
+    void logMeasurement({ rideId, kind: 'ux_explainer_shown', payload: { fg, bg } });
+    // Android 11+ reality: requestBackgroundPermissionsAsync does NOT show an inline
+    // dialog after foreground is granted — the OS only grants "Allow all the time"
+    // from the app's system Settings. So a silent `denied` here is the EXPECTED first
+    // outcome, and the field walk's frozen-while-locked symptom. Guide the rider there
+    // explicitly; the AppState re-check effect below picks up the grant when they return.
+    if (bg !== 'granted') {
+      Alert.alert(
+        'Stay on the map when pocketed',
+        'To keep sharing your position after your screen locks, set location access to "Allow all the time" in Settings. Without it, the group sees you go to sleep when you pocket your phone.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ],
+      );
+    }
     // W177 advisories fired AT JOIN (when the rider commits to a tracked ride) — the
     // conventional "you're starting an activity that needs background power" moment,
     // not reactively at screen-lock. One-time OEM battery-exclusion + a Battery-Saver
@@ -160,7 +178,21 @@ const RideMapScreen: React.FC = () => {
     void promptIfBatterySaverOn('join');
     void acquireRideWakelock();
     setBackgroundReady(bg === 'granted');
-  }, [myRiderId]);
+  }, [myRiderId, rideId]);
+
+  // Re-check background permission whenever the app returns to foreground. The
+  // rider may have just granted "Allow all the time" in system Settings (the only
+  // place Android 11+ allows it) — flip backgroundReady on so the NEXT screen-lock
+  // takes the foreground-service branch instead of the dormant fallback.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      Location.getBackgroundPermissionsAsync()
+        .then(({ status }) => setBackgroundReady(status === 'granted'))
+        .catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   // Release the ride wakelock when leaving the ride.
   useEffect(() => {

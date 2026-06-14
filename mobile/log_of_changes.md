@@ -231,3 +231,31 @@ the operator's current zoom after (read via regionRef so the effect doesn't re-r
 camera move). A manual pan (MapView onPanDrag) disengages following; the Centre button
 re-engages it (setFollowing(true)); fit-all (W201) disengages it so it can't yank back to
 the dot after framing the fleet. tsc clean.
+
+## RC2 — background-transmission fix + handoff instrumentation (2026-06-14)
+
+Field walk on RC1 (build b244c3c5) proved, via the W202 gps_ping sink, that background
+transmission never ran: 0 `bg` pings AND 0 `dormant` pings; the foreground stream froze
+for up to ~5 min whenever the screen was locked (seq advancing only ~3 across a 298s gap =
+JS engine suspended, not network loss). Controlled A/B: gmail (lock-screened) failed; rogers
+(screen-on couch control) streamed fine — it was never backgrounded. Config was NOT the cause
+(app.config.ts correctly layers expo-location with isAndroidBackgroundLocationEnabled +
+isAndroidForegroundServiceEnabled). Failure is in the runtime handoff. Working hypothesis B:
+Android 11+ never grants "Allow all the time" inline → backgroundReady stayed false → dormant
+branch → which sent over the WEBSOCKET and lost the race against JS-freeze on lock.
+
+- backgroundLocation.ts: extracted shared `restBroadcast()`; bg task now logs gps_ping with
+  `{src:'bg', sent}` (sent:false = task ran but no token/POST failed — distinct from absence =
+  task never ran). New `sendDormantPing()` sends the "pocketed" ping over REST (escapes before
+  freeze). `startRail3BackgroundLocation` wrapped in try/catch + logs `app_state_change
+  {event:'bg_start', ok/error}` so an Android 14+ FGS-type rejection is visible, not silent.
+- useFleetPositions.ts: handoff logs `app_state_change {event:'handoff', branch, backgroundReady,
+  hadCoords}` on every background transition; dormant branch now calls sendDormantPing (REST),
+  not channel.send (websocket).
+- RideMapScreen.tsx: handleExplainerDismiss logs `ux_explainer_shown {fg,bg}`; when bg!='granted'
+  it now Alerts + offers Open Settings (Linking.openSettings) — the only place Android 11+ grants
+  "Allow all the time". New AppState 'active' effect re-checks getBackgroundPermissionsAsync and
+  flips backgroundReady when the rider returns from Settings having granted it.
+
+Pure JS/TS (no native/config change) but needs a new APK (no EAS Update/OTA configured).
+tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.

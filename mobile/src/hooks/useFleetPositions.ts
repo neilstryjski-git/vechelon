@@ -9,6 +9,7 @@ import { logMeasurement } from '../lib/measure';
 import {
   startRail3BackgroundLocation,
   stopRail3BackgroundLocation,
+  sendDormantPing,
 } from '../lib/backgroundLocation';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
@@ -319,17 +320,21 @@ export function useFleetPositions(
       if (next === 'active') {
         void stopRail3BackgroundLocation();
       } else if (next === 'background') {
+        const c = myCoordsRef.current;
+        // PoC/staging instrumentation: record which handoff branch we take AND its
+        // inputs the instant we background. With this, a future walk's sink tells us
+        // — without eyeballing a notification — whether backgroundReady was true (FGS
+        // branch) or false (dormant branch), and whether we even had a fix to send.
+        void logMeasurement({
+          rideId,
+          kind: 'app_state_change',
+          payload: { event: 'handoff', branch: backgroundReady ? 'fgs' : 'dormant', backgroundReady, hadCoords: !!c },
+        });
         if (backgroundReady) {
           void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
-        } else {
-          const c = myCoordsRef.current;
-          if (c) {
-            void channel.send({
-              type: 'broadcast',
-              event: POSITION_EVENT,
-              payload: { riderId: myRiderId, state: 'dormant', lat: c.lat, lng: c.lng, ts: Date.now() },
-            });
-          }
+        } else if (c) {
+          // REST (not the websocket) so it escapes before the JS engine freezes on lock.
+          void sendDormantPing({ rideId, riderId: myRiderId, lat: c.lat, lng: c.lng });
         }
       }
       // 'inactive' is a transient iOS state — ignored.
