@@ -5,21 +5,31 @@ import { Marker } from 'react-native-maps';
 import type { FleetParticipant } from '../lib/roleVisibility';
 
 // Marker visual contract (Pillar II Feature 4 + §5.1 sunlight-readable):
-//   Active   → solid filled
-//   Stopped  → reduced opacity
-//   Inactive → hollow (outline only)
+//   Active   → solid GREEN
+//   Stopped  → green, reduced opacity
+//   Inactive → hollow green (outline only)
 //   Dark     → greyed at last known position (clear change, not a tonal shift)
+//   SOS      → solid RED (reserved for distress; overrides the state colour)
+// Colour is GREEN for peers so red stays exclusively a distress signal, and so
+// peers read distinct from the viewer's own OS blue dot.
 // Icon differs by TACTICAL STATE only — never by account type (W172 pitfall).
 // Role is surfaced as a small badge (C / S) so riders can tell Captain from
 // SAG, which §4.1 requires for the rider view; badge ≠ icon differentiation.
+
+// Riders render GREEN, varied by tactical state. RED is RESERVED for an active
+// SOS beacon (applied to the dot below, overriding the state fill) so red always
+// means distress, never "normal rider". Own position is the OS blue dot, so green
+// also keeps peers visually distinct from self. Dark = grey (a clear change).
+const RIDER_GREEN = '#16A34A';
+const SOS_RED = '#E11D2A';
 
 const STATE_STYLE: Record<
   FleetParticipant['state'],
   { fill: string; border: string; opacity: number; hollow: boolean }
 > = {
-  active: { fill: '#E11D2A', border: '#FFFFFF', opacity: 1, hollow: false },
-  stopped: { fill: '#E11D2A', border: '#FFFFFF', opacity: 0.55, hollow: false },
-  inactive: { fill: 'transparent', border: '#E11D2A', opacity: 1, hollow: true },
+  active: { fill: RIDER_GREEN, border: '#FFFFFF', opacity: 1, hollow: false },
+  stopped: { fill: RIDER_GREEN, border: '#FFFFFF', opacity: 0.55, hollow: false },
+  inactive: { fill: 'transparent', border: RIDER_GREEN, opacity: 1, hollow: true },
   dark: { fill: '#6B6B70', border: '#3A3A3E', opacity: 1, hollow: false },
 };
 
@@ -117,9 +127,10 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
           style={[
             styles.dot,
             {
-              backgroundColor: s.hollow ? 'transparent' : s.fill,
-              borderColor: s.border,
-              borderWidth: s.hollow ? 3 : 2,
+              // SOS overrides everything to solid red; otherwise green by state.
+              backgroundColor: beaconActive ? SOS_RED : s.hollow ? 'transparent' : s.fill,
+              borderColor: beaconActive ? '#FFFFFF' : s.border,
+              borderWidth: beaconActive ? 2 : s.hollow ? 3 : 2,
             },
           ]}
         />
