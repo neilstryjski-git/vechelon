@@ -40,6 +40,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         locationWhenInUsePermission:
           'Your position is shared with your ride Captain and SAG during a live ride.',
+        // W179: keep transmitting while the phone is pocketed so the Captain/SAG
+        // and web views stay current. Background permission + a foreground
+        // service (persistent notification) are required for Android background
+        // location; the service is started/stopped per active ride.
+        locationAlwaysAndWhenInUsePermission:
+          'VEcheLOn shares your position with your ride Captain and SAG while a ride is active, even when the app is in the background.',
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true,
       },
     ],
   ],

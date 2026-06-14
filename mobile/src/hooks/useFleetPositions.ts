@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import * as Location from 'expo-location';
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
+import {
+  startRail3BackgroundLocation,
+  stopRail3BackgroundLocation,
+} from '../lib/backgroundLocation';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -197,6 +202,7 @@ export function useFleetPositions(
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let appStateSub: { remove: () => void } | null = null;
     let cancelled = false;
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
@@ -205,6 +211,26 @@ export function useFleetPositions(
     (async () => {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted' || cancelled) return;
+
+      // W179: ask for BACKGROUND location so we can keep transmitting when the
+      // phone is pocketed. Best-effort — if denied, foreground-only still works
+      // (the rider just goes Dark to the fleet while backgrounded). Then hand off
+      // foreground↔background by AppState: foreground uses the socket path below;
+      // when the app leaves the foreground we start the foreground-service task
+      // that REST-broadcasts (and stop it on return), so the two never overlap.
+      const { status: bgPerm } = await Location.requestBackgroundPermissionsAsync().catch(
+        () => ({ status: 'denied' as Location.PermissionStatus }),
+      );
+      if (cancelled) return;
+      if (bgPerm === 'granted') {
+        appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+          if (next === 'active') {
+            void stopRail3BackgroundLocation();
+          } else {
+            void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
+          }
+        });
+      }
 
       // W174 publish seam: state computed from own movement (Dark is
       // receiver-derived and intentionally absent here). Shared by the OS
@@ -274,6 +300,9 @@ export function useFleetPositions(
       cancelled = true;
       sub?.remove();
       if (heartbeat) clearInterval(heartbeat);
+      appStateSub?.remove();
+      // Leaving the ride (or losing the channel) → stop background transmission.
+      void stopRail3BackgroundLocation();
     };
   }, [channel, status, rideId, myRiderId, thresholds]);
 
