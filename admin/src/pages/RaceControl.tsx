@@ -8,7 +8,6 @@ import {
 } from '../hooks/useFleetPositions';
 import {
   visibleParticipants,
-  canSeePhone,
   type RideRole,
 } from '../lib/roleVisibility';
 import FleetMap, { type FleetMapMarker } from '../components/FleetMap';
@@ -76,7 +75,10 @@ export default function RaceControl() {
     () => visible.find((p) => p.riderId === selectedId) ?? null,
     [visible, selectedId],
   );
-  const canContactSelected = selectedRider ? canSeePhone(OPERATOR_ROLE, selectedRider.role) : false;
+  // The race-control operator is an admin DISPATCHER, not a peer rider — the §4.1
+  // contact matrix (which hides e.g. captain↔captain) does not apply here. The
+  // operator sees every visible rider's contact when it's on file.
+  const canContactSelected = selectedRider != null;
 
   if (!rideId) {
     return (
@@ -192,7 +194,7 @@ export default function RaceControl() {
               <ul>
                 {visible.map((p) => {
                   const stale = isStalePing(p.lastPingAt, now);
-                  const showPhone = canSeePhone(OPERATOR_ROLE, p.role) && p.phone;
+                  const showPhone = p.phone; // operator (dispatcher) sees all contact
                   return (
                     <li
                       key={p.riderId}

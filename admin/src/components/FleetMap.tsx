@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { importLibrary } from '../lib/mapsLoader';
 import { veloModernStyle } from '../lib/mapStyles';
 import type { RideRole } from '../lib/roleVisibility';
@@ -47,6 +47,22 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className =
   // Stable ref so the marker click listener always calls the latest handler.
   const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
+
+  // Snap the camera to encompass the whole fleet. Used for the initial one-time fit
+  // AND the manual "Fit all riders" button (the operator can pan/zoom freely, then
+  // re-fit on demand). A single marker would fitBounds to max zoom, so clamp it.
+  const fitToMarkers = useCallback(() => {
+    if (!map || markers.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+    markers.forEach((m) => bounds.extend(m.position));
+    map.fitBounds(bounds);
+    if (markers.length === 1) {
+      const listener = google.maps.event.addListener(map, 'idle', () => {
+        map.setZoom(15);
+        google.maps.event.removeListener(listener);
+      });
+    }
+  }, [map, markers]);
 
   useEffect(() => {
     const initMap = async () => {
@@ -112,20 +128,12 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className =
     });
 
     // Fit to the fleet ONCE, the first time we have any markers. After that the
-    // camera belongs to the operator.
+    // camera belongs to the operator (re-fit on demand via the button).
     if (!hasFitRef.current && markers.length > 0) {
-      const bounds = new google.maps.LatLngBounds();
-      markers.forEach((m) => bounds.extend(m.position));
-      map.fitBounds(bounds);
-      if (markers.length === 1) {
-        const listener = google.maps.event.addListener(map, 'idle', () => {
-          map.setZoom(15);
-          google.maps.event.removeListener(listener);
-        });
-      }
+      fitToMarkers();
       hasFitRef.current = true;
     }
-  }, [isLoaded, map, markers]);
+  }, [isLoaded, map, markers, fitToMarkers]);
 
   if (loaderError) {
     return (
@@ -137,7 +145,20 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className =
     );
   }
 
-  return <div ref={mapRef} className={className} />;
+  return (
+    <div className={`relative ${className}`}>
+      <div ref={mapRef} className="w-full h-full" />
+      {isLoaded && markers.length > 0 ? (
+        <button
+          type="button"
+          onClick={fitToMarkers}
+          className="absolute top-3 right-3 z-10 bg-surface-container-high/90 text-on-surface-variant text-[10px] font-bold uppercase tracking-widest px-3 py-2 rounded-lg shadow hover:bg-surface-container-highest"
+        >
+          Fit all riders
+        </button>
+      ) : null}
+    </div>
+  );
 };
 
 export default FleetMap;
