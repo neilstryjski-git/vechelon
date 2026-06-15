@@ -2,8 +2,41 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 import {
   withAppBuildGradle,
   withGradleProperties,
+  withProjectBuildGradle,
   type ConfigPlugin,
 } from 'expo/config-plugins';
+
+// THE jitpack fix. react-native-background-fetch declares its native dep as a
+// wildcard — `implementation 'com.transistorsoft:tsbackgroundfetch:+'`. The `+`
+// forces gradle to ENUMERATE every available version (fetch maven-metadata.xml)
+// across all repos to pick the newest, which drags in jitpack.io's metadata
+// endpoint — and jitpack's flaky "Read timed out" killed THREE billed EAS builds
+// (b83e86cf, e12e23d9, 38b7fc64) even though the exact AAR it needs ships locally
+// in node_modules (.../libs/com/transistorsoft/tsbackgroundfetch/1.0.4/). Pinning
+// the version with resolutionStrategy.force turns the dynamic lookup into a
+// concrete artifact fetch resolved straight from the local ./libs repo — gradle
+// never lists versions, never touches jitpack. This removes the dependency on
+// jitpack being up, rather than just giving it more time to respond.
+const PINNED_TSBGFETCH = 'com.transistorsoft:tsbackgroundfetch:1.0.4';
+const withPinnedTsBackgroundFetch: ConfigPlugin = (config) =>
+  withProjectBuildGradle(config, (cfg) => {
+    if (cfg.modResults.language !== 'groovy') return cfg;
+    if (cfg.modResults.contents.includes(PINNED_TSBGFETCH)) return cfg;
+    cfg.modResults.contents += `
+
+// Injected by app.config.ts (withPinnedTsBackgroundFetch): force the locally
+// vendored tsbackgroundfetch version so gradle never enumerates versions from
+// the flaky jitpack.io metadata endpoint.
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force '${PINNED_TSBGFETCH}'
+        }
+    }
+}
+`;
+    return cfg;
+  });
 
 // Harden dependency resolution against slow/flaky maven hosts. Transistorsoft's
 // `tsbackgroundfetch` is served from jitpack.io, which intermittently answers its
@@ -124,9 +157,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
   ],
   };
-  // Longer maven HTTP timeouts apply to every build (jitpack flake can bite any
-  // build that resolves the Transistorsoft deps — harmless elsewhere).
-  const hardened = withLongHttpTimeouts(base) as ExpoConfig;
+  // Pin tsbackgroundfetch to the local AAR (kills the jitpack version-listing) and
+  // keep the longer maven HTTP timeouts as belt-and-suspenders. Both are harmless
+  // on every build.
+  const hardened = withLongHttpTimeouts(
+    withPinnedTsBackgroundFetch(base),
+  ) as ExpoConfig;
   // Only the 'trial' profile builds the standalone DEBUG APK (unlicensed Transistorsoft).
   return process.env.EAS_BUILD_PROFILE === 'trial'
     ? (withBundleInDebug(hardened) as ExpoConfig)
