@@ -10,15 +10,15 @@ import { useCallback, useEffect, useState } from 'react';
 // validation construct — production ships ONE engine, not the toggle.
 export type BgEngine = 'expo' | 'tsbg';
 
-// EXPO-ONLY trial build (2026-06-15): the Transistorsoft native modules are excluded from
-// this build, so the engine is HARD-LOCKED to 'expo'. This overrides any value a device may
-// have saved from the earlier dual-engine build — without it, a phone with 'tsbg' stored
-// would try to start a native module that isn't present and crash. Flip EXPO_ONLY back to
-// false (and restore TS autolinking + plugins) to resume the dual-engine A/B.
-export const EXPO_ONLY = true;
+// EXPO_ONLY hard-locks the engine to 'expo' (used for the expo-only build that proved the
+// free path can't track screen-off). Set FALSE here to validate the Transistorsoft engine
+// ("positive positive") — TS native modules are linked again, so it's safe to select 'tsbg'.
+export const EXPO_ONLY = false;
 
 const KEY = 'rail3.bgEngine';
-let cached: BgEngine = 'expo';
+// Default 'tsbg' for the Transistorsoft validation build so a fresh install tests TS without
+// needing the rider to toggle. The Home toggle is still available to A/B against expo.
+let cached: BgEngine = 'tsbg';
 
 export function getBgEngineSync(): BgEngine {
   return EXPO_ONLY ? 'expo' : cached;

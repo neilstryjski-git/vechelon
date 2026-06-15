@@ -3,15 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "main": "index.ts",
-  "comment_autolinking": "EXPO-ONLY trial build (2026-06-15): exclude the Transistorsoft native modules from autolinking so they are NOT compiled in — this is what removes the jitpack/Cloudflare dependency entirely (just dropping the config plugins is not enough; autolinking would still pull them). Remove this exclude (+ restore plugins in app.config.ts + flip EXPO_ONLY=false) to resume the dual-engine A/B.",
-  "expo": {
-    "autolinking": {
-      "exclude": [
-        "react-native-background-geolocation",
-        "react-native-background-fetch"
-      ]
-    }
-  },
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo run:android",

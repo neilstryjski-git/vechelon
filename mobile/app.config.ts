@@ -136,12 +136,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         isAndroidForegroundServiceEnabled: true,
       },
     ],
-    // RC4 EXPO-ONLY trial (2026-06-15): the Transistorsoft plugins
-    // ('react-native-background-geolocation' / 'react-native-background-fetch') are REMOVED
-    // here AND excluded from autolinking (package.json expo.autolinking.exclude). This makes
-    // the build the pure free expo-location path with ZERO jitpack/Cloudflare dependency, to
-    // test whether expo-location + the FGS-decoupling fix sustains background on its own. Put
-    // them back (here + un-exclude in package.json + flip EXPO_ONLY=false) to resume the A/B.
+    // RC4 (engine-swap trial) — Transistorsoft Background Geolocation. The expo-only walk
+    // PROVED expo-location can't stream with the screen off (24-min dead on Unrestricted
+    // battery); these plugins are RESTORED to validate the TS engine ("positive positive")
+    // before the $399 buy. FREE in this debug/trial build — no license key. The plugins add
+    // the maven repo + manifest entries (FGS location type) at prebuild. jitpack flake is
+    // handled by withPinnedTsBackgroundFetch (force concrete version, never query jitpack).
+    'react-native-background-geolocation',
+    'react-native-background-fetch',
     [
       // Pin play-services-location to 21.x so bg-geo selects the matching
       // tslocationmanager-v21 AAR (its default of 20.0.0 picks the non-v21 artifact and
