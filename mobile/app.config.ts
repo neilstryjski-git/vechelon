@@ -77,6 +77,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // the maven repo + manifest entries (FGS location type, etc.) at prebuild.
     'react-native-background-geolocation',
     'react-native-background-fetch',
+    [
+      // Pin play-services-location to 21.x so bg-geo selects the matching
+      // tslocationmanager-v21 AAR (its default of 20.0.0 picks the non-v21 artifact and
+      // clashes with the 21.x play-services Expo 52 / RN 0.76 already ship → gradle fail).
+      'expo-gradle-ext-vars',
+      {
+        googlePlayServicesLocationVersion: '21.3.0',
+        // Align bg-geo's library module to the app's SDK levels (its defaults are
+        // compileSdk 31 — too low for the FOREGROUND_SERVICE_LOCATION API-34 surface).
+        compileSdkVersion: 35,
+        targetSdkVersion: 34,
+        minSdkVersion: 24,
+      },
+    ],
   ],
   };
   // Only the 'trial' profile builds the standalone DEBUG APK (unlicensed Transistorsoft).
