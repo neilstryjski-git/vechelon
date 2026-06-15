@@ -80,7 +80,7 @@ TaskManager.defineTask(RAIL3_BG_LOCATION_TASK, async ({ data, error }) => {
 // (rail3_broadcast_tenant_send → tenant member); getSession refreshes an expired
 // one — load-bearing because a ride can outlive the 1-hour access token.
 // Returns true if the POST went out, false if there was no token or it threw.
-async function restBroadcast(rideId: string, payload: Record<string, unknown>): Promise<boolean> {
+export async function restBroadcast(rideId: string, payload: Record<string, unknown>): Promise<boolean> {
   const { data: s } = await supabase.auth.getSession();
   const token = s.session?.access_token;
   if (!token) return false;

@@ -304,3 +304,29 @@ the FGS behavior, and exactly our accepted design (sender stays live to the flee
 rider's OWN map view may be stale until reopen).
 
 tsc clean except pre-existing deepLinkAuth.ts ParsedURL errors.
+
+## RC4 — engine swap to Transistorsoft Background Geolocation (FREE debug trial) (2026-06-14)
+
+RC3 proved the FGS could be started legally (bg_start ok:true) but Android Doze still BATCHED
+expo-location's updates (saffron + 30ab walks: wake-time bursts, ~1 fix/min, not a live 5s
+stream). Research confirmed this is a documented, unfixed expo-location limitation; Garmin /
+Life360 / Strava-Beacon class apps use Transistorsoft's native SDK. Neil's RWGPS-vs-Garmin
+observation reframed it: recording tolerates batching, live broadcast does not — and Garmin
+(live) streams regardless of battery setting because its native engine resists Doze.
+
+- Added react-native-background-geolocation@4.19.4 + react-native-background-fetch@4.2.8
+  (the Expo SDK-52-compatible 4.x line; the latest 5.x targets SDK 53+ / config-plugins >=10).
+- mobile/src/lib/bgGeo.ts: thin wrapper — onLocation (registered once, swappable handler ref) →
+  caller broadcasts; ready() with HIGH accuracy, 5s interval, disableElasticity + disableStopDetection
+  (steady cadence, no false stationary gaps), foregroundService, debug:true (audible chirp per fix
+  for the trial). changePace(true) on start to force continuous streaming.
+- useFleetPositions: when backgroundReady, the Transistorsoft engine replaces BOTH the expo
+  foreground watch (early-returns) and the RC3 FGS handoff — onLocation → SenderStateTracker →
+  OUR restBroadcast + gps_ping sink (src:'tsbg'). Transport + §4.1 + instrumentation unchanged.
+- app.config.ts: bg-geo + bg-fetch config plugins (no license key — debug runs unlicensed).
+  Inline withBundleInDebug plugin (gated to EAS_BUILD_PROFILE=trial) injects bundleInDebug=true
+  so the DEBUG-variant APK embeds JS and runs standalone (no Metro tether) for a real walk.
+- eas.json: new "trial" profile (buildType apk, gradleCommand :app:assembleDebug, dev-client off).
+
+Verified: prebuild injects bundleInDebug=true; bg-geo manifest entries present; tsc clean
+(only pre-existing deepLinkAuth.ts). The $399 Starter license is needed ONLY for a release build.

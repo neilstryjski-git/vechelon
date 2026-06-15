@@ -6,11 +6,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
-import {
-  startRail3BackgroundLocation,
-  stopRail3BackgroundLocation,
-  sendDormantPing,
-} from '../lib/backgroundLocation';
+import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
+import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -208,7 +205,11 @@ export function useFleetPositions(
   }, [channel]);
 
   // Publish: watch the device position in the foreground and broadcast pings.
+  // RC4: when backgroundReady, the Transistorsoft engine (below) owns location for BOTH
+  // foreground and background, so this expo-location path stands down to avoid double-send.
+  // It remains the path for foreground-only riders (no "Allow all the time").
   useEffect(() => {
+    if (backgroundReady) return;
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -302,25 +303,38 @@ export function useFleetPositions(
       sub?.remove();
       if (heartbeat) clearInterval(heartbeat);
     };
-  }, [channel, status, rideId, myRiderId, thresholds]);
+  }, [channel, status, rideId, myRiderId, thresholds, backgroundReady]);
 
-  // RC3 (Option A) — start the foreground-service location stream WHILE FOREGROUND, at
-  // the start of tracking, and keep it running for the WHOLE ride. Android 12+ refuses to
-  // START an FGS once the app is already backgrounded (the exact rejection the field walk's
-  // `bg_start ok:false` log captured), so the old "start it at screen-lock" handoff could
-  // never have worked. Started here — the app IS foregrounded when a ride is joined — it
-  // legally keeps delivering location across the lock (persistent notification for the ride,
-  // mandatory on modern Android). The task broadcasts ONLY while backgrounded (guarded in
-  // the task), so it never doubles with the foreground socket path above. Stopped when the
-  // rider leaves the ride / the channel drops. start/stop are idempotent, so re-mounts are
-  // harmless.
+  // RC4 (Option A, engine swap) — Transistorsoft Background Geolocation owns location for
+  // the WHOLE ride when background tracking is active. RC3 proved expo-location's FGS could
+  // be *started* legally, but Android Doze still BATCHED its updates (saffron/30ab walks:
+  // wake-time bursts, not a live stream — a documented, unfixed expo limitation). This is the
+  // Garmin/Life360-class native engine that streams through Doze. We keep OUR transport (REST
+  // broadcast + sink), so receivers/instrumentation are unchanged; this just replaces the
+  // location SOURCE. Gated on backgroundReady; the foreground expo path (above) yields to it.
+  // Started while foregrounded at ride join, stopped on leave. FREE in this debug/trial build
+  // (no license); a release build needs the $399 Starter key.
   useEffect(() => {
     if (!backgroundReady || status !== 'SUBSCRIBED' || !rideId || !myRiderId) return;
-    void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
+    // Sender-half state machine, fresh per (ride, thresholds) — same as the foreground path.
+    const tracker = new SenderStateTracker(thresholds);
+    let last: LatLng | null = null;
+    void startBgGeo((fix) => {
+      const coords = { lat: fix.lat, lng: fix.lng };
+      setMyCoords(coords);
+      const dist = last ? haversineDistanceM(last, coords) : Infinity;
+      last = coords;
+      const state = tracker.sample({ distanceFromLastM: dist, atMs: fix.ts });
+      // OUR transport (REST broadcast on the rail3 topic) + the same sink, so receivers
+      // and instrumentation are unchanged. src:'tsbg' separates Transistorsoft pings in
+      // the sink so a walk's cadence is directly comparable to the old fg/bg streams.
+      void restBroadcast(rideId, { riderId: myRiderId, state, lat: coords.lat, lng: coords.lng, ts: fix.ts });
+      void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
+    });
     return () => {
-      void stopRail3BackgroundLocation();
+      void stopBgGeo();
     };
-  }, [backgroundReady, status, rideId, myRiderId]);
+  }, [backgroundReady, status, rideId, myRiderId, thresholds]);
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,

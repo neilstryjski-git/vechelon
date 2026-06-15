@@ -1,4 +1,23 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
+import { withAppBuildGradle, type ConfigPlugin } from 'expo/config-plugins';
+
+// Trial-build helper: force `bundleInDebug = true` so a DEBUG-variant APK embeds the JS
+// bundle and runs standalone (no Metro tether) — needed because Transistorsoft's free
+// (unlicensed) mode only runs in a DEBUG build, but we still want a walk-able field APK.
+// Gated to the 'trial' EAS profile so normal dev/preview/release builds are untouched.
+const withBundleInDebug: ConfigPlugin = (config) =>
+  withAppBuildGradle(config, (cfg) => {
+    if (
+      cfg.modResults.language === 'groovy' &&
+      !cfg.modResults.contents.includes('bundleInDebug')
+    ) {
+      cfg.modResults.contents = cfg.modResults.contents.replace(
+        /react\s*\{/,
+        'react {\n    bundleInDebug = true',
+      );
+    }
+    return cfg;
+  });
 
 // Dynamic config layered over app.json (W172). Two additions:
 //
@@ -12,7 +31,8 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 // 2. expo-location plugin — foreground "While using the app" permission for
 //    live position pings on the fleet map. Background-mode permissions land
 //    with W176/W179 (Foreground Service explainer / background GPS validation).
-export default ({ config }: ConfigContext): ExpoConfig => ({
+export default ({ config }: ConfigContext): ExpoConfig => {
+  const base: ExpoConfig = {
   ...(config as ExpoConfig),
   // Build fingerprint for remote build identification (staging measurement sink).
   // EAS sets these env vars during the build; baked into extra so the running app
@@ -50,5 +70,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         isAndroidForegroundServiceEnabled: true,
       },
     ],
+    // RC4 (engine swap trial) — Transistorsoft Background Geolocation. Garmin-class
+    // continuous live tracking that survives Doze where expo-location batches. NO
+    // license key here: DEBUG builds run the full SDK unlicensed ("try before you
+    // buy"); only a RELEASE build needs the $399 Starter key. The config plugin adds
+    // the maven repo + manifest entries (FGS location type, etc.) at prebuild.
+    'react-native-background-geolocation',
+    'react-native-background-fetch',
   ],
-});
+  };
+  // Only the 'trial' profile builds the standalone DEBUG APK (unlicensed Transistorsoft).
+  return process.env.EAS_BUILD_PROFILE === 'trial'
+    ? (withBundleInDebug(base) as ExpoConfig)
+    : base;
+};
