@@ -190,6 +190,9 @@
       content: 'SHIPPED ✓';
       background: var(--complete); color: #000;
     }
+    .value-set-card.next-major {
+      overflow: visible;
+    }
     .value-set-card.next-major::before {
       content: 'NEXT MAJOR RELEASE';
       background: var(--v2); color: #000;
@@ -458,8 +461,8 @@
       <div class="value-grid">
         <div class="value-pick">
           <div class="pick-tag" style="--tag-color: var(--v2)">Android Theme</div>
-          <div class="pick-title">Android Tactical — PoC</div>
-          <div class="pick-desc">Proof of concept for live tactical ride tracking on Android. Real-time fleet map, Support Beacon, and Captain controls on the road. Gate: validate core GPS and real-time infra before full build.</div>
+          <div class="pick-title">Android Tactical — In Field Test</div>
+          <div class="pick-desc">Live tactical ride tracking on Android — real-time fleet map, Support Beacon, Captain controls, and ad-hoc rides — now in field test with Racer Sportif, paired with a web Race Control view to follow the fleet from HQ. Field-hardening background GPS and real-time scaling before broad rollout.</div>
         </div>
       </div>
     </div>
@@ -510,7 +513,7 @@
       <div class="ring-card next-up" style="--ring-color: var(--v2);">
         <div class="ring-rail">Rail 3a</div>
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="0"/></svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="75"/></svg>
           <div class="ring-icon">
             <!-- Android robot — CC 3.0 Attribution, Google Inc. -->
             <svg viewBox="0 0 24 24" fill="#38c6f5">
@@ -526,22 +529,27 @@
               <path d="M7.03 2.68L5.61 1.27c-.2-.2-.51-.2-.71 0s-.2.51 0 .71l1.42 1.41c.2.2.51.2.71 0s.2-.51 0-.71zM16.97 2.68l1.42-1.41c.2-.2.51-.2.71 0s.2.51 0 .71l-1.42 1.41c-.2.2-.51.2-.71 0s-.2-.51 0-.71z"/>
             </svg>
           </div>
-          <div class="ring-pct">—</div>
+          <div class="ring-pct">75%</div>
         </div>
         <div class="ring-info">
           <div class="ring-version">v2.0</div>
           <div class="ring-title">Android Tactical</div>
-          <div class="ring-subtitle">PoC — Live ride goes mobile</div>
-          <div class="ring-desc">Proof of concept: validate real-time fleet tracking, Support Beacon, and Captain controls on Android before committing to the full build.</div>
+          <div class="ring-subtitle">PoC — In field test now</div>
+          <div class="ring-desc">The live ride goes mobile. Real-time fleet tracking, Support Beacon, and Captain controls in the saddle — now in field test with Racer Sportif riders on the road.</div>
           <ul class="ring-features">
-            <li class="locked"><i class="fi fi-lock">⊘</i>Live fleet tracking map</li>
-            <li class="locked"><i class="fi fi-lock">⊘</i>Support Beacon — one tap alert</li>
-            <li class="locked"><i class="fi fi-lock">⊘</i>Captain mobile controls</li>
-            <li class="locked"><i class="fi fi-lock">⊘</i>Rider states & edge indicators</li>
-            <li class="locked"><i class="fi fi-lock">⊘</i>Ad hoc ride creation on road</li>
+            <li class="done"><i class="fi fi-check">✓</i>Live fleet tracking map</li>
+            <li class="done"><i class="fi fi-check">✓</i>Support Beacon — one tap alert</li>
+            <li class="done"><i class="fi fi-check">✓</i>Captain mobile controls</li>
+            <li class="done"><i class="fi fi-check">✓</i>Rider status & off-screen alerts</li>
+            <li class="done"><i class="fi fi-check">✓</i>Ad hoc ride creation on road</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>Web Race Control — follow the fleet from HQ</li>
+            <li class="inbuild"><i class="fi fi-build">◐</i>All-ride background tracking — phone in your pocket</li>
           </ul>
+          <div class="ring-footnote" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); line-height: 1.5;">
+            Built and on the road with Racer Sportif riders — refining the last details before we open it to every club.
+          </div>
         </div>
-        <span class="ring-status-badge badge-next">Next Up — PoC</span>
+        <span class="ring-status-badge badge-live">In Field Test</span>
       </div>
 
       <!-- v2.1 iOS -->
@@ -574,7 +582,7 @@
       <!-- v3.0 Multi-Club — Next Up -->
       <div class="ring-card build" style="--ring-color: var(--v3);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="30"/></svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="60"/></svg>
           <div class="ring-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ring-color)">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -583,25 +591,25 @@
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
           </div>
-          <div class="ring-pct">30%</div>
+          <div class="ring-pct">60%</div>
         </div>
         <div class="ring-info">
           <div class="ring-version">v3.0</div>
           <div class="ring-title">Multi-Club</div>
-          <div class="ring-subtitle">Phase 1 foundations live</div>
-          <div class="ring-desc">Multi-tenancy turned on. A second test tenant runs alongside Racer Sportif on the same infrastructure with full data sovereignty. Self-serve onboarding and multi-membership scoped for the full release.</div>
+          <div class="ring-subtitle">Phase 1 Complete</div>
+          <div class="ring-desc">Three live tenants — Racer Sportif, Bikes &amp; Beers, and Lakeside Wheelers — running on the same infrastructure with full data sovereignty. Phase 2 brings self-serve onboarding and multi-membership.</div>
           <ul class="ring-features">
             <li class="done"><i class="fi fi-check">✓</i>Independent data isolation per club</li>
             <li class="done"><i class="fi fi-check">✓</i>Cross-club email validation</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Platform Admin role (admin.vechelon.ca)</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Bikes &amp; Beers test tenant</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Subdomain routing (clubname.vechelon.ca)</li>
+            <li class="done"><i class="fi fi-check">✓</i>Platform Admin role (admin.vechelon.ca)</li>
+            <li class="done"><i class="fi fi-check">✓</i>Bikes &amp; Beers &amp; Lakeside Wheelers tenants</li>
+            <li class="done"><i class="fi fi-check">✓</i>Subdomain routing (clubname.vechelon.ca)</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Self-serve onboarding (Phase 2)</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Multi-membership support (Phase 2)</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Self-serve branding portal (Phase 2)</li>
           </ul>
         </div>
-        <span class="ring-status-badge badge-build">In Build</span>
+        <span class="ring-status-badge badge-live">Phase 1 Complete</span>
       </div>
 
       <!-- v4.0 Ride Depth -->
@@ -635,23 +643,23 @@
       <!-- v5.0 Club Growth -->
       <div class="ring-card build" style="--ring-color: var(--v5);">
         <div class="ring-wrap">
-          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="15"/></svg>
+          <svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-progress" cx="60" cy="60" r="54" data-pct="40"/></svg>
           <div class="ring-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ring-color)">
               <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
               <polyline points="17 6 23 6 23 12"></polyline>
             </svg>
           </div>
-          <div class="ring-pct">15%</div>
+          <div class="ring-pct">40%</div>
         </div>
         <div class="ring-info">
           <div class="ring-version">v5.0</div>
           <div class="ring-title">Club Growth</div>
           <div class="ring-subtitle">Riders shape the club</div>
-          <div class="ring-desc">Voice of Customer feedback loop, organic-reach Rider Share, member-uploaded routes, ride history on every profile.</div>
+          <div class="ring-desc">Voice of Customer feedback loop and Rider Share viral growth loop shipped. Member-uploaded routes, Observer role, and ride history profiles scoped for next phase.</div>
           <ul class="ring-features">
-            <li class="inbuild"><i class="fi fi-build">◐</i>Voice of Customer (Phase 1 shipped)</li>
-            <li class="inbuild"><i class="fi fi-build">◐</i>Rider Share — viral growth loop</li>
+            <li class="done"><i class="fi fi-check">✓</i>Voice of Customer (schema, GitHub, label set)</li>
+            <li class="done"><i class="fi fi-check">✓</i>Rider Share — viral growth loop</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Observer role</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Member GPX uploads</li>
             <li class="scoped"><i class="fi fi-scope">·</i>Ride history on profiles</li>
@@ -695,7 +703,7 @@
   <!-- Footer -->
   <footer>
     <p>Built in the open. <a href="https://vechelon.ca">vechelon.ca</a></p>
-    <p>Last updated May 2026 · v1.6.0</p>
+    <p>Last updated June 2026 · v1.7.0</p>
   </footer>
 
 </div>
