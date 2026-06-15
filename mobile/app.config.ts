@@ -1,19 +1,23 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 import { withAppBuildGradle, type ConfigPlugin } from 'expo/config-plugins';
 
-// Trial-build helper: force `bundleInDebug = true` so a DEBUG-variant APK embeds the JS
-// bundle and runs standalone (no Metro tether) — needed because Transistorsoft's free
-// (unlicensed) mode only runs in a DEBUG build, but we still want a walk-able field APK.
+// Trial-build helper: make the DEBUG-variant APK embed the JS bundle so it runs standalone
+// (no Metro tether) — needed because Transistorsoft's free (unlicensed) mode only runs in a
+// DEBUG build, but we still want a walk-able field APK. RN 0.76's react-native gradle plugin
+// has NO `bundleInDebug` property (that fails config: "Could not set unknown property
+// 'bundleInDebug'"). The correct lever is `debuggableVariants`: variants listed there SKIP
+// bundling (expect Metro); default is ["debug"]. Setting it to [] makes the debug variant
+// bundle JS while staying a debug build (BuildConfig.DEBUG=true → Transistorsoft free).
 // Gated to the 'trial' EAS profile so normal dev/preview/release builds are untouched.
 const withBundleInDebug: ConfigPlugin = (config) =>
   withAppBuildGradle(config, (cfg) => {
     if (
       cfg.modResults.language === 'groovy' &&
-      !cfg.modResults.contents.includes('bundleInDebug')
+      !cfg.modResults.contents.includes('debuggableVariants = []')
     ) {
       cfg.modResults.contents = cfg.modResults.contents.replace(
         /react\s*\{/,
-        'react {\n    bundleInDebug = true',
+        'react {\n    debuggableVariants = []',
       );
     }
     return cfg;
