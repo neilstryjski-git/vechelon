@@ -14,6 +14,7 @@ import {
 } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
 import type { BgEngine } from '../lib/bgEngine';
+import { chirp } from '../lib/chirp';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -147,8 +148,9 @@ export function useFleetPositions(
   backgroundReady = false,
   // Dual-engine TRIAL selector (debug A/B): which background-location engine drives this
   // ride — 'expo' (foreground watch + FGS task) or 'tsbg' (Transistorsoft). Only the
-  // selected engine broadcasts; both carry the channel-status-decoupling fix.
-  bgEngine: BgEngine = 'tsbg',
+  // selected engine broadcasts; both carry the channel-status-decoupling fix. Defaults to
+  // 'expo' (the EXPO-ONLY trial build hard-locks it there; Transistorsoft is excluded).
+  bgEngine: BgEngine = 'expo',
 ): {
   fleet: FleetParticipant[];
   myCoords: LatLng | null;
@@ -264,12 +266,16 @@ export function useFleetPositions(
         // is measurable from the sender, not just flaky receivers. Both this send AND
         // this sink write need a valid token — a gap = the token refresh failed.
         void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'fg', state } });
+        // TRIAL aid: audible beep on each foreground ping (the chirp Neil used to troubleshoot).
+        void chirp();
       };
 
       let lastCallbackAtMs = 0;
       sub = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.Balanced,
+          // BestForNavigation (RC4 expo-only trial): give the FREE engine its best shot at
+          // sustaining a live stream so we don't under-sell it vs Transistorsoft (was Balanced).
+          accuracy: Location.Accuracy.BestForNavigation,
           timeInterval: PING_INTERVAL_MS,
           // 0, NOT a distance filter (review finding): a distance filter
           // suppresses OS callbacks while stationary — exactly the condition

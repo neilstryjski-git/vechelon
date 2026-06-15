@@ -15,7 +15,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
 import { TENANT_SLUG } from '../lib/env';
 import AdHocCreator from '../components/AdHocCreator';
-import { useBgEngine } from '../lib/bgEngine';
+import { useBgEngine, EXPO_ONLY } from '../lib/bgEngine';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
 interface ActiveRide {
@@ -110,25 +110,28 @@ const HomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Dual-engine TRIAL toggle (debug A/B). Pick the background-location engine, join a
-          ride, and walk; flip and repeat to compare. Remove for production. */}
-      <View style={styles.engineRow}>
-        <Text style={styles.engineLabel}>BG engine</Text>
-        {(['expo', 'tsbg'] as const).map((e) => (
-          <TouchableOpacity
-            key={e}
-            style={[
-              styles.enginePill,
-              bgEngine === e && { backgroundColor: theme.primaryColor, borderColor: theme.primaryColor },
-            ]}
-            onPress={() => setBgEngine(e)}
-          >
-            <Text style={[styles.enginePillText, bgEngine === e && { color: '#FFFFFF' }]}>
-              {e === 'expo' ? 'expo-location' : 'Transistorsoft'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Dual-engine TRIAL toggle (debug A/B). Hidden in the EXPO-ONLY build — the engine is
+          hard-locked to expo-location there (Transistorsoft is excluded). Pick the engine,
+          join a ride, and walk; flip and repeat to compare. Remove for production. */}
+      {!EXPO_ONLY && (
+        <View style={styles.engineRow}>
+          <Text style={styles.engineLabel}>BG engine</Text>
+          {(['expo', 'tsbg'] as const).map((e) => (
+            <TouchableOpacity
+              key={e}
+              style={[
+                styles.enginePill,
+                bgEngine === e && { backgroundColor: theme.primaryColor, borderColor: theme.primaryColor },
+              ]}
+              onPress={() => setBgEngine(e)}
+            >
+              <Text style={[styles.enginePillText, bgEngine === e && { color: '#FFFFFF' }]}>
+                {e === 'expo' ? 'expo-location' : 'Transistorsoft'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>Live rides</Text>
       <FlatList

@@ -1,8 +1,24 @@
-import BackgroundGeolocation, {
-  Location,
-} from 'react-native-background-geolocation';
+import type BackgroundGeolocationType from 'react-native-background-geolocation';
+import type { Location } from 'react-native-background-geolocation';
 
 // RC4 engine-swap TRIAL — Transistorsoft Background Geolocation.
+//
+// LAZY NATIVE BINDING (expo-only build, 2026-06-15): the Transistorsoft native modules are
+// EXCLUDED from autolinking in the expo-only trial build, so the native module is absent.
+// This file is still imported (useFleetPositions imports start/stopBgGeo), so it must NOT
+// touch the native module at load time — a top-level `import BackgroundGeolocation from ...`
+// + the module-load `onLocation` registration would throw the instant the bundle evaluates.
+// We therefore `require()` the SDK lazily inside startBgGeo (only the 'tsbg' engine reaches
+// it), and register onLocation there. In an expo-only build startBgGeo is never called, so
+// the native module is never touched and the app starts clean.
+let BackgroundGeolocation: typeof BackgroundGeolocationType | null = null;
+function getBgGeo(): typeof BackgroundGeolocationType {
+  if (!BackgroundGeolocation) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    BackgroundGeolocation = require('react-native-background-geolocation').default;
+  }
+  return BackgroundGeolocation as typeof BackgroundGeolocationType;
+}
 //
 // WHY: expo-location structurally batches background location under Android Doze (the
 // saffron/30ab walks: a wake-time burst, not a live 5s stream — a documented, unfixed
@@ -21,36 +37,40 @@ export interface BgFix {
   ts: number; // device clock at receipt (we time on client_ts, never server ingest)
 }
 
-// Registered ONCE at module load (like a TaskManager task). onLocation persists for the
-// process, so we route it through a swappable ref rather than re-subscribing per ride —
-// re-subscribing would stack listeners (the duplicate-handler bug we saw on the FGS path).
+// onLocation is registered ONCE (the first time tracking starts), then persists for the
+// process — so we route it through a swappable ref rather than re-subscribing per ride
+// (re-subscribing would stack listeners: the duplicate-handler bug we saw on the FGS path).
 let currentHandler: ((fix: BgFix) => void) | null = null;
 let configured = false;
-
-BackgroundGeolocation.onLocation(
-  (location: Location) => {
-    currentHandler?.({
-      lat: location.coords.latitude,
-      lng: location.coords.longitude,
-      isMoving: location.is_moving,
-      ts: Date.now(),
-    });
-  },
-  (error) => {
-    console.warn('[Rail3][bgGeo] location error', error);
-  },
-);
+let listenerBound = false;
 
 // Start continuous high-accuracy tracking for a ride. Idempotent: ready() configures once;
 // start()+changePace(true) force the "moving" state so we stream a steady cadence even at a
 // stoplight (otherwise the SDK's stop-detection would pause updates and read as a gap).
 export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
   currentHandler = handler;
+  const BG = getBgGeo();
+  if (!listenerBound) {
+    BG.onLocation(
+      (location: Location) => {
+        currentHandler?.({
+          lat: location.coords.latitude,
+          lng: location.coords.longitude,
+          isMoving: location.is_moving,
+          ts: Date.now(),
+        });
+      },
+      (error) => {
+        console.warn('[Rail3][bgGeo] location error', error);
+      },
+    );
+    listenerBound = true;
+  }
   if (!configured) {
     // v4 (Expo SDK 52-compatible) FLAT config. On Android `foregroundService: true`
     // runs the persistent-notification service that keeps GPS streaming through Doze.
-    await BackgroundGeolocation.ready({
-      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+    await BG.ready({
+      desiredAccuracy: BG.DESIRED_ACCURACY_HIGH,
       distanceFilter: 0, // 0 → time-based on Android via the interval below
       locationUpdateInterval: 5000, // ~match the legacy PING_INTERVAL_MS
       fastestLocationUpdateInterval: 5000,
@@ -75,18 +95,19 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
       // TRIAL aids: audible chirp on each fix so the rider can HEAR it working on a walk,
       // and verbose logs. Debug-only niceties — silence before any release build.
       debug: true,
-      logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
+      logLevel: BG.LOG_LEVEL_VERBOSE,
     });
     configured = true;
   }
-  await BackgroundGeolocation.start();
+  await BG.start();
   // Force the moving state so we get a continuous stream for the trial (vs. the SDK
   // pausing when it decides we're stationary).
-  await BackgroundGeolocation.changePace(true);
+  await BG.changePace(true);
 }
 
 export async function stopBgGeo(): Promise<void> {
   currentHandler = null;
+  if (!BackgroundGeolocation) return; // never started (e.g. expo-only build) — nothing to stop
   try {
     await BackgroundGeolocation.stop();
   } catch (e) {

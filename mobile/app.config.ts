@@ -136,13 +136,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         isAndroidForegroundServiceEnabled: true,
       },
     ],
-    // RC4 (engine swap trial) — Transistorsoft Background Geolocation. Garmin-class
-    // continuous live tracking that survives Doze where expo-location batches. NO
-    // license key here: DEBUG builds run the full SDK unlicensed ("try before you
-    // buy"); only a RELEASE build needs the $399 Starter key. The config plugin adds
-    // the maven repo + manifest entries (FGS location type, etc.) at prebuild.
-    'react-native-background-geolocation',
-    'react-native-background-fetch',
+    // RC4 EXPO-ONLY trial (2026-06-15): the Transistorsoft plugins
+    // ('react-native-background-geolocation' / 'react-native-background-fetch') are REMOVED
+    // here AND excluded from autolinking (package.json expo.autolinking.exclude). This makes
+    // the build the pure free expo-location path with ZERO jitpack/Cloudflare dependency, to
+    // test whether expo-location + the FGS-decoupling fix sustains background on its own. Put
+    // them back (here + un-exclude in package.json + flip EXPO_ONLY=false) to resume the A/B.
     [
       // Pin play-services-location to 21.x so bg-geo selects the matching
       // tslocationmanager-v21 AAR (its default of 20.0.0 picks the non-v21 artifact and

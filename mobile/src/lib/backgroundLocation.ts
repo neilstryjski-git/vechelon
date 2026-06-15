@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
+import { chirp } from './chirp';
 import { rail3RideTopic } from '../hooks/useRideChannel';
 
 // Mirror of useFleetPositions.POSITION_EVENT — inlined to avoid a circular import
@@ -71,6 +72,9 @@ TaskManager.defineTask(RAIL3_BG_LOCATION_TASK, async ({ data, error }) => {
   // `sent:false` here = the FGS task ran but had no token / the POST failed (distinct from
   // the task never running at all — that shows as an absence of these rows).
   void logMeasurement({ rideId: ctx.rideId, kind: 'gps_ping', payload: { src: 'bg', sent } });
+  // TRIAL aid: audible beep on each BACKGROUND ping so the rider can hear the FGS still
+  // streaming while the screen is locked (best-effort from a headless task — see chirp.ts).
+  void chirp();
 });
 
 // Shared REST broadcast on the rail3 ride topic. REST (HTTP), NOT the websocket —
@@ -146,7 +150,9 @@ export async function startRail3BackgroundLocation(ctx: BgLocationCtx): Promise<
   // service even started.
   try {
     await Location.startLocationUpdatesAsync(RAIL3_BG_LOCATION_TASK, {
-      accuracy: Location.Accuracy.Balanced,
+      // BestForNavigation (RC4 expo-only trial): give the FREE engine its best shot at a live
+      // background stream through Doze so we don't under-sell it vs Transistorsoft (was Balanced).
+      accuracy: Location.Accuracy.BestForNavigation,
       timeInterval: 5000, // matches the foreground PING_INTERVAL_MS
       distanceInterval: 0,
       pausesUpdatesAutomatically: false,

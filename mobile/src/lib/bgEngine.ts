@@ -10,16 +10,22 @@ import { useCallback, useEffect, useState } from 'react';
 // validation construct — production ships ONE engine, not the toggle.
 export type BgEngine = 'expo' | 'tsbg';
 
+// EXPO-ONLY trial build (2026-06-15): the Transistorsoft native modules are excluded from
+// this build, so the engine is HARD-LOCKED to 'expo'. This overrides any value a device may
+// have saved from the earlier dual-engine build — without it, a phone with 'tsbg' stored
+// would try to start a native module that isn't present and crash. Flip EXPO_ONLY back to
+// false (and restore TS autolinking + plugins) to resume the dual-engine A/B.
+export const EXPO_ONLY = true;
+
 const KEY = 'rail3.bgEngine';
-// Default 'expo' so the first walk tests the FREE engine + the fix (answers "is the $399
-// Transistorsoft engine even required?"); flip to 'tsbg' to compare.
 let cached: BgEngine = 'expo';
 
 export function getBgEngineSync(): BgEngine {
-  return cached;
+  return EXPO_ONLY ? 'expo' : cached;
 }
 
 export async function loadBgEngine(): Promise<BgEngine> {
+  if (EXPO_ONLY) return 'expo';
   try {
     const v = await AsyncStorage.getItem(KEY);
     if (v === 'expo' || v === 'tsbg') cached = v;
@@ -30,6 +36,7 @@ export async function loadBgEngine(): Promise<BgEngine> {
 }
 
 export async function setBgEngine(e: BgEngine): Promise<void> {
+  if (EXPO_ONLY) return;
   cached = e;
   try {
     await AsyncStorage.setItem(KEY, e);
@@ -40,11 +47,12 @@ export async function setBgEngine(e: BgEngine): Promise<void> {
 
 // Hook for the debug toggle UI (Home screen).
 export function useBgEngine(): [BgEngine, (e: BgEngine) => void] {
-  const [engine, setEngine] = useState<BgEngine>(cached);
+  const [engine, setEngine] = useState<BgEngine>(getBgEngineSync());
   useEffect(() => {
     void loadBgEngine().then(setEngine);
   }, []);
   const update = useCallback((e: BgEngine) => {
+    if (EXPO_ONLY) return;
     setEngine(e);
     void setBgEngine(e);
   }, []);
