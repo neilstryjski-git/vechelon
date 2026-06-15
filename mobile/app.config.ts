@@ -1,5 +1,32 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
-import { withAppBuildGradle, type ConfigPlugin } from 'expo/config-plugins';
+import {
+  withAppBuildGradle,
+  withGradleProperties,
+  type ConfigPlugin,
+} from 'expo/config-plugins';
+
+// Harden dependency resolution against slow/flaky maven hosts. Transistorsoft's
+// `tsbackgroundfetch` is served from jitpack.io, which intermittently answers its
+// maven-metadata.xml slower than gradle's DEFAULT 30s HTTP socket timeout — that
+// "Read timed out" killed two billed EAS builds (b83e86cf, e12e23d9) at ~3m20s
+// even though the source compiled the correct commit. Raising the connect/socket
+// timeouts to 120s lets a slow jitpack respond instead of aborting the build.
+const withLongHttpTimeouts: ConfigPlugin = (config) =>
+  withGradleProperties(config, (cfg) => {
+    const set = (key: string, value: string) => {
+      const existing = cfg.modResults.find(
+        (i) => i.type === 'property' && i.key === key,
+      );
+      if (existing && existing.type === 'property') {
+        existing.value = value;
+      } else {
+        cfg.modResults.push({ type: 'property', key, value });
+      }
+    };
+    set('systemProp.org.gradle.internal.http.connectionTimeout', '120000');
+    set('systemProp.org.gradle.internal.http.socketTimeout', '120000');
+    return cfg;
+  });
 
 // Trial-build helper: make the DEBUG-variant APK embed the JS bundle so it runs standalone
 // (no Metro tether) — needed because Transistorsoft's free (unlicensed) mode only runs in a
@@ -97,8 +124,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
   ],
   };
+  // Longer maven HTTP timeouts apply to every build (jitpack flake can bite any
+  // build that resolves the Transistorsoft deps — harmless elsewhere).
+  const hardened = withLongHttpTimeouts(base) as ExpoConfig;
   // Only the 'trial' profile builds the standalone DEBUG APK (unlicensed Transistorsoft).
   return process.env.EAS_BUILD_PROFILE === 'trial'
-    ? (withBundleInDebug(base) as ExpoConfig)
-    : base;
+    ? (withBundleInDebug(hardened) as ExpoConfig)
+    : hardened;
 };
