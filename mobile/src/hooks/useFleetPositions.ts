@@ -314,8 +314,17 @@ export function useFleetPositions(
   // location SOURCE. Gated on backgroundReady; the foreground expo path (above) yields to it.
   // Started while foregrounded at ride join, stopped on leave. FREE in this debug/trial build
   // (no license); a release build needs the $399 Starter key.
+  //
+  // CRITICAL (field-test bug, 2026-06-15): do NOT gate this on the realtime channel `status`.
+  // On screen-lock the websocket channel drops (status leaves 'SUBSCRIBED' → the "channel denied"
+  // message), and if this effect depended on status it would re-run and TEAR DOWN the foreground
+  // service (stopBgGeo) at exactly the moment we need it — killing the FGS (notification vanishes)
+  // and stopping all location ~1–2 min after lock. The two are independent: location broadcasts go
+  // over REST (restBroadcast), which never needs the websocket channel. So the FGS runs for the
+  // whole ride regardless of channel state; it stops only on leaving the ride / losing background
+  // permission / unmount.
   useEffect(() => {
-    if (!backgroundReady || status !== 'SUBSCRIBED' || !rideId || !myRiderId) return;
+    if (!backgroundReady || !rideId || !myRiderId) return;
     // Sender-half state machine, fresh per (ride, thresholds) — same as the foreground path.
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;
@@ -334,7 +343,7 @@ export function useFleetPositions(
     return () => {
       void stopBgGeo();
     };
-  }, [backgroundReady, status, rideId, myRiderId, thresholds]);
+  }, [backgroundReady, rideId, myRiderId, thresholds]);
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,
