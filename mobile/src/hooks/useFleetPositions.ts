@@ -6,8 +6,14 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
-import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
+import {
+  sendDormantPing,
+  restBroadcast,
+  startRail3BackgroundLocation,
+  stopRail3BackgroundLocation,
+} from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
+import type { BgEngine } from '../lib/bgEngine';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -139,6 +145,10 @@ export function useFleetPositions(
   // below so we never request background permission or start the foreground
   // service inline (that staging-only shortcut is removed for promotion).
   backgroundReady = false,
+  // Dual-engine TRIAL selector (debug A/B): which background-location engine drives this
+  // ride — 'expo' (foreground watch + FGS task) or 'tsbg' (Transistorsoft). Only the
+  // selected engine broadcasts; both carry the channel-status-decoupling fix.
+  bgEngine: BgEngine = 'tsbg',
 ): {
   fleet: FleetParticipant[];
   myCoords: LatLng | null;
@@ -205,11 +215,13 @@ export function useFleetPositions(
   }, [channel]);
 
   // Publish: watch the device position in the foreground and broadcast pings.
-  // RC4: when backgroundReady, the Transistorsoft engine (below) owns location for BOTH
-  // foreground and background, so this expo-location path stands down to avoid double-send.
-  // It remains the path for foreground-only riders (no "Allow all the time").
+  // RC4: this expo-location FOREGROUND watch (src:'fg') runs UNLESS the Transistorsoft engine
+  // is the selected background engine AND background tracking is active — in which case tsbg
+  // owns foreground+background and this would double-send. For the 'expo' engine it stays on
+  // (handles foreground; the expo FGS task handles background). Also the path for
+  // foreground-only riders (no "Allow all the time").
   useEffect(() => {
-    if (backgroundReady) return;
+    if (backgroundReady && bgEngine === 'tsbg') return;
     if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
     let sub: Location.LocationSubscription | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -303,7 +315,7 @@ export function useFleetPositions(
       sub?.remove();
       if (heartbeat) clearInterval(heartbeat);
     };
-  }, [channel, status, rideId, myRiderId, thresholds, backgroundReady]);
+  }, [channel, status, rideId, myRiderId, thresholds, backgroundReady, bgEngine]);
 
   // RC4 (Option A, engine swap) — Transistorsoft Background Geolocation owns location for
   // the WHOLE ride when background tracking is active. RC3 proved expo-location's FGS could
@@ -325,7 +337,19 @@ export function useFleetPositions(
   // permission / unmount.
   useEffect(() => {
     if (!backgroundReady || !rideId || !myRiderId) return;
-    // Sender-half state machine, fresh per (ride, thresholds) — same as the foreground path.
+
+    if (bgEngine === 'expo') {
+      // EXPO engine: the foreground watch (above) sends 'fg'; this FGS TaskManager task sends
+      // 'bg' while backgrounded (AppState-gated so the two never overlap). Started in the
+      // foreground, runs the whole ride, decoupled from channel status (the field-test fix).
+      void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
+      return () => {
+        void stopRail3BackgroundLocation();
+      };
+    }
+
+    // TSBG engine: Transistorsoft is the unified source (foreground + background), broadcasting
+    // 'tsbg'. Sender-half state machine fresh per (ride, thresholds), same as the fg path.
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;
     void startBgGeo((fix) => {
@@ -343,7 +367,7 @@ export function useFleetPositions(
     return () => {
       void stopBgGeo();
     };
-  }, [backgroundReady, rideId, myRiderId, thresholds]);
+  }, [backgroundReady, rideId, myRiderId, thresholds, bgEngine]);
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,

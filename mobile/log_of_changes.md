@@ -330,3 +330,25 @@ observation reframed it: recording tolerates batching, live broadcast does not �
 
 Verified: prebuild injects bundleInDebug=true; bg-geo manifest entries present; tsc clean
 (only pre-existing deepLinkAuth.ts). The $399 Starter license is needed ONLY for a release build.
+
+## RC4 — dual-engine A/B toggle + the real fix (2026-06-15)
+
+Root cause of the field failures FOUND: the background-location effect in useFleetPositions was
+gated on the realtime channel status==='SUBSCRIBED' (status in guard+deps). On any backgrounding
+(lock OR app-switch) the websocket drops -> status leaves SUBSCRIBED ('channel denied') -> effect
+cleanup ran stopBgGeo()/stopRail3BackgroundLocation() -> tore down the foreground service ->
+notification vanished + all location stopped ~1-2 min after background; foreground re-subscribed ->
+restarted it. NOT battery (Unrestricted was on), NOT motion, NOT token, NOT notification-permission
+(all eliminated on-device). Confirmed both directions by Neil. Our own code was killing the FGS.
+
+- FIX: removed `status` from the bg-engine effect's guard AND deps. The FGS now runs the whole ride
+  on (backgroundReady && rideId && myRiderId), independent of websocket state — broadcasts go over
+  REST and never needed the channel. (Same bug existed in the expo path; both now decoupled.)
+- DUAL-ENGINE TRIAL toggle (debug only): bgEngine.ts (AsyncStorage pref + useBgEngine hook);
+  HomeScreen debug toggle expo<->Transistorsoft; RideMapScreen reads + passes bgEngine to
+  useFleetPositions. 'expo' = fg watch (src:'fg') + FGS task (src:'bg'); 'tsbg' = Transistorsoft
+  unified (src:'tsbg'). Only the selected engine broadcasts (fg-watch yields only when tsbg+ready).
+  Lets us A/B both engines on the same device/walk to answer "is the $399 Transistorsoft engine
+  even required, or does free expo-location + the fix now sustain background?" Default 'expo'.
+
+tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — production ships ONE engine.

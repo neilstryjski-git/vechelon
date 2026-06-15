@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
 import { TENANT_SLUG } from '../lib/env';
 import AdHocCreator from '../components/AdHocCreator';
+import { useBgEngine } from '../lib/bgEngine';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
 interface ActiveRide {
@@ -41,6 +42,8 @@ const HomeScreen: React.FC = () => {
   // ride creators are tenant admins. Show the control only to accounts that
   // can actually use it (PoC captains are seeded as tenant admins).
   const [canCreate, setCanCreate] = useState(false);
+  // Dual-engine TRIAL toggle (debug A/B; remove for production).
+  const [bgEngine, setBgEngine] = useBgEngine();
 
   useEffect(() => {
     let mounted = true;
@@ -105,6 +108,26 @@ const HomeScreen: React.FC = () => {
         >
           <Text style={[styles.signOutText, { color: theme.primaryColor }]}>Sign Out</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Dual-engine TRIAL toggle (debug A/B). Pick the background-location engine, join a
+          ride, and walk; flip and repeat to compare. Remove for production. */}
+      <View style={styles.engineRow}>
+        <Text style={styles.engineLabel}>BG engine</Text>
+        {(['expo', 'tsbg'] as const).map((e) => (
+          <TouchableOpacity
+            key={e}
+            style={[
+              styles.enginePill,
+              bgEngine === e && { backgroundColor: theme.primaryColor, borderColor: theme.primaryColor },
+            ]}
+            onPress={() => setBgEngine(e)}
+          >
+            <Text style={[styles.enginePillText, bgEngine === e && { color: '#FFFFFF' }]}>
+              {e === 'expo' ? 'expo-location' : 'Transistorsoft'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <Text style={styles.sectionTitle}>Live rides</Text>
@@ -184,6 +207,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   empty: { color: '#7A7A7A', fontSize: 13, lineHeight: 19, marginTop: 12 },
+  engineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 8 },
+  engineLabel: {
+    color: '#9A9A9A',
+    fontSize: 11,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginRight: 2,
+  },
+  enginePill: {
+    borderWidth: 1,
+    borderColor: '#3A3A3E',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  enginePillText: { color: '#9A9A9A', fontSize: 12, fontWeight: '700' },
   rideCard: {
     flexDirection: 'row',
     alignItems: 'center',
