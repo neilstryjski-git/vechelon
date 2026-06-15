@@ -131,7 +131,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         // service (persistent notification) are required for Android background
         // location; the service is started/stopped per active ride.
         locationAlwaysAndWhenInUsePermission:
-          'VEcheLOn shares your position with your ride Captain and SAG while a ride is active, even when the app is in the background.',
+          'Vechelon shares your position with your ride Captain and SAG while a ride is active, even when the app is in the background.',
         isAndroidBackgroundLocationEnabled: true,
         isAndroidForegroundServiceEnabled: true,
       },

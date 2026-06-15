@@ -84,12 +84,12 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
       backgroundPermissionRationale: {
         title: 'Keep sharing your position while pocketed?',
         message:
-          'VEcheLOn shares your position with your ride Captain and SAG while a ride is active, even when your screen is locked.',
+          'Vechelon shares your position with your ride Captain and SAG while a ride is active, even when your screen is locked.',
         positiveAction: 'Allow',
         negativeAction: 'Cancel',
       },
       notification: {
-        title: 'VEcheLOn — sharing your position',
+        title: 'Vechelon — sharing your position',
         text: 'Live with your ride Captain while the ride is active.',
       },
       // TRIAL aids: audible chirp on each fix so the rider can HEAR it working on a walk,

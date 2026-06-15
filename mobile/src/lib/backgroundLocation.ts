@@ -158,7 +158,7 @@ export async function startRail3BackgroundLocation(ctx: BgLocationCtx): Promise<
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: 'VEcheLOn — sharing your position',
+        notificationTitle: 'Vechelon — sharing your position',
         notificationBody: 'Your location is shared with your ride Captain while the ride is active.',
         notificationColor: '#16A34A',
       },
