@@ -8,16 +8,18 @@ import {
 
 // THE jitpack fix. react-native-background-fetch declares its native dep as a
 // wildcard — `implementation 'com.transistorsoft:tsbackgroundfetch:+'`. The `+`
-// forces gradle to ENUMERATE every available version (fetch maven-metadata.xml)
-// across all repos to pick the newest, which drags in jitpack.io's metadata
-// endpoint — and jitpack's flaky "Read timed out" killed THREE billed EAS builds
-// (b83e86cf, e12e23d9, 38b7fc64) even though the exact AAR it needs ships locally
-// in node_modules (.../libs/com/transistorsoft/tsbackgroundfetch/1.0.4/). Pinning
-// the version with resolutionStrategy.force turns the dynamic lookup into a
-// concrete artifact fetch resolved straight from the local ./libs repo — gradle
-// never lists versions, never touches jitpack. This removes the dependency on
-// jitpack being up, rather than just giving it more time to respond.
-const PINNED_TSBGFETCH = 'com.transistorsoft:tsbackgroundfetch:1.0.4';
+// makes gradle ENUMERATE every available version (fetch maven-metadata.xml) across
+// all repos to pick the newest, which drags in jitpack.io's metadata endpoint —
+// and jitpack's flaky "Read timed out" killed THREE billed EAS builds (b83e86cf,
+// e12e23d9, 38b7fc64). The version `+` actually resolves to is 4.1.1 from
+// mavenCentral (the reliable host; jitpack is just a legacy/empty fallback, and
+// the local ./libs only carries an ancient 1.0.4 that `+` never picks) — i.e.
+// 4.1.1 is what the EARLIER SUCCESSFUL builds compiled with. Pinning the concrete
+// 4.1.1 with resolutionStrategy.force turns the dynamic lookup into a direct
+// artifact fetch from mavenCentral — gradle never lists versions, never queries
+// jitpack — WITHOUT changing the version that ships. (Pinning 1.0.4 would have
+// been a 3-major downgrade; do not.)
+const PINNED_TSBGFETCH = 'com.transistorsoft:tsbackgroundfetch:4.1.1';
 const withPinnedTsBackgroundFetch: ConfigPlugin = (config) =>
   withProjectBuildGradle(config, (cfg) => {
     if (cfg.modResults.language !== 'groovy') return cfg;
@@ -157,9 +159,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
   ],
   };
-  // Pin tsbackgroundfetch to the local AAR (kills the jitpack version-listing) and
-  // keep the longer maven HTTP timeouts as belt-and-suspenders. Both are harmless
-  // on every build.
+  // Pin tsbackgroundfetch to its resolved version (kills the jitpack version-listing,
+  // resolves from mavenCentral) and keep the longer maven HTTP timeouts as
+  // belt-and-suspenders. Both are harmless on every build.
   const hardened = withLongHttpTimeouts(
     withPinnedTsBackgroundFetch(base),
   ) as ExpoConfig;
