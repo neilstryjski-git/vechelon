@@ -191,3 +191,58 @@ environment). Production needs a deliberate strategy, not a hardcoded host:
 - Reliable hand-off from the web link into the mobile app (deep link / app-link), consistent with
   the D48 OTP/deep-link decisions — the join flow must land the user in-app on the correct ride.
 - Define the canonical public ride-join URL shape and who owns the domain mapping.
+
+### I. Brain session — Rail 3 IA (Instrumentation & Analytics) framework
+
+**Ask (product owner, 2026-06-15):** run a dedicated Brain session to define the Rail 3 app's
+IA — the production instrumentation/analytics hypothesis framework — i.e. *what experiments do we
+run to test and validate the product's core promises?* The PoC sink already emits the primitives
+(`gps_ping` {fg/bg/tsbg}, `broadcast_latency`, beacon `D-55` latency, `fleet_compose`,
+`app_state_change`); the session formalizes these into hypotheses + targets + dashboards and adds
+the gaps below. The decision record `docs/rail3-transistorsoft-trial-test.md` is a first instance
+of this kind of experiment.
+
+**Seed experiment list (refine in the Brain session):**
+
+- **E1 — Position freshness (the core "live" promise).** H: a viewer sees every fleet member's
+  position fresh within the cadence target for ≥95% of an active ride. Experiment: per-rider
+  staleness distribution (receiver receipt − ping `ts`), max gap, segmented by
+  foreground/locked/backgrounded/network. Validate: P95 staleness ≤ target; ~zero false "Dark".
+
+- **E2 — Background continuity across the OEM matrix (W179).** H: Transistorsoft sustains
+  continuous background tracking across Samsung/Pixel/etc. and battery settings. Experiment:
+  multi-device pocketed rides; `tsbg` continuity per device/OEM/battery; broaden the screen-off +
+  app-switch scenarios already proven on one Samsung. Validate: max-gap within target per OEM;
+  capture per-OEM battery-exclusion setup needs.
+
+- **E3 — Fan-out scaling / cost (W193, the O(N²) concern).** H: the two-channel role-scoped
+  broadcast keeps fan-out latency and per-device message volume ~O(N) as fleet size grows.
+  Experiment: rides at N≈5/15/30/50; `broadcast_latency` + per-device message volume vs N;
+  single-channel vs two-channel. Validate: latency < target; volume scales linearly, not O(N²).
+
+- **E4 — Beacon (SOS) alert latency (D-55 / DoD-05).** H: an SOS reaches all intended recipients
+  <500ms, including under load and under the new command-visible-to-all rule (W206). Experiment:
+  trigger→render latency across recipients at varying N; sender self-echo as the skew-free measure.
+  Validate: P95 < 500ms.
+
+- **E5 — Tactical-state accuracy (W174).** H: Active/Stopped/Inactive/Dark match ground truth — a
+  stopped rider reads Stopped (not Dark), a backgrounded rider doesn't false-Dark, a truly dead
+  device goes Dark. Experiment: scripted ride/stop/pocket/kill/dead-zone runs; rendered state vs
+  actual. Validate: transitions land within threshold windows; no false Dark from backgrounding.
+
+- **E6 — Network resilience.** H: through a dead zone, tracking self-heals within X s and gaps are
+  bounded (cf. the observed ~24s transmission blip that recovered on its own). Experiment: induced
+  dead zones mid-ride; gap size + recovery time. Validate: recovery < target; no permanent desync.
+
+- **E7 — Battery cost.** H: continuous background GPS drains ≤ X%/hour — acceptable for a
+  multi-hour ride. Experiment: battery delta over a fixed ride per device and accuracy setting
+  (BestForNavigation vs Balanced). Validate: drain within bound; tune accuracy if needed.
+
+- **E8 — Join / onboarding funnel (D58).** H: QR scan → app open → auth → joined-ride conversion is
+  high, and the URL/deep-link strategy works across environments. Experiment: instrument the funnel
+  stages; measure drop-off. Validate: conversion target; pinpoint drop steps.
+
+**Cross-cutting for the session:** which of these are PoC-grade (already measurable from the sink)
+vs production-only; the per-experiment target values (currently unset); whether the sink's
+`analytics_events` schema + the `ia_*` views are the right home or Rail 3 needs its own; and the
+privacy/retention posture for position/beacon telemetry at production scale.
