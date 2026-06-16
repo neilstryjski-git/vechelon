@@ -1,16 +1,15 @@
 import type BackgroundGeolocationType from 'react-native-background-geolocation';
 import type { Location } from 'react-native-background-geolocation';
 
-// RC4 engine-swap TRIAL — Transistorsoft Background Geolocation.
+// RC4 engine — Transistorsoft Background Geolocation (sole engine since W203).
 //
-// LAZY NATIVE BINDING (expo-only build, 2026-06-15): the Transistorsoft native modules are
-// EXCLUDED from autolinking in the expo-only trial build, so the native module is absent.
-// This file is still imported (useFleetPositions imports start/stopBgGeo), so it must NOT
-// touch the native module at load time — a top-level `import BackgroundGeolocation from ...`
-// + the module-load `onLocation` registration would throw the instant the bundle evaluates.
-// We therefore `require()` the SDK lazily inside startBgGeo (only the 'tsbg' engine reaches
-// it), and register onLocation there. In an expo-only build startBgGeo is never called, so
-// the native module is never touched and the app starts clean.
+// LAZY NATIVE BINDING: we `require()` the SDK lazily inside startBgGeo (and register
+// onLocation there) rather than binding at module load. A top-level
+// `import BackgroundGeolocation from ...` + a module-load `onLocation` registration would
+// touch the native module the instant the bundle evaluates; deferring to first-track keeps
+// import side-effect-free and is robust if the native module is ever absent (it throws at
+// use, not at app start). This was load-bearing during the now-removed expo-only trial
+// build (which excluded TS from autolinking); it's retained as defensive deferral.
 let BackgroundGeolocation: typeof BackgroundGeolocationType | null = null;
 function getBgGeo(): typeof BackgroundGeolocationType {
   if (!BackgroundGeolocation) {
@@ -92,11 +91,15 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
         title: 'Vechelon — sharing your position',
         text: 'Live with your ride Captain while the ride is active.',
       },
-      // Cx-facing: debug OFF so real club riders hear NO debug chirp and see no debug
-      // notifications (W203, Neil 2026-06-15). The required FGS "sharing your position"
-      // notification still shows; only Transistorsoft's debug sounds/notifications are
-      // suppressed. logLevel stays verbose — logs are diagnostic, not customer-facing.
-      debug: false,
+      // FIELD-BUILD diagnostic (Neil 2026-06-15): debug ON so the TS engine emits its
+      // native audible chirp on each recorded fix — the field-troubleshooting beep Neil
+      // uses to HEAR tracking working from a pocketed phone. This is the engine's own
+      // chirp (the custom expo-av chirp.ts that substituted for it on the now-removed
+      // expo-location path is gone). The dual-engine SELECTOR stays hidden — TS is the
+      // sole, hardwired engine — so nothing customer-switchable is in view. debug:true
+      // also surfaces TS's diagnostic notification; acceptable for the volunteer field
+      // session. Flip back to false for a real club release. logLevel stays verbose.
+      debug: true,
       logLevel: BG.LOG_LEVEL_VERBOSE,
     });
     configured = true;
