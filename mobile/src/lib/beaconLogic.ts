@@ -10,15 +10,28 @@
 
 import type { RideRole } from './roleVisibility';
 
-const isCommand = (role: RideRole) => role === 'captain' || role === 'support';
+const isCommand = (role?: RideRole) => role === 'captain' || role === 'support';
 
-// §4.1 SUPPORT BEACON visibility: Captain/SAG see others' beacons; every rider
-// sees their OWN beacon state. Other riders never see a beacon (F-07 is a
-// PENDING Brain decision — Captain/SAG-only is the committed rule; W173
-// pitfall: do not build rider-visible beacons).
-export function canSeeBeacon(myRole: RideRole, myRiderId: string, beaconRiderId: string): boolean {
-  if (beaconRiderId === myRiderId) return true;
-  return isCommand(myRole);
+// §4.1 SUPPORT BEACON visibility (amended W206, ratified 2026-06-15):
+//  - every rider always sees their OWN beacon state;
+//  - Captain/SAG see ALL beacons (command overview);
+//  - a COMMAND rider's beacon (a Captain/SAG SOS) is visible to EVERYONE. The
+//    Captain/SAG marker is already on every rider's map (§4.1), so surfacing
+//    their SOS *state change* on that marker is a safety extension, not new
+//    peer visibility.
+// PEER (member→member) beacons remain hidden from other riders — F-07 (full
+// peer-beacon visibility) is still a PENDING Brain decision and is NOT opened
+// here. `beaconOwnerRole` is optional for back-compat; absent it, a non-command
+// viewer only sees their own beacon (the pre-W206 behavior).
+export function canSeeBeacon(
+  myRole: RideRole,
+  myRiderId: string,
+  beaconRiderId: string,
+  beaconOwnerRole?: RideRole,
+): boolean {
+  if (beaconRiderId === myRiderId) return true; // own beacon — every role
+  if (isCommand(myRole)) return true; // Captain/SAG see all beacons
+  return isCommand(beaconOwnerRole); // W206: everyone sees a Captain/SAG SOS
 }
 
 // §4.1: cancel own beacon — every role; cancel ANY rider's beacon — Captain/SAG

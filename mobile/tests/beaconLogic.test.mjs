@@ -13,15 +13,25 @@ import {
   latencyDeltaMs,
 } from '../src/lib/beaconLogic.ts';
 
-// ── §4.1 visibility: Captain/SAG see others' beacons; everyone sees their own;
-//    riders NEVER see another rider's beacon (F-07 pending — pitfall 2). ──────
+// ── §4.1 visibility (W206 amended): self always; Captain/SAG see all beacons;
+//    EVERYONE sees a Captain/SAG SOS; peer member→member beacons stay hidden
+//    (F-07 still pending). 4th arg is the beacon OWNER's role. ────────────────
 
-test('beacon visibility: Captain/SAG see others, rider sees own only', () => {
-  assert.equal(canSeeBeacon('captain', 'cap', 'r1'), true);
-  assert.equal(canSeeBeacon('support', 'sag', 'r1'), true);
-  assert.equal(canSeeBeacon('member', 'r1', 'r1'), true); // own
-  assert.equal(canSeeBeacon('member', 'r1', 'r2'), false); // F-07: committed rule is Captain/SAG-only
-  assert.equal(canSeeBeacon('guest', 'g1', 'r2'), false);
+test('beacon visibility (W206): self + command see all; everyone sees a Captain/SAG SOS; peer beacons hidden', () => {
+  // Captain/SAG see every beacon
+  assert.equal(canSeeBeacon('captain', 'cap', 'r1', 'member'), true);
+  assert.equal(canSeeBeacon('support', 'sag', 'r1', 'member'), true);
+  // own beacon — every role
+  assert.equal(canSeeBeacon('member', 'r1', 'r1'), true);
+  // W206: a rider/guest SEES a Captain's or SAG's SOS (command-owned beacon)
+  assert.equal(canSeeBeacon('member', 'r1', 'cap', 'captain'), true);
+  assert.equal(canSeeBeacon('member', 'r1', 'sag', 'support'), true);
+  assert.equal(canSeeBeacon('guest', 'g1', 'cap', 'captain'), true);
+  // PEER (member→member) beacons stay hidden — F-07 not opened here
+  assert.equal(canSeeBeacon('member', 'r1', 'r2', 'member'), false);
+  assert.equal(canSeeBeacon('guest', 'g1', 'r2', 'member'), false);
+  // back-compat: 3-arg call (no owner role) → non-command viewer sees own only
+  assert.equal(canSeeBeacon('member', 'r1', 'r2'), false);
 });
 
 test('R3-22: Captain/SAG can cancel any beacon; rider only their own', () => {

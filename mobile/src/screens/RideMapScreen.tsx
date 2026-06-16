@@ -382,9 +382,11 @@ const RideMapScreen: React.FC = () => {
       >
         {visible.map((p) => {
           const beacon = beacons[p.riderId];
-          // W173 pitfall (F-07 pending): beacons render for Captain/SAG + self
-          // ONLY — myRiderId-keyed self-rendering is handled below.
-          const showBeacon = Boolean(beacon) && myRiderId != null && canSeeBeacon(myRole, myRiderId, p.riderId);
+          // W206 (§4.1 amended): self + Captain/SAG see all beacons, AND every
+          // rider sees a COMMAND rider's SOS (the Captain/SAG is already on the
+          // map). Peer member→member beacons stay hidden (F-07 still pending) —
+          // p.role is the beacon OWNER's role, which gates that command case.
+          const showBeacon = Boolean(beacon) && myRiderId != null && canSeeBeacon(myRole, myRiderId, p.riderId, p.role);
           return (
             <RiderMarker
               key={p.riderId}
