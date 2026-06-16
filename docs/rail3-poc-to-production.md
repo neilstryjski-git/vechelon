@@ -192,6 +192,8 @@ environment). Production needs a deliberate strategy, not a hardcoded host:
   the D48 OTP/deep-link decisions — the join flow must land the user in-app on the correct ride.
 - Define the canonical public ride-join URL shape and who owns the domain mapping.
 
+**Remove the orphaned `expo-task-manager` dependency before release.** Stride W209. Unused since the W203 engine swap (no JS imports), but it autolinks a `BOOT_COMPLETED` receiver + background `TaskJobService` + `RECEIVE_BOOT_COMPLETED` — unwanted Play-review/footprint surface; kept through PoC field builds only to preserve a known-good dep set, so remove it in its own native-EAS-verified commit.
+
 ### I. Brain session — Rail 3 IA (Innovation Accounting)
 
 **Ask (product owner, 2026-06-15):** run a dedicated Brain session on the Rail 3 app's **Innovation
