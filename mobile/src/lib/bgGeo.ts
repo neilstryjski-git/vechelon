@@ -1,15 +1,16 @@
 import type BackgroundGeolocationType from 'react-native-background-geolocation';
 import type { Location } from 'react-native-background-geolocation';
 
-// RC4 engine — Transistorsoft Background Geolocation (sole engine since W203).
+// RC4 engine-swap TRIAL — Transistorsoft Background Geolocation.
 //
-// LAZY NATIVE BINDING: we `require()` the SDK lazily inside startBgGeo (and register
-// onLocation there) rather than binding at module load. A top-level
-// `import BackgroundGeolocation from ...` + a module-load `onLocation` registration would
-// touch the native module the instant the bundle evaluates; deferring to first-track keeps
-// import side-effect-free and is robust if the native module is ever absent (it throws at
-// use, not at app start). This was load-bearing during the now-removed expo-only trial
-// build (which excluded TS from autolinking); it's retained as defensive deferral.
+// LAZY NATIVE BINDING (expo-only build, 2026-06-15): the Transistorsoft native modules are
+// EXCLUDED from autolinking in the expo-only trial build, so the native module is absent.
+// This file is still imported (useFleetPositions imports start/stopBgGeo), so it must NOT
+// touch the native module at load time — a top-level `import BackgroundGeolocation from ...`
+// + the module-load `onLocation` registration would throw the instant the bundle evaluates.
+// We therefore `require()` the SDK lazily inside startBgGeo (only the 'tsbg' engine reaches
+// it), and register onLocation there. In an expo-only build startBgGeo is never called, so
+// the native module is never touched and the app starts clean.
 let BackgroundGeolocation: typeof BackgroundGeolocationType | null = null;
 function getBgGeo(): typeof BackgroundGeolocationType {
   if (!BackgroundGeolocation) {
