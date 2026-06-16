@@ -92,9 +92,11 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
         title: 'Vechelon — sharing your position',
         text: 'Live with your ride Captain while the ride is active.',
       },
-      // TRIAL aids: audible chirp on each fix so the rider can HEAR it working on a walk,
-      // and verbose logs. Debug-only niceties — silence before any release build.
-      debug: true,
+      // Cx-facing: debug OFF so real club riders hear NO debug chirp and see no debug
+      // notifications (W203, Neil 2026-06-15). The required FGS "sharing your position"
+      // notification still shows; only Transistorsoft's debug sounds/notifications are
+      // suppressed. logLevel stays verbose — logs are diagnostic, not customer-facing.
+      debug: false,
       logLevel: BG.LOG_LEVEL_VERBOSE,
     });
     configured = true;

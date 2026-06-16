@@ -23,7 +23,6 @@ import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant }
 import { canSeeBeacon, canCancelBeacon } from '../lib/beaconLogic';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
-import { getBgEngineSync, loadBgEngine, type BgEngine } from '../lib/bgEngine';
 import RiderMarker from '../components/RiderMarker';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
@@ -65,11 +64,6 @@ const RideMapScreen: React.FC = () => {
   const { channel, status } = useRideChannel(rideId);
   // D63: enabled only after the W176 explainer flow grants BACKGROUND location.
   const [backgroundReady, setBackgroundReady] = useState(false);
-  // Dual-engine TRIAL: read the engine the rider toggled on Home; locked in at ride-map mount.
-  const [bgEngine, setBgEngineState] = useState<BgEngine>(getBgEngineSync());
-  useEffect(() => {
-    void loadBgEngine().then(setBgEngineState);
-  }, []);
   const { fleet, myCoords, channelStatus } = useFleetPositions(
     rideId,
     myRiderId,
@@ -79,7 +73,6 @@ const RideMapScreen: React.FC = () => {
     status,
     refetchRoster,
     backgroundReady,
-    bgEngine,
   );
 
   // useBeacons reads coords on trigger (lat/long audit snapshot) via a ref so

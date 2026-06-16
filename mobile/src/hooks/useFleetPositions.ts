@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import * as Location from 'expo-location';
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
-import {
-  sendDormantPing,
-  restBroadcast,
-  startRail3BackgroundLocation,
-  stopRail3BackgroundLocation,
-} from '../lib/backgroundLocation';
+import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
-import type { BgEngine } from '../lib/bgEngine';
-import { chirp } from '../lib/chirp';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
@@ -27,11 +19,6 @@ import {
 
 // Broadcast event name for position pings on the rail3:ride:<id> channel.
 export const POSITION_EVENT = 'pos';
-
-// Foreground ping cadence while the map screen is open (D-54 validation targets
-// are W179's scope; these are the working defaults). Background GPS / screen-lock
-// continuation is W176/W179 — this hook publishes while the app is foregrounded.
-const PING_INTERVAL_MS = 5000;
 
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
@@ -146,11 +133,6 @@ export function useFleetPositions(
   // below so we never request background permission or start the foreground
   // service inline (that staging-only shortcut is removed for promotion).
   backgroundReady = false,
-  // Dual-engine TRIAL selector (debug A/B): which background-location engine drives this
-  // ride — 'expo' (foreground watch + FGS task) or 'tsbg' (Transistorsoft). Only the
-  // selected engine broadcasts; both carry the channel-status-decoupling fix. Defaults to
-  // 'expo' (the EXPO-ONLY trial build hard-locks it there; Transistorsoft is excluded).
-  bgEngine: BgEngine = 'expo',
 ): {
   fleet: FleetParticipant[];
   myCoords: LatLng | null;
@@ -164,7 +146,6 @@ export function useFleetPositions(
   // position to the "going dormant" ping without re-binding on every GPS update.
   const myCoordsRef = useRef<LatLng | null>(null);
   myCoordsRef.current = myCoords;
-  const lastSentRef = useRef(0);
   // Live refs so the broadcast receive handler (subscribed once, on [channel])
   // can read the current ride/rider for W180 latency logging WITHOUT re-binding
   // the subscription (which would reset pings) when these props change.
@@ -216,146 +197,27 @@ export function useFleetPositions(
     // already subscribed); postgres_changes may not — none are used here.
   }, [channel]);
 
-  // Publish: watch the device position in the foreground and broadcast pings.
-  // RC4: this expo-location FOREGROUND watch (src:'fg') runs UNLESS the Transistorsoft engine
-  // is the selected background engine AND background tracking is active — in which case tsbg
-  // owns foreground+background and this would double-send. For the 'expo' engine it stays on
-  // (handles foreground; the expo FGS task handles background). Also the path for
-  // foreground-only riders (no "Allow all the time").
-  useEffect(() => {
-    if (backgroundReady && bgEngine === 'tsbg') return;
-    if (!channel || status !== 'SUBSCRIBED' || !myRiderId || !rideId) return;
-    let sub: Location.LocationSubscription | null = null;
-    let heartbeat: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
-    // Sender half of the W174 state machine — fresh per (ride, thresholds).
-    const tracker = new SenderStateTracker(thresholds);
-    let lastPublished: LatLng | null = null;
-
-    (async () => {
-      const { status: perm } = await Location.requestForegroundPermissionsAsync();
-      if (perm !== 'granted' || cancelled) return;
-
-      // BACKGROUND-location permission + the AppState foreground↔background
-      // handoff live in a SEPARATE effect (D63), gated on the W176 explainer flow
-      // via `backgroundReady`. This effect owns ONLY the foreground socket publish
-      // path — no inline background request (that staging shortcut is gone).
-
-      // W174 publish seam: state computed from own movement (Dark is
-      // receiver-derived and intentionally absent here). Shared by the OS
-      // callback and the stationary heartbeat below.
-      const publishSample = (coords: LatLng, distanceFromLastM: number, now: number) => {
-        // RC3: the FGS owns broadcasting while backgrounded; this socket path owns the
-        // foreground. Guard so the two (both alive for the whole ride) never double-send.
-        if (AppState.currentState !== 'active') return;
-        if (now - lastSentRef.current < PING_INTERVAL_MS) return;
-        lastSentRef.current = now;
-        const state = tracker.sample({ distanceFromLastM, atMs: now });
-        lastPublished = coords;
-        const payload: PositionPayload = {
-          riderId: myRiderId,
-          state,
-          lat: coords.lat,
-          lng: coords.lng,
-          ts: now,
-        };
-        // Ephemeral fan-out only — the send is RLS-authorized server-side
-        // (W170 rail3_broadcast_tenant_send). Never a DB write.
-        void channel.send({ type: 'broadcast', event: POSITION_EVENT, payload });
-        // W202 (PoC/staging-only sink): record the SENDER's own send so token-survival
-        // is measurable from the sender, not just flaky receivers. Both this send AND
-        // this sink write need a valid token — a gap = the token refresh failed.
-        void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'fg', state } });
-        // TRIAL aid: audible beep on each foreground ping (the chirp Neil used to troubleshoot).
-        void chirp();
-      };
-
-      let lastCallbackAtMs = 0;
-      sub = await Location.watchPositionAsync(
-        {
-          // BestForNavigation (RC4 expo-only trial): give the FREE engine its best shot at
-          // sustaining a live stream so we don't under-sell it vs Transistorsoft (was Balanced).
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: PING_INTERVAL_MS,
-          // 0, NOT a distance filter (review finding): a distance filter
-          // suppresses OS callbacks while stationary — exactly the condition
-          // Stopped/Inactive describe — starving the state machine and making
-          // a stopped rider indistinguishable from a Dark one. Movement vs
-          // jitter is judged by MOVE_EPSILON_M in the tracker, not by the OS.
-          distanceInterval: 0,
-        },
-        (loc) => {
-          const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
-          setMyCoords(coords);
-          const now = Date.now();
-          lastCallbackAtMs = now;
-          publishSample(
-            coords,
-            lastPublished ? haversineDistanceM(lastPublished, coords) : Infinity,
-            now,
-          );
-        },
-      );
-      if (cancelled) {
-        // Effect tore down while the watcher await was in flight — don't leak
-        // the watcher or start a heartbeat the cleanup can no longer reach.
-        sub.remove();
-        return;
-      }
-
-      // Stationary heartbeat: if the OS still withholds callbacks (OEM
-      // batching, Battery Saver — W177 territory), keep feeding the tracker
-      // zero-movement samples at the ping cadence so Stopped/Inactive can
-      // actually transition AND receivers keep getting pings (a silent sender
-      // would read as Dark, collapsing the Stopped-vs-Dark distinction).
-      heartbeat = setInterval(() => {
-        const now = Date.now();
-        if (now - lastCallbackAtMs < PING_INTERVAL_MS * 2) return; // OS is feeding us
-        if (!lastPublished) return; // no fix yet — nothing truthful to send
-        publishSample(lastPublished, 0, now);
-      }, PING_INTERVAL_MS);
-    })();
-
-    return () => {
-      cancelled = true;
-      sub?.remove();
-      if (heartbeat) clearInterval(heartbeat);
-    };
-  }, [channel, status, rideId, myRiderId, thresholds, backgroundReady, bgEngine]);
-
-  // RC4 (Option A, engine swap) — Transistorsoft Background Geolocation owns location for
-  // the WHOLE ride when background tracking is active. RC3 proved expo-location's FGS could
-  // be *started* legally, but Android Doze still BATCHED its updates (saffron/30ab walks:
-  // wake-time bursts, not a live stream — a documented, unfixed expo limitation). This is the
-  // Garmin/Life360-class native engine that streams through Doze. We keep OUR transport (REST
-  // broadcast + sink), so receivers/instrumentation are unchanged; this just replaces the
-  // location SOURCE. Gated on backgroundReady; the foreground expo path (above) yields to it.
-  // Started while foregrounded at ride join, stopped on leave. FREE in this debug/trial build
-  // (no license); a release build needs the $399 Starter key.
+  // Publish: Transistorsoft Background Geolocation is the SOLE location source for the ride —
+  // foreground AND background, broadcasting 'tsbg'. The expo-location foreground watch and FGS
+  // TaskManager task were removed once TS was validated (W203): TS streams continuously through
+  // Doze where expo-location batched (the saffron/30ab + 2026-06-15 walks). We keep OUR transport
+  // (REST broadcast + the measurement sink), so receivers/instrumentation are unchanged; TS just
+  // owns the location SOURCE.
   //
-  // CRITICAL (field-test bug, 2026-06-15): do NOT gate this on the realtime channel `status`.
-  // On screen-lock the websocket channel drops (status leaves 'SUBSCRIBED' → the "channel denied"
-  // message), and if this effect depended on status it would re-run and TEAR DOWN the foreground
-  // service (stopBgGeo) at exactly the moment we need it — killing the FGS (notification vanishes)
-  // and stopping all location ~1–2 min after lock. The two are independent: location broadcasts go
-  // over REST (restBroadcast), which never needs the websocket channel. So the FGS runs for the
-  // whole ride regardless of channel state; it stops only on leaving the ride / losing background
-  // permission / unmount.
+  // Gated on `backgroundReady`: the FGS must be STARTED while foregrounded (Android 12+ forbids
+  // starting it from the background), which the W176 explainer / D63 permission flow guarantees;
+  // a returning rider (permission already granted) starts TS immediately on join. A rider who
+  // declines "Allow all the time" never flips backgroundReady → TS doesn't start here, and the
+  // dormant-ping effect below covers their backgrounding.
+  //
+  // CRITICAL (field-test fix, 2026-06-15): do NOT gate this on the realtime channel `status`. On
+  // screen-lock the websocket drops (status leaves 'SUBSCRIBED' → "channel denied"); if this
+  // depended on status it would re-run and stopBgGeo() — tearing down the FGS exactly when we need
+  // it. Broadcasts go over REST (restBroadcast), which never needs the channel, so the FGS runs the
+  // whole ride regardless of channel state; it stops only on leave / lost permission / unmount.
   useEffect(() => {
     if (!backgroundReady || !rideId || !myRiderId) return;
-
-    if (bgEngine === 'expo') {
-      // EXPO engine: the foreground watch (above) sends 'fg'; this FGS TaskManager task sends
-      // 'bg' while backgrounded (AppState-gated so the two never overlap). Started in the
-      // foreground, runs the whole ride, decoupled from channel status (the field-test fix).
-      void startRail3BackgroundLocation({ rideId, riderId: myRiderId });
-      return () => {
-        void stopRail3BackgroundLocation();
-      };
-    }
-
-    // TSBG engine: Transistorsoft is the unified source (foreground + background), broadcasting
-    // 'tsbg'. Sender-half state machine fresh per (ride, thresholds), same as the fg path.
+    // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;
     void startBgGeo((fix) => {
@@ -364,16 +226,13 @@ export function useFleetPositions(
       const dist = last ? haversineDistanceM(last, coords) : Infinity;
       last = coords;
       const state = tracker.sample({ distanceFromLastM: dist, atMs: fix.ts });
-      // OUR transport (REST broadcast on the rail3 topic) + the same sink, so receivers
-      // and instrumentation are unchanged. src:'tsbg' separates Transistorsoft pings in
-      // the sink so a walk's cadence is directly comparable to the old fg/bg streams.
       void restBroadcast(rideId, { riderId: myRiderId, state, lat: coords.lat, lng: coords.lng, ts: fix.ts });
       void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
     });
     return () => {
       void stopBgGeo();
     };
-  }, [backgroundReady, rideId, myRiderId, thresholds, bgEngine]);
+  }, [backgroundReady, rideId, myRiderId, thresholds]);
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,
