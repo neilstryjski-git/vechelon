@@ -192,17 +192,40 @@ environment). Production needs a deliberate strategy, not a hardcoded host:
   the D48 OTP/deep-link decisions — the join flow must land the user in-app on the correct ride.
 - Define the canonical public ride-join URL shape and who owns the domain mapping.
 
-### I. Brain session — Rail 3 IA (Instrumentation & Analytics) framework
+### I. Brain session — Rail 3 IA (Innovation Accounting)
 
-**Ask (product owner, 2026-06-15):** run a dedicated Brain session to define the Rail 3 app's
-IA — the production instrumentation/analytics hypothesis framework — i.e. *what experiments do we
-run to test and validate the product's core promises?* The PoC sink already emits the primitives
-(`gps_ping` {fg/bg/tsbg}, `broadcast_latency`, beacon `D-55` latency, `fleet_compose`,
-`app_state_change`); the session formalizes these into hypotheses + targets + dashboards and adds
-the gaps below. The decision record `docs/rail3-transistorsoft-trial-test.md` is a first instance
-of this kind of experiment.
+**Ask (product owner, 2026-06-15):** run a dedicated Brain session on the Rail 3 app's **Innovation
+Accounting** (Lean Startup sense): name the **leap-of-faith assumptions**, choose **actionable (not
+vanity) metrics**, define the build–measure–learn **experiments** that validate them, and set
+explicit **pivot-or-persevere thresholds**. Value/growth experiments come first — they prove the
+product *matters*; the technical/NFR validations only prove it *works*. (The PoC sink + decision
+records like `docs/rail3-transistorsoft-trial-test.md` are early validated-learning instances; this
+session makes the accounting deliberate.)
 
-**Seed experiment list (refine in the Brain session):**
+**Leap-of-faith assumptions:**
+- **Value hypothesis** — live fleet awareness materially helps a club run a ride (captains manage
+  the group, fewer riders dropped/lost, riders feel safer) enough that clubs keep using it
+  ride-over-ride.
+- **Growth hypothesis** — adoption compounds (club-by-club, captain-led rider invites, retention)
+  without per-ride hand-holding.
+
+**Value-hypothesis experiments (the primary set):**
+- **V1 — Captain actually uses it.** % of active rides where the Captain opens the fleet view and
+  acts on it (taps a rider, responds to a beacon). Pivot signal: built-but-unused.
+- **V2 — Moves the real-world outcome.** Does Rail 3 reduce "lost/dropped rider" incidents vs
+  control rides (captain debrief)? The job it claims to do.
+- **V3 — Rider retention ride-over-ride.** % of riders who join again on the club's next ride.
+- **V4 — Keep/pay intent (persevere test).** After N rides, do pilot clubs keep running it — and
+  would they pay?
+
+**Growth-hypothesis experiments:**
+- **G1 — Join/activation conversion (D58 funnel).** QR scan → app → joined-ride.
+- **G2 — Captain→rider invite loop.** Does one captain reliably onboard a full roster; riders/ride.
+- **G3 — Club-to-club spread.** Do pilot clubs seed/refer other clubs.
+
+**Viability / NFR enablers (E1–E8) — necessary, not sufficient.** The technical baseline the
+value/growth metrics ride on; the PoC sink already emits their primitives (`gps_ping` {fg/bg/tsbg},
+`broadcast_latency`, beacon `D-55`, `fleet_compose`, `app_state_change`):
 
 - **E1 — Position freshness (the core "live" promise).** H: a viewer sees every fleet member's
   position fresh within the cadence target for ≥95% of an active ride. Experiment: per-rider
@@ -242,7 +265,9 @@ of this kind of experiment.
   high, and the URL/deep-link strategy works across environments. Experiment: instrument the funnel
   stages; measure drop-off. Validate: conversion target; pinpoint drop steps.
 
-**Cross-cutting for the session:** which of these are PoC-grade (already measurable from the sink)
-vs production-only; the per-experiment target values (currently unset); whether the sink's
-`analytics_events` schema + the `ia_*` views are the right home or Rail 3 needs its own; and the
-privacy/retention posture for position/beacon telemetry at production scale.
+**Cross-cutting for the session:** the **baseline** (current metric values), **actionable-vs-vanity**
+for each metric, and the explicit **pivot-or-persevere threshold** per leap-of-faith assumption.
+Plus the plumbing: the PoC debug sink is removed before production (Stride W208) and *replaced* by
+the deliberate instrumentation this session defines — decide whether `analytics_events` + `ia_*`
+views are its home or Rail 3 needs its own, and set the privacy/retention posture for
+position/beacon telemetry at production scale.
