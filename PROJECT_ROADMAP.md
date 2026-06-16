@@ -41,6 +41,7 @@
 - [x] Platform Admin role (admin.vechelon.ca)
 - [x] Cross-club email validation
 - [x] Subdomain routing (clubname.vechelon.ca)
+- [x] Multi-tenancy hardening audit
 - [x] Second & third club onboarding (Bikes & Beers, Lakeside Wheelers — live alongside Racer Sportif)
 - [ ] Self-serve onboarding (Phase 2)
 - [ ] Multi-membership support (Phase 2)
@@ -61,7 +62,6 @@
 - [x] Voice of Customer feedback loop (schema, GitHub Issues, label set)
 - [x] Rider Share — viral growth loop
 - [x] Innovation Accounting — H1–H5 adoption hypotheses instrumented end-to-end
-- [x] Multi-tenancy hardening audit
 - [ ] Ride history on profiles
 - [ ] Observer role
 - [ ] Member-uploaded routes (GPX)
