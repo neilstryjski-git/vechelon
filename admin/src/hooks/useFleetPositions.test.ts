@@ -10,8 +10,8 @@ import {
 } from './useFleetPositions';
 
 const roster: RideRoster = {
-  cap: { role: 'captain', displayName: 'Cap', phone: '555-1', participantStatus: 'active' },
-  r1: { role: 'member', displayName: 'Rider One', phone: '555-2', participantStatus: 'active' },
+  cap: { role: 'captain', displayName: 'Cap', phone: '555-1', email: 'cap@club.test', participantStatus: 'active' },
+  r1: { role: 'member', displayName: 'Rider One', phone: '555-2', email: 'r1@club.test', participantStatus: 'active' },
 };
 
 function ping(riderId: string, ts = 1000): PositionPayload {

@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// W192: the Rail 3 staging fleet build (VITE_RAIL3_FLEET_ENABLED=true) self-
+// destructs its service worker so frequent redeploys are never masked by a stale
+// PWA cache — selfDestroying emits a SW that unregisters itself and clears caches.
+// Production builds (flag unset) keep the normal offline PWA untouched.
+const STAGING_FLEET_BUILD = process.env.VITE_RAIL3_FLEET_ENABLED === 'true'
+
 // https://vite.dev/config/
 export default defineConfig({
   base: '/portal/',
@@ -11,12 +17,20 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      selfDestroying: STAGING_FLEET_BUILD,
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
         name: 'VEcheLOn Admin',
         short_name: 'VEcheLOn',
         description: 'Tactical Command Centre for Group Rides',
         theme_color: '#000000',
+        // display:'browser' makes the app NON-installable, so browsers no longer
+        // offer the "Install VEcheLOn Admin" prompt to visitors (incl. riders who
+        // land on the portal/QR) — the installable admin PWA is deprecated. The
+        // service worker (offline cache + autoUpdate) is unaffected; only
+        // installability is removed (install needs display standalone/fullscreen/
+        // minimal-ui).
+        display: 'browser',
         icons: [
           {
             src: 'pwa-192x192.png',

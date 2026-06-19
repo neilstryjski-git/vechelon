@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { useAppStore } from '../store/useAppStore';
 import {
   useRideRoster,
   useFleetPositions,
@@ -9,7 +8,6 @@ import {
 } from '../hooks/useFleetPositions';
 import {
   visibleParticipants,
-  canSeePhone,
   type RideRole,
 } from '../lib/roleVisibility';
 import FleetMap, { type FleetMapMarker } from '../components/FleetMap';
@@ -40,8 +38,6 @@ function secondsAgo(lastPingAt: number | null, now: number): string {
 
 export default function RaceControl() {
   const { rideId } = useParams<{ rideId: string }>();
-  const isAdmin = useAppStore((s) => s.isAdmin);
-  const isPlatformAdmin = useAppStore((s) => s.isPlatformAdmin);
 
   const { roster, refetchRoster } = useRideRoster(rideId ?? null);
   const { fleet, channelStatus } = useFleetPositions(rideId ?? null, roster, refetchRoster);
@@ -75,17 +71,14 @@ export default function RaceControl() {
 
   const liveCount = markers.filter((m) => !m.stale).length;
 
-  // Admin-only surface. Riders never reach race control (it exposes the full
-  // fleet + contact details that §4.1 reserves for command roles).
-  if (!isAdmin && !isPlatformAdmin) {
-    return (
-      <div className="p-20 text-center font-label text-on-surface-variant flex flex-col items-center justify-center min-h-[60vh]">
-        <span className="material-symbols-outlined text-4xl mb-3 text-on-surface-variant/40">lock</span>
-        <p className="text-[11px] uppercase tracking-widest font-bold">Race Control is for organizers</p>
-        <p className="text-xs mt-2 opacity-70">This live fleet view is restricted to club admins.</p>
-      </div>
-    );
-  }
+  const selectedRider = useMemo(
+    () => visible.find((p) => p.riderId === selectedId) ?? null,
+    [visible, selectedId],
+  );
+  // The race-control operator is an admin DISPATCHER, not a peer rider — the §4.1
+  // contact matrix (which hides e.g. captain↔captain) does not apply here. The
+  // operator sees every visible rider's contact when it's on file.
+  const canContactSelected = selectedRider != null;
 
   if (!rideId) {
     return (
@@ -146,6 +139,49 @@ export default function RaceControl() {
                 </span>
               </div>
             )}
+            {selectedRider && (
+              <div className="absolute bottom-3 left-3 right-3 md:right-auto md:w-80 bg-surface border border-outline-variant/50 rounded-lg shadow-lg p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-on-surface truncate">{selectedRider.displayName}</p>
+                    <p className="font-label text-[9px] uppercase tracking-wider text-on-surface-variant/70 mt-0.5">
+                      {ROLE_LABEL[selectedRider.role]} ·{' '}
+                      <span className={isStalePing(selectedRider.lastPingAt, now) ? 'text-error/80' : 'text-green-600'}>
+                        {isStalePing(selectedRider.lastPingAt, now) ? 'Stale' : 'Live'}
+                      </span>{' '}
+                      · {secondsAgo(selectedRider.lastPingAt, now)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="text-on-surface-variant/60 hover:text-on-surface shrink-0"
+                    aria-label="Close"
+                  >
+                    <span className="material-symbols-outlined text-lg">close</span>
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {canContactSelected && selectedRider.email && (
+                    <a href={`mailto:${selectedRider.email}`} className="flex items-center gap-2 text-xs text-primary hover:underline break-all">
+                      <span className="material-symbols-outlined text-sm shrink-0">mail</span>
+                      {selectedRider.email}
+                    </a>
+                  )}
+                  {canContactSelected && selectedRider.phone && (
+                    <a href={`tel:${selectedRider.phone}`} className="flex items-center gap-2 text-xs text-primary hover:underline">
+                      <span className="material-symbols-outlined text-sm shrink-0">call</span>
+                      {selectedRider.phone}
+                    </a>
+                  )}
+                  {canContactSelected && !selectedRider.email && !selectedRider.phone && (
+                    <p className="text-[10px] text-on-surface-variant/60 font-label uppercase tracking-wider">No contact on file</p>
+                  )}
+                  {!canContactSelected && (
+                    <p className="text-[10px] text-on-surface-variant/60 font-label uppercase tracking-wider">Contact hidden for this role</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <aside className="w-full md:w-72 border-t md:border-t-0 md:border-l border-outline-variant/40 overflow-y-auto">
@@ -158,7 +194,7 @@ export default function RaceControl() {
               <ul>
                 {visible.map((p) => {
                   const stale = isStalePing(p.lastPingAt, now);
-                  const showPhone = canSeePhone(OPERATOR_ROLE, p.role) && p.phone;
+                  const showPhone = p.phone; // operator (dispatcher) sees all contact
                   return (
                     <li
                       key={p.riderId}

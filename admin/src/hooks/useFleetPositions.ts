@@ -34,6 +34,7 @@ export interface RideRosterEntry {
   role: RideRole;
   displayName: string;
   phone: string | null;
+  email: string | null;
   participantStatus: string | null;
 }
 
@@ -82,6 +83,7 @@ export function deriveFleet(
       displayName: entry.displayName,
       role: entry.role,
       phone: entry.phone,
+      email: entry.email,
       accountStatus: entry.participantStatus,
       state: p.state ?? 'active',
       position: { lat: p.lat, lng: p.lng },
@@ -134,7 +136,7 @@ export function useRideRoster(rideId: string | null): {
     (async () => {
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('account_id, role, display_name, phone, status')
+        .select('account_id, role, display_name, phone, email, status')
         .eq('ride_id', rideId);
       if (cancelled || error || !data) return;
 
@@ -145,6 +147,7 @@ export function useRideRoster(rideId: string | null): {
           role: (row.role as RideRole) ?? 'member',
           displayName: row.display_name ?? 'Rider',
           phone: row.phone ?? null,
+          email: row.email ?? null,
           participantStatus: row.status ?? null,
         };
       }

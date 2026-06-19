@@ -7,15 +7,22 @@
 
 import { extractSlug } from './extractSlug';
 
-const isLegacyHost =
-  typeof window !== 'undefined' &&
-  window.location.hostname === 'vechelon.productdelivered.ca';
+const HOST = typeof window !== 'undefined' ? window.location.hostname : '';
+
+const isLegacyHost = HOST === 'vechelon.productdelivered.ca';
+
+// W192: Vercel preview deploys (the Rail 3 staging fleet view) serve the SPA
+// under /portal via the non-host-gated `/portal/:path*` rewrite — the clean-path
+// catch-all rewrite is gated to *.vechelon.ca only. So the router basename must
+// be /portal on a *.vercel.app host, matching the legacy host. Production
+// *.vechelon.ca subdomains keep basename '/'.
+const isPortalBasedHost = isLegacyHost || HOST.endsWith('.vercel.app');
 
 /** React Router basename for the current host. */
-export const PORTAL_BASE = isLegacyHost ? '/portal' : '/';
+export const PORTAL_BASE = isPortalBasedHost ? '/portal' : '/';
 
 /** href for the auth page on the current host. */
-export const AUTH_HREF = isLegacyHost ? '/portal/auth' : '/auth';
+export const AUTH_HREF = isPortalBasedHost ? '/portal/auth' : '/auth';
 
 /** Build a shareable ride URL pointing at the tenant's rider portal.
  *

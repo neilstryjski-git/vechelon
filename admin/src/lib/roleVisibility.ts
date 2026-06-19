@@ -21,6 +21,7 @@ export interface FleetParticipant {
   displayName: string;
   role: RideRole;
   phone: string | null;
+  email: string | null;
   accountStatus: string | null; // account_tenants.status, surfaced in the detail panel
   state: TacticalState;
   position: { lat: number; lng: number } | null;
