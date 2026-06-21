@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
@@ -233,7 +233,17 @@ const AdHocCreator: React.FC = () => {
         </View>
       ) : null}
 
-      {phase === 'warn' ? (
+      {/* D66: the warning is a SCREEN-ROOT Modal, not an absolute overlay inside
+          this component. AdHocCreator mounts in a small Home container; an
+          absoluteFill overlay filled only THAT box, so the bottom-pinned sheet
+          (and its "Create Anyway" button) was clipped. A transparent Modal renders
+          at the window root, so the sheet pins to the real screen bottom. */}
+      <Modal
+        visible={phase === 'warn'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhase('idle')}
+      >
         <View style={styles.warnOverlay}>
           <Pressable style={styles.backdrop} onPress={() => setPhase('idle')} />
           <View style={styles.warnSheet}>
@@ -253,7 +263,7 @@ const AdHocCreator: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-      ) : null}
+      </Modal>
     </View>
   );
 };
@@ -278,7 +288,9 @@ const styles = StyleSheet.create({
   // behind everything. A view positioned far off-screen (left:-1000) is culled on
   // some Android OEMs, so react-native-svg's toDataURL callback never fires.
   hiddenQr: { position: 'absolute', left: 0, top: 0, opacity: 0, zIndex: -1 },
-  warnOverlay: { ...StyleSheet.absoluteFillObject, position: 'absolute', zIndex: 10 },
+  // Fills the Modal's screen-root container (D66). The sheet inside pins to the
+  // real screen bottom, so its buttons are never clipped by this component's box.
+  warnOverlay: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: '#00000099' },
   warnSheet: {
     position: 'absolute',
