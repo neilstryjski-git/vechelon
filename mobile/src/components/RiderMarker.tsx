@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
+import Svg, { Rect, Circle } from 'react-native-svg';
 
 import type { FleetParticipant } from '../lib/roleVisibility';
 
@@ -15,8 +16,13 @@ import type { FleetParticipant } from '../lib/roleVisibility';
 // Colour is GREEN for peers so red stays exclusively a distress signal, and so
 // peers read distinct from the viewer's own OS blue dot.
 // Icon differs by TACTICAL STATE only — never by account type (W172 pitfall).
-// Role is surfaced as a small badge (C / S) so riders can tell Captain from
-// SAG, which §4.1 requires for the rider view; badge ≠ icon differentiation.
+// Role is surfaced as a small overlay BADGE so riders can tell Captain from SAG,
+// which §4.1 requires for the rider view; the badge is an overlay, NOT icon
+// differentiation (the state-colored dot is untouched — Pillar II Feature 1
+// "icon by tactical state only" holds). W213 (PoC interim): SAG gets a distinctive
+// white van glyph so the support VEHICLE is glanceable in a field of rider dots;
+// Captain keeps the small "C" badge. The "wholesome" production version (a fully
+// distinct SAG marker SHAPE) is a Rail 3a item — see dossier §H.
 
 // Riders render GREEN, varied by tactical state. RED is RESERVED for an active
 // SOS beacon (applied to the dot below, overriding the state fill) so red always
@@ -39,10 +45,32 @@ const STATE_STYLE: Record<
   dormant: { fill: SLEEP_VIOLET, border: '#FFFFFF', opacity: 0.85, hollow: false },
 };
 
+// Captain is a letter badge; SAG (support) is the van glyph below. Members/guests
+// get no badge. (W213: 'support' moved off the letter badge onto the van.)
 const ROLE_BADGE: Partial<Record<FleetParticipant['role'], string>> = {
   captain: 'C',
-  support: 'S',
 };
+
+// W213 — SAG distinctive marker (PoC interim). A white rounded-square badge (a
+// shape distinct from the Captain's round "C") holding a dark van silhouette, so
+// the support VEHICLE reads at a glance. White + dark avoids the reserved palette
+// (red=SOS, blue=own, green=active, violet=sleep, grey=Dark, amber=beacon ring)
+// and stays sunlight-readable (§5.1). Drawn from primitives so it rasterizes
+// cleanly into the Android marker bitmap.
+const VAN_DARK = '#0E0E10';
+const SagVanBadge: React.FC = () => (
+  <View style={styles.sagBadge}>
+    <Svg width={14} height={14} viewBox="0 0 24 24">
+      {/* body */}
+      <Rect x="3" y="7" width="16" height="7.5" rx="2" fill={VAN_DARK} />
+      {/* windshield */}
+      <Rect x="5" y="8.8" width="4.5" height="3" rx="0.6" fill="#FFFFFF" />
+      {/* wheels */}
+      <Circle cx="8" cy="16.3" r="2" fill={VAN_DARK} />
+      <Circle cx="15" cy="16.3" r="2" fill={VAN_DARK} />
+    </Svg>
+  </View>
+);
 
 interface Props {
   participant: FleetParticipant;
@@ -140,7 +168,9 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
             },
           ]}
         />
-        {badge ? (
+        {participant.role === 'support' ? (
+          <SagVanBadge />
+        ) : badge ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge}</Text>
           </View>
@@ -176,6 +206,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  // W213 — SAG van badge: white rounded-SQUARE (distinct from the Captain's round
+  // "C") with a dark border, larger than the letter badge so it pops.
+  sagBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: VAN_DARK,
+  },
   // Sunlight-readable distress ring (§5.1) — amber, expanding, unmistakable.
   beaconRing: {
     position: 'absolute',
