@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-map-clustering';
-import { PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { PROVIDER_GOOGLE, Polyline, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -19,6 +19,7 @@ import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
 import { useBeacons } from '../hooks/useBeacons';
+import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { canSeeBeacon, canCancelBeacon } from '../lib/beaconLogic';
 import { initialBearingDeg, regionContains } from '../lib/geo';
@@ -88,6 +89,12 @@ const RideMapScreen: React.FC = () => {
     status,
     getMyCoords,
   );
+
+  // W212 — ride-leader breadcrumb: the first captain's accumulated trail, sourced
+  // from the shared 'pos' broadcast (no new channel). Toggle (default ON) gates the
+  // RENDER only; the hook keeps accumulating so toggling back on shows the full line.
+  const { trail: breadcrumbTrail } = useBreadcrumb(rideId, channel);
+  const [showBreadcrumb, setShowBreadcrumb] = useState(true);
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
@@ -373,6 +380,18 @@ const RideMapScreen: React.FC = () => {
         clusterColor="#E11D2A"
         spiralEnabled={false}
       >
+        {/* W212 — ride-leader breadcrumb. Rendered FIRST so it sits BELOW the rider
+            markers (z-order = JSX order). Provisional colour/width — a Feature-6-style
+            design pass (legible in sunlight, must not occlude rider icons) is pending. */}
+        {showBreadcrumb && breadcrumbTrail.length > 1 ? (
+          <Polyline
+            coordinates={breadcrumbTrail.map((c) => ({ latitude: c.lat, longitude: c.lng }))}
+            strokeColor="#4F46E5"
+            strokeWidth={5}
+            lineCap="round"
+            lineJoin="round"
+          />
+        ) : null}
         {visible.map((p) => {
           const beacon = beacons[p.riderId];
           // W206 (§4.1 amended): self + Captain/SAG see all beacons, AND every
@@ -497,6 +516,16 @@ const RideMapScreen: React.FC = () => {
         <Text style={styles.centreGlyph}>⛶</Text>
       </TouchableOpacity>
 
+      {/* W212 — breadcrumb on/off toggle (PoC). Stacked above fit-all; dims when
+          off. PoC-only control → strip or graduate at promotion (dossier §H). */}
+      <TouchableOpacity
+        style={[styles.breadcrumbButton, !showBreadcrumb && styles.centreButtonDisabled]}
+        onPress={() => setShowBreadcrumb((v) => !v)}
+        accessibilityLabel={showBreadcrumb ? 'Hide leader trail' : 'Show leader trail'}
+      >
+        <Text style={styles.centreGlyph}>≈</Text>
+      </TouchableOpacity>
+
       <RiderBottomSheet
         participant={selected}
         myRole={myRole}
@@ -575,6 +604,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centreButtonDisabled: { opacity: 0.35 },
+  // W212 — breadcrumb toggle, stacked above fit-all (which is at bottom 116).
+  breadcrumbButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: 192,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#0E0E10E6',
+    borderColor: '#FFFFFF',
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   fitAllButton: {
     position: 'absolute',
     right: 18,
