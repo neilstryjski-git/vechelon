@@ -10,12 +10,17 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
-import { canSeePhone, FleetParticipant, RideRole } from '../lib/roleVisibility';
+import { canNavigateToRider, canSeePhone, FleetParticipant, RideRole } from '../lib/roleVisibility';
+import { buildMapsDirUrl } from '../lib/geo';
 
 // Role-gated contact sheet (R3-15/R3-16, Pillar II Feature 1 + §5.1):
-// display name, account state, tactical state, phone in large monospace,
-// Copy Number, full-width Dial via tel:. Slides up on icon tap; dismissed by
-// tap outside (and the parent only opens it when canOpenSheet passes).
+// display name, account state, tactical state, phone in large monospace.
+// W211 (PoC): Copy Number is now an inline clipboard ICON on the phone row
+// (Pillar III literally says "clipboard icon"), which frees its old full-width
+// slot for a full-width NAVIGATE button — SAG only — that launches Maps directions
+// to the rider's last-known position. Dial stays full-width (R3-16); the meta line
+// is kept (no committed content removed). Slides up on icon tap; dismissed by tap
+// outside (and the parent only opens it when canOpenSheet passes).
 // Custom Animated implementation — no extra bottom-sheet/reanimated deps for
 // the PoC.
 interface Props {
@@ -81,28 +86,53 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
         ) : null}
 
         {showPhone ? (
-          <>
+          // Phone row: number + inline Copy ICON (Pillar III "clipboard icon").
+          <View style={styles.phoneRow}>
             <Text style={styles.phone}>{participant.phone}</Text>
-            {/* R3-16: Dial is FULL-WIDTH (the criterion is literal — reviewer
-                finding); Copy Number stacks above it as a secondary action. */}
             <TouchableOpacity
-              style={styles.copyButton}
+              style={styles.copyIcon}
               onPress={() => void Clipboard.setStringAsync(participant.phone ?? '')}
+              accessibilityLabel="Copy number"
             >
-              <Text style={styles.copyText}>Copy Number</Text>
+              <Text style={styles.copyIconGlyph}>⧉</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.dialButton}
-              onPress={() => void Linking.openURL(`tel:${participant.phone}`)}
-            >
-              <Text style={styles.dialText}>Dial</Text>
-            </TouchableOpacity>
-          </>
+          </View>
         ) : roleCanSeeContact ? (
           <Text style={styles.noPhone}>No contact on file.</Text>
         ) : (
           <Text style={styles.noPhone}>Contact hidden for this role.</Text>
         )}
+
+        {/* W211 — Navigate (SAG only). Full-width primary, in the slot Copy vacated.
+            Independent of phone (a SAG may need to reach a phoneless rider). Routes to
+            the rider's last-known position; a Dark rider's label discloses staleness
+            (D60). position null → a disabled, honest "no position" state (not a dead tap). */}
+        {canNavigateToRider(myRole) ? (
+          participant.position ? (
+            <TouchableOpacity
+              style={styles.navigateButton}
+              onPress={() => void Linking.openURL(buildMapsDirUrl(participant.position!))}
+            >
+              <Text style={styles.navigateText}>
+                {participant.state === 'dark' ? 'Navigate · last known' : 'Navigate'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.navigateButton, styles.navigateDisabled]}>
+              <Text style={styles.navigateText}>No position received yet</Text>
+            </View>
+          )
+        ) : null}
+
+        {/* Dial — full-width (R3-16), only when a number is on file. */}
+        {showPhone ? (
+          <TouchableOpacity
+            style={styles.dialButton}
+            onPress={() => void Linking.openURL(`tel:${participant.phone}`)}
+          >
+            <Text style={styles.dialText}>Dial</Text>
+          </TouchableOpacity>
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -149,18 +179,24 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: 'monospace',
     letterSpacing: 1.5,
+    flexShrink: 1, // let a long number shrink rather than push the copy icon off-row
+  },
+  // W211 — phone row holds the number + the inline Copy icon (replaces the old
+  // full-width Copy Number button so Navigate can occupy that slot).
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 18,
   },
-  copyButton: {
-    borderColor: '#2C2C30',
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 48, // §5.1 floor for the secondary action
+  copyIcon: {
+    minWidth: 44, // §5.1 tap target
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 18,
+    marginLeft: 12,
   },
-  copyText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  copyIconGlyph: { color: '#FFFFFF', fontSize: 22 },
   dialButton: {
     backgroundColor: '#E11D2A',
     borderRadius: 12,
@@ -170,6 +206,24 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   dialText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 17,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  // W211 — Navigate: full-width primary, maps-blue (distinct from the red Dial and
+  // the amber Cancel Support). 64dp per §5.1.
+  navigateButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  navigateDisabled: { backgroundColor: '#2C2C30' },
+  navigateText: {
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 17,

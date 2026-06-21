@@ -59,6 +59,15 @@ export function canSeePhone(myRole: RideRole, targetRole: RideRole): boolean {
   return canOpenSheet(myRole, targetRole);
 }
 
+// W211 §4.1 (new row): NAVIGATE to a rider (launch Maps directions) is SAG ONLY.
+// A Captain rides a bike and won't run turn-by-turn; the SAG is the support
+// VEHICLE whose job is reaching a stranded/Dark/dropped rider. Captain keeps Dial
+// (canSeePhone), not Navigate. Riders never reach a peer sheet, so they never see
+// it. Distinct from isCommand on purpose — this is narrower than Captain+SAG.
+export function canNavigateToRider(myRole: RideRole): boolean {
+  return myRole === 'support';
+}
+
 // §4.1: cluster expand on tap is Captain/SAG only. (Riders render at most
 // Captain+SAG markers, so clusters are unreachable for them anyway — this
 // predicate makes the gate explicit rather than incidental.)

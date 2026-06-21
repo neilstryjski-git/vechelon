@@ -57,6 +57,15 @@ export function haversineDistanceM(a: LatLng, b: LatLng): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
+// W211 — Google Maps directions deep link to a destination. Universal https form:
+// resolves to the Maps app when installed (browser otherwise), works cross-platform
+// (future-proofs Rail 3b iOS over the Android-only `google.navigation:` scheme).
+// `origin` is omitted so Maps routes from the device's CURRENT location; driving
+// mode because the SAG responds in a vehicle. Pure + unit-testable.
+export function buildMapsDirUrl(dest: LatLng): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
+}
+
 // Initial great-circle bearing from `from` to `to`, in degrees clockwise from
 // true north, normalized to [0, 360).
 export function initialBearingDeg(from: LatLng, to: LatLng): number {
