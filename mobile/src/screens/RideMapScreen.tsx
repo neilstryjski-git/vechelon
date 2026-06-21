@@ -93,7 +93,7 @@ const RideMapScreen: React.FC = () => {
   // W212 — ride-leader breadcrumb: the first captain's accumulated trail, sourced
   // from the shared 'pos' broadcast (no new channel). Toggle (default ON) gates the
   // RENDER only; the hook keeps accumulating so toggling back on shows the full line.
-  const { trail: breadcrumbTrail } = useBreadcrumb(rideId, channel);
+  const { trail: breadcrumbTrail } = useBreadcrumb(rideId, channel, roster);
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
 
   useEffect(() => {
