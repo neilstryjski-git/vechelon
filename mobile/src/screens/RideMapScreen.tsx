@@ -95,6 +95,14 @@ const RideMapScreen: React.FC = () => {
   // RENDER only; the hook keeps accumulating so toggling back on shows the full line.
   const { trail: breadcrumbTrail } = useBreadcrumb(rideId, channel, roster);
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
+  // Map the trail to Polyline coords ONCE per trail change, not on every render.
+  // RideMapScreen re-renders on each fleet ping (~5s); without this memo the up-to-
+  // 1500-point trail was re-mapped (and the array thrown away) every time. Keyed on
+  // breadcrumbTrail so it only rebuilds when a new point is actually kept.
+  const breadcrumbCoords = useMemo(
+    () => breadcrumbTrail.map((c) => ({ latitude: c.lat, longitude: c.lng })),
+    [breadcrumbTrail],
+  );
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
@@ -385,7 +393,7 @@ const RideMapScreen: React.FC = () => {
             design pass (legible in sunlight, must not occlude rider icons) is pending. */}
         {showBreadcrumb && breadcrumbTrail.length > 1 ? (
           <Polyline
-            coordinates={breadcrumbTrail.map((c) => ({ latitude: c.lat, longitude: c.lng }))}
+            coordinates={breadcrumbCoords}
             strokeColor="#4F46E5"
             strokeWidth={5}
             lineCap="round"
