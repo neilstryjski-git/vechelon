@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { supabase } from '../lib/supabase';
+
 import {
   useRideRoster,
   useFleetPositions,
@@ -10,6 +12,7 @@ import {
   visibleParticipants,
   type RideRole,
 } from '../lib/roleVisibility';
+import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import FleetMap, { type FleetMapMarker } from '../components/FleetMap';
 
 // The race-control operator is an admin observing the whole fleet, so the §4.1
@@ -30,6 +33,10 @@ const ROLE_LABEL: Record<RideRole, string> = {
 // a rider who stops broadcasting visibly degrades to STALE instead of freezing.
 const STALENESS_TICK_MS = 5000;
 
+// Stable empty trail for the toggled-off branch, so the FleetMap breadcrumb prop
+// keeps a constant identity (a fresh `[]` each render would re-run its effect).
+const EMPTY_TRAIL: { lat: number; lng: number }[] = [];
+
 function secondsAgo(lastPingAt: number | null, now: number): string {
   if (lastPingAt == null) return '—';
   const s = Math.max(0, Math.round((now - lastPingAt) / 1000));
@@ -42,8 +49,31 @@ export default function RaceControl() {
   const { roster, refetchRoster } = useRideRoster(rideId ?? null);
   const { fleet, channelStatus } = useFleetPositions(rideId ?? null, roster, refetchRoster);
 
+  // Ride name for the header (instead of the raw UUID) — e.g. "Ad Hoc Ride — Cinnamon".
+  const [rideName, setRideName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rideId) return;
+    let cancelled = false;
+    void supabase
+      .from('rides')
+      .select('name')
+      .eq('id', rideId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setRideName((data as { name?: string } | null)?.name ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rideId]);
+
   const [now, setNow] = useState(() => Date.now());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // W215 — ride-leader breadcrumb (first captain's trail). PoC on/off toggle,
+  // default ON, like mobile. The hook resolves the leader from the roster and
+  // accumulates from the same fleet pings (no new channel).
+  const [showBreadcrumb, setShowBreadcrumb] = useState(true);
+  const { trail: breadcrumbTrail } = useBreadcrumb(rideId ?? null, roster, fleet);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), STALENESS_TICK_MS);
@@ -99,7 +129,7 @@ export default function RaceControl() {
           <h1 className="font-label text-[11px] uppercase tracking-widest font-bold text-on-surface">
             Race Control
           </h1>
-          <p className="text-[10px] text-on-surface-variant/70 mt-0.5">Ride {rideId}</p>
+          <p className="text-[10px] text-on-surface-variant/70 mt-0.5">{rideName ?? `Ride ${rideId}`}</p>
         </div>
         <div className="flex items-center gap-2 font-label text-[10px] uppercase tracking-wider">
           <span
@@ -126,7 +156,26 @@ export default function RaceControl() {
       ) : (
         <div className="flex-1 flex flex-col md:flex-row min-h-0">
           <div className="flex-1 relative min-h-[300px]">
-            <FleetMap markers={markers} onMarkerClick={setSelectedId} className="w-full h-full" />
+            <FleetMap
+              markers={markers}
+              onMarkerClick={setSelectedId}
+              breadcrumb={showBreadcrumb ? breadcrumbTrail : EMPTY_TRAIL}
+              className="w-full h-full"
+            />
+            {/* W215 — breadcrumb on/off (default ON). Top-left, mirroring the
+                top-right "Fit all riders" chip. Render gate only; the hook keeps
+                accumulating so toggling back on shows the full line. */}
+            <button
+              type="button"
+              onClick={() => setShowBreadcrumb((v) => !v)}
+              aria-pressed={showBreadcrumb}
+              className={`absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3 py-2.5 rounded-lg shadow-lg ${
+                showBreadcrumb ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">route</span>
+              Trail
+            </button>
             {connecting && (
               <div className="absolute inset-0 flex items-center justify-center bg-surface/40 font-label text-[10px] uppercase tracking-widest text-on-surface-variant animate-pulse">
                 Connecting to live ride…

@@ -14,8 +14,16 @@ export interface FleetMapMarker {
 interface FleetMapProps {
   markers: FleetMapMarker[];
   onMarkerClick?: (id: string) => void;
+  // W215 — the ride-leader breadcrumb trail, drawn as a single polyline BELOW the
+  // rider markers. Empty / <2 points → nothing drawn (and any existing line cleared).
+  breadcrumb?: { lat: number; lng: number }[];
   className?: string;
 }
+
+// Mirror the mobile breadcrumb stroke (mobile RideMapScreen Polyline) so both
+// surfaces read the same. Provisional colour/width pending a Feature-6 design pass.
+const BREADCRUMB_COLOR = '#4F46E5';
+const BREADCRUMB_WEIGHT = 5;
 
 const ICON_BASE = 'https://maps.google.com/mapfiles/ms/icons/';
 const TORONTO = { lat: 43.6532, lng: -79.3832 };
@@ -37,12 +45,13 @@ function fleetIcon(role: RideRole, stale: boolean): google.maps.Icon {
 // (markersRef keyed by id, upsert/remove on prop change) but deliberately fits
 // bounds ONCE — a live tracker must not yank the camera on every ping; the
 // operator pans/zooms freely after the initial fit.
-const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className = 'w-full h-full' }) => {
+const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, breadcrumb, className = 'w-full h-full' }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [loaderError, setLoaderError] = useState<string | null>(null);
   const markersRef = useRef<Record<string, google.maps.Marker>>({});
+  const breadcrumbRef = useRef<google.maps.Polyline | null>(null);
   const hasFitRef = useRef(false);
   // Stable ref so the marker click listener always calls the latest handler.
   const onMarkerClickRef = useRef(onMarkerClick);
@@ -134,6 +143,46 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, className =
       hasFitRef.current = true;
     }
   }, [isLoaded, map, markers, fitToMarkers]);
+
+  // W215 — sync the breadcrumb polyline. One persistent Polyline whose path we
+  // update in place (mirrors InteractiveMap's lifecycle). zIndex 1 keeps it under
+  // the rider markers (markers always paint above shapes anyway). <2 points →
+  // remove the line entirely (toggle off / new ride / not enough trail yet).
+  useEffect(() => {
+    if (!isLoaded || !map) return;
+    const path = breadcrumb ?? [];
+    if (path.length < 2) {
+      if (breadcrumbRef.current) {
+        breadcrumbRef.current.setMap(null);
+        breadcrumbRef.current = null;
+      }
+      return;
+    }
+    if (breadcrumbRef.current) {
+      breadcrumbRef.current.setPath(path);
+    } else {
+      breadcrumbRef.current = new google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: BREADCRUMB_COLOR,
+        strokeOpacity: 0.9,
+        strokeWeight: BREADCRUMB_WEIGHT,
+        zIndex: 1,
+        map,
+      });
+    }
+  }, [isLoaded, map, breadcrumb]);
+
+  // Tear the breadcrumb polyline off the map on unmount (navigating away from
+  // Race Control). Kept SEPARATE from the sync effect above — an empty-deps
+  // unmount-only effect — so the line isn't destroyed/recreated on every
+  // breadcrumb update (which would flicker and defeat the in-place setPath).
+  useEffect(() => {
+    return () => {
+      breadcrumbRef.current?.setMap(null);
+      breadcrumbRef.current = null;
+    };
+  }, []);
 
   if (loaderError) {
     return (
