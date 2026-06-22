@@ -13,6 +13,7 @@ import {
   type RideRole,
 } from '../lib/roleVisibility';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
+import { useScreenWakeLock } from '../hooks/useScreenWakeLock';
 import FleetMap, { type FleetMapMarker } from '../components/FleetMap';
 
 // The race-control operator is an admin observing the whole fleet, so the §4.1
@@ -74,6 +75,9 @@ export default function RaceControl() {
   // accumulates from the same fleet pings (no new channel).
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
   const { trail: breadcrumbTrail } = useBreadcrumb(rideId ?? null, roster, fleet);
+  // Keep the operator's screen awake while monitoring a ride — a slept display
+  // freezes the realtime websocket and truncates the live fleet + breadcrumb.
+  useScreenWakeLock(Boolean(rideId));
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), STALENESS_TICK_MS);
