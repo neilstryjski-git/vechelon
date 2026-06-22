@@ -162,13 +162,19 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
                 borderWidth: beaconActive ? 2 : s.hollow ? 3 : 2,
               },
             ]}
-          />
-        )}
-        {badge ? (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badge}</Text>
+          >
+            {/* Role glyph (e.g. Captain "C") CENTERED inside the dot. It used to be
+                a corner badge that clipped at the Android marker-bitmap bounds (the
+                same failure as the old SAG van badge); centering removes the clip.
+                On a hollow (inactive) dot the fill is transparent, so the glyph
+                takes the green border colour to stay legible; otherwise white. */}
+            {badge ? (
+              <Text style={[styles.dotBadge, { color: !beaconActive && s.hollow ? s.border : '#FFFFFF' }]}>
+                {badge}
+              </Text>
+            ) : null}
           </View>
-        ) : null}
+        )}
       </View>
     </Marker>
   );
@@ -186,20 +192,11 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-  },
-  badge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    backgroundColor: '#0E0E10',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
   },
-  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  // Centered role glyph inside the dot — no corner badge, so nothing to clip.
+  dotBadge: { fontSize: 14, fontWeight: '800', lineHeight: 15 },
   // Sunlight-readable distress ring (§5.1) — amber, expanding, unmistakable.
   beaconRing: {
     position: 'absolute',
