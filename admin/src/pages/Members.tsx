@@ -33,6 +33,105 @@ interface MemberRow {
 }
 
 // ---------------------------------------------------------------------------
+// Bulk CSV import — parsing + validation (W216)
+// ---------------------------------------------------------------------------
+
+const IMPORT_MAX_ROWS = 99;
+const IMPORT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const IMPORT_TEMPLATE =
+  'name,email,phone,role,emergency_contact_name,emergency_contact_phone\n' +
+  'Jane Rider,jane.rider@example.com,+1-416-555-0100,member,John Rider,+1-416-555-0101\n' +
+  'Sam Captain,sam.captain@example.com,+1-416-555-0102,admin,,\n';
+
+interface ParsedMember {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+}
+interface ParsedRow {
+  line: number;           // 1-based data-row number
+  member: ParsedMember;
+  willAffiliate: boolean; // name && phone present -> affiliated on import
+  error?: string;         // set when the row is invalid (excluded from submit)
+}
+interface ParseResult {
+  rows: ParsedRow[];
+  fileError?: string;     // fatal: empty / missing email header / over the cap
+}
+interface ImportRowReport {
+  row: number;
+  email: string;
+  result: string;
+  reason?: string;
+}
+interface ImportReport {
+  total: number;
+  summary: Record<string, number>;
+  reports: ImportRowReport[];
+}
+
+// Minimal quoted-field CSV splitter (no external dependency — mirrors the
+// no-lib posture used for GPX parsing elsewhere in admin/).
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; continue; }
+    if (ch === ',' && !inQ) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parseMembersCsv(text: string): ParseResult {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { rows: [], fileError: 'The file is empty.' };
+
+  const header = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
+  const col = (name: string) => header.indexOf(name);
+  if (col('email') === -1) {
+    return { rows: [], fileError: 'CSV must include an "email" column header.' };
+  }
+  const dataLines = lines.slice(1);
+  if (dataLines.length > IMPORT_MAX_ROWS) {
+    return { rows: [], fileError: `Too many rows: ${dataLines.length}. The import is capped at ${IMPORT_MAX_ROWS} per file.` };
+  }
+
+  const seen = new Set<string>();
+  const rows: ParsedRow[] = dataLines.map((line, i) => {
+    const cells = splitCsvLine(line);
+    const get = (name: string) => { const c = col(name); return c >= 0 ? (cells[c] ?? '') : ''; };
+    const member: ParsedMember = {
+      name: get('name'),
+      email: get('email').toLowerCase(),
+      phone: get('phone'),
+      role: get('role'),
+      emergency_contact_name: get('emergency_contact_name'),
+      emergency_contact_phone: get('emergency_contact_phone'),
+    };
+    const willAffiliate = !!member.name && !!member.phone;
+    let error: string | undefined;
+    if (!member.email || !IMPORT_EMAIL_RE.test(member.email)) error = 'Missing or invalid email';
+    else if (seen.has(member.email)) error = 'Duplicate email in file';
+    else seen.add(member.email);
+    return { line: i + 1, member, willAffiliate, error };
+  });
+  return { rows };
+}
+
+function downloadCsv(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
 // BDD Scenarios (living documentation)
 // ---------------------------------------------------------------------------
 //
@@ -387,6 +486,11 @@ const Members: React.FC = () => {
   const [showInvite, setShowInvite]   = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole]   = useState<'member' | 'admin'>('member');
+  const [showImport, setShowImport]   = useState(false);
+  const [importParse, setImportParse] = useState<ParseResult | null>(null);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [importDryRun, setImportDryRun] = useState<ImportReport | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [confirmAction, setConfirmAction] = useState<{
@@ -590,6 +694,97 @@ const Members: React.FC = () => {
   };
 
   // -------------------------------------------------------------------------
+  // Bulk CSV import mutation (W216)
+  // -------------------------------------------------------------------------
+
+  const { mutate: runImport, isPending: isImporting } = useMutation({
+    mutationFn: async (members: ParsedMember[]) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('bulk-create-members', {
+        body: { members },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      });
+      if (error) {
+        let msg = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch (e) {
+          console.warn('[Members] Failed to parse import error body:', e);
+        }
+        throw new Error(msg);
+      }
+      return data as ImportReport;
+    },
+    onSuccess: (data) => {
+      setImportReport(data);
+      setShowImport(false);
+      setImportParse(null);
+      setImportDryRun(null);
+      if (importFileRef.current) importFileRef.current.value = '';
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+    },
+    onError: (e: Error) => {
+      addToast(`Import failed: ${e.message}`, 'error');
+    },
+  });
+
+  // Dry-run: DB-aware preview (already-member / cross-club) before committing.
+  const { mutate: runDryRun, isPending: isDryRunning } = useMutation({
+    mutationFn: async (members: ParsedMember[]) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('bulk-create-members', {
+        body: { members, dryRun: true },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      });
+      if (error) throw new Error(error.message);
+      return data as ImportReport;
+    },
+    onSuccess: (data) => setImportDryRun(data),
+    onError: () => setImportDryRun(null), // preview gracefully falls back to client-only
+  });
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    setImportDryRun(null);
+    if (!f) { setImportParse(null); return; }
+    try {
+      const text = await f.text();
+      const parsed = parseMembersCsv(text);
+      setImportParse(parsed);
+      if (!parsed.fileError) {
+        const valid = parsed.rows.filter((r) => !r.error).map((r) => r.member);
+        if (valid.length > 0) runDryRun(valid);
+      }
+    } catch {
+      setImportParse({ rows: [], fileError: 'Could not read the file.' });
+    }
+  };
+
+  const submitImport = () => {
+    if (!importParse || importParse.fileError) return;
+    const valid = importParse.rows.filter((r) => !r.error).map((r) => r.member);
+    if (valid.length === 0) { addToast('No valid rows to import.', 'error'); return; }
+    runImport(valid);
+  };
+
+  const closeImport = () => {
+    setShowImport(false);
+    setImportParse(null);
+    setImportDryRun(null);
+    if (importFileRef.current) importFileRef.current.value = '';
+  };
+
+  const downloadErrorRows = () => {
+    if (!importReport) return;
+    const failed = importReport.reports.filter(
+      (r) => r.result === 'failed' || r.result.startsWith('skipped'),
+    );
+    const body = failed.map((r) => `${r.row},${r.email},${r.result},"${(r.reason ?? '').replace(/"/g, '""')}"`).join('\n');
+    downloadCsv('bulk-import-issues.csv', `row,email,result,reason\n${body}\n`);
+  };
+
+  // -------------------------------------------------------------------------
   // Confirm action handler
   // -------------------------------------------------------------------------
 
@@ -666,19 +861,83 @@ const Members: React.FC = () => {
         />
       )}
 
+      {/* Bulk import result report */}
+      {importReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setImportReport(null)}
+        >
+          <div
+            className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-low p-8 max-w-lg w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-headline text-lg font-bold text-on-background">Import complete</h3>
+            <p className="font-label text-xs text-on-surface-variant/70 mt-1">{importReport.total} rows processed.</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mt-4 font-label text-[11px] text-on-surface-variant">
+              {Object.entries(importReport.summary).map(([k, v]) => (
+                <span key={k}><strong className="text-on-background">{v}</strong> {k.replace(/-/g, ' ')}</span>
+              ))}
+            </div>
+            <div className="mt-4 max-h-64 overflow-y-auto rounded-lg border border-outline-variant/20 divide-y divide-outline-variant/10">
+              {importReport.reports.map((r) => (
+                <div key={r.row} className="flex items-center justify-between gap-3 px-3 py-1.5 font-label text-[11px]">
+                  <span className="text-on-surface-variant truncate">{r.email || `Row ${r.row}`}</span>
+                  <span
+                    className={`shrink-0 ${
+                      r.result === 'failed'
+                        ? 'text-error'
+                        : r.result.startsWith('created')
+                          ? 'text-on-background'
+                          : 'text-on-surface-variant/60'
+                    }`}
+                  >
+                    {r.result.replace(/-/g, ' ')}{r.reason ? ` — ${r.reason}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              {importReport.reports.some((r) => r.result === 'failed' || r.result.startsWith('skipped')) && (
+                <button
+                  onClick={downloadErrorRows}
+                  className="px-5 py-2.5 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                >
+                  Download issues
+                </button>
+              )}
+              <button
+                onClick={() => setImportReport(null)}
+                className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98]"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PageHeader
         label="Central Command"
         title="Member Directory"
         italicTitle={false}
         description="Manage the collective strength of Vechelon. Control access levels, validate new entrants, and maintain the integrity of the rider network."
       >
-        <button
-          onClick={() => setShowInvite((v) => !v)}
-          className="signature-gradient text-on-primary px-5 py-2.5 rounded-xl font-label text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
-        >
-          <span className="material-symbols-outlined text-base">person_add</span>
-          Invite Member
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowImport((v) => !v); setShowInvite(false); }}
+            className="px-5 py-2.5 rounded-xl border border-outline-variant/30 font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2 hover:bg-surface-container-high transition-colors active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined text-base">upload_file</span>
+            Import CSV
+          </button>
+          <button
+            onClick={() => { setShowInvite((v) => !v); setShowImport(false); }}
+            className="signature-gradient text-on-primary px-5 py-2.5 rounded-xl font-label text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined text-base">person_add</span>
+            Invite Member
+          </button>
+        </div>
       </PageHeader>
 
       {/* Invite panel */}
@@ -746,6 +1005,111 @@ const Members: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Import CSV panel */}
+      {showImport && (
+        <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/20 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-headline text-sm font-bold text-on-background">Import a roster from CSV</p>
+              <p className="font-label text-[11px] text-on-surface-variant/70 mt-1 leading-relaxed">
+                Up to {IMPORT_MAX_ROWS} known members. Columns: name, email, phone, role, emergency_contact_name, emergency_contact_phone.
+                Rows with name + phone are added as Validated; the rest as Pending. An invite email is sent to each member.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => downloadCsv('bulk-member-import-template.csv', IMPORT_TEMPLATE)}
+              className="shrink-0 px-4 py-2 rounded-lg border border-outline-variant/30 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Download template
+            </button>
+          </div>
+
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportFile}
+            className="w-full font-label text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-label file:text-xs file:bg-surface-container-high file:text-on-surface-variant hover:file:bg-surface-container-highest cursor-pointer"
+          />
+
+          {importParse?.fileError && (
+            <p className="font-label text-xs text-error">{importParse.fileError}</p>
+          )}
+
+          {importParse && !importParse.fileError && (() => {
+            const clientFlagged = importParse.rows.filter((r) => r.error);
+            const validRows = importParse.rows.filter((r) => !r.error);
+            const byEmail = new Map(importDryRun?.reports.map((r) => [r.email, r]) ?? []);
+
+            let toValidate = 0, toPending = 0, alreadyMember = 0, crossClub = 0;
+            const dbFlagged: { line: number; email: string; reason: string }[] = [];
+            for (const r of validRows) {
+              const rep = importDryRun ? byEmail.get(r.member.email) : undefined;
+              if (!importDryRun) { r.willAffiliate ? toValidate++ : toPending++; continue; }
+              switch (rep?.result) {
+                case 'created-affiliated': toValidate++; break;
+                case 'created-initiated': toPending++; break;
+                case 'skipped-already-member':
+                  alreadyMember++; dbFlagged.push({ line: r.line, email: r.member.email, reason: 'Already a member' }); break;
+                case 'failed':
+                  crossClub++; dbFlagged.push({ line: r.line, email: r.member.email, reason: rep?.reason || 'Rejected' }); break;
+                default: r.willAffiliate ? toValidate++ : toPending++;
+              }
+            }
+            return (
+              <div className="space-y-3">
+                {isDryRunning && (
+                  <p className="font-label text-[11px] text-on-surface-variant/60">Checking against existing members…</p>
+                )}
+                <div className="flex flex-wrap gap-x-6 gap-y-1 font-label text-[11px] text-on-surface-variant">
+                  <span><strong className="text-on-background">{toValidate + toPending}</strong> to import</span>
+                  <span><strong className="text-on-background">{toValidate}</strong> → Validated</span>
+                  <span><strong className="text-on-background">{toPending}</strong> → Pending (no name/phone)</span>
+                  {alreadyMember > 0 && <span><strong className="text-on-background">{alreadyMember}</strong> already members</span>}
+                  {crossClub > 0 && <span className="text-error"><strong>{crossClub}</strong> from another club</span>}
+                  {clientFlagged.length > 0 && <span className="text-error"><strong>{clientFlagged.length}</strong> invalid</span>}
+                </div>
+                {(clientFlagged.length > 0 || dbFlagged.length > 0) && (
+                  <div className="max-h-32 overflow-y-auto rounded-lg border border-outline-variant/20 divide-y divide-outline-variant/10">
+                    {clientFlagged.map((r) => (
+                      <div key={`c-${r.line}`} className="flex items-center justify-between px-3 py-1.5 font-label text-[11px]">
+                        <span className="text-on-surface-variant truncate">Row {r.line}: {r.member.email || '(no email)'}</span>
+                        <span className="text-error shrink-0 ml-3">{r.error}</span>
+                      </div>
+                    ))}
+                    {dbFlagged.map((r) => (
+                      <div key={`d-${r.line}`} className="flex items-center justify-between px-3 py-1.5 font-label text-[11px]">
+                        <span className="text-on-surface-variant truncate">Row {r.line}: {r.email}</span>
+                        <span className="text-on-surface-variant/60 shrink-0 ml-3">{r.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeImport}
+              className="px-5 py-2.5 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submitImport}
+              disabled={isImporting || isDryRunning || !importParse || !!importParse.fileError || importParse.rows.every((r) => r.error)}
+              className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {isImporting ? 'Importing…' : 'Import members'}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Tab Navigation */}
