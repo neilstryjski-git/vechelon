@@ -269,3 +269,58 @@ froze for 24 min. Transistorsoft streamed continuously (~7–9s) on both devices
 (OS Doze limitation, no free fix); Transistorsoft's native engine does, across screen-on, locked,
 and app-switched — validated on real hardware. $399 Starter (+optional $199/yr) justified. The only
 remaining step before a release build is purchasing the license key (debug builds run free).
+
+## 🚲 BIKE RIDE — RWGPS ground-truth cross-check (2026-06-20) — W179 validation evidence
+
+First on-**bike** field test, at real cycling speed over real distance. Build = `trial` debug profile,
+commit `bd16e40` (`bd16e4095…`), engine `tsbg`. Sink ride `75aa8d5d-4e6d-4674-a1f4-13f4f9552a51`.
+Paired ground-truth artifact: `docs/06_20_26.gpx` (RWGPS trip 391994301, 870 trackpoints).
+
+**Ride shape (RWGPS, independent recording):** 9.81 km, 34.3 min (22:54:54→23:29:11 UTC), avg moving
+20.9 km/h, max 50.0 km/h. Vechelon emitted **410 `tsbg` pings @ ~5 s cadence**; worst inter-ping gap
+all ride = **14.3 s** (GPS warmup at ride start), steady ≤7.6 s after the first minute. Continuous
+through a mid-ride backgrounding handoff (logged `branch:fgs, backgroundReady:true` at 23:12:44).
+
+**The canonical "Stopped ≠ Dark" validation — the beer stop.** Rider parked the bike at **Henderson's
+Brewing (43.6539, -79.4455)** for ~2.5 min (≈23:10:22→23:13:12 UTC). This single real-world stop
+exercised the W174 two-axis state model exactly as designed:
+- **Movement axis (sender-derived):** Vechelon flagged `Stopped` at **23:12:16** — precisely at the
+  tenant's `rail3_stopped_threshold_minutes = 2` (stop began ~23:10:22; +2 min = 23:12:22; fired within
+  seconds). Stop **end** matched RWGPS to ~1 s (Vechelon last-`Stopped` 23:13:15; RWGPS movement
+  resumes 23:13:14). The four shorter pauses on the ride (29–37 s) correctly stayed `Active` — all
+  well under the 2-min threshold, immaterial to fleet awareness by design.
+- **Liveness axis (receiver-derived):** pings **never stopped** during the beer stop, so the rider
+  correctly stayed *alive* and never tipped toward `Dark`. Had the phone died, ping silence would have
+  derived `Dark` at the 15-min threshold. **This is the distinction that separates "having a beer" from
+  "dead phone" — proven against a real stop, not a scripted one.**
+
+**Design reconciliation vs RWGPS (no defect):** RWGPS **auto-paused** during the stop (150 s gap, no
+trackpoints) — correct *for its purpose*: ride-stat apps must subtract stationary time to keep pace
+stats true ("don't record the coffee/beer stop"). Vechelon does the opposite **on purpose** — it keeps
+pinging through the stop because continuous pings are the only thing that distinguishes Stopped-for-beer
+from a dead phone. Two products, two correct behaviors. (Corrects an earlier in-session overclaim that
+Vechelon "beat" RWGPS on continuity here — the RWGPS gap was deliberate auto-pause, not a failure.)
+
+**Quantified performance (sink series — 410 `gps_ping`, 30 `broadcast_latency`, ride `75aa8d5d…`):**
+- *Cadence:* mean **4.95 s**, median **5.00 s**; p90 5.0 s, p95 5.1 s, **p99 5.1 s**. Beyond the lone
+  GPS-warmup gap noted above, only **2 inter-ping gaps the entire ride exceeded 7 s** (0.5 %) and just
+  one exceeded 10 s — effectively metronomic after the first minute.
+- *Broadcast latency (send→receive):* median **145 ms**, p90 220 ms, p95 377 ms, lone max 1.27 s. Sub-
+  150 ms typical — the fleet sees a rider essentially in real time; the single spike is network, not systemic.
+- *Coverage:* Vechelon 22:54:36→23:28:20 (33.7 min) vs RWGPS 22:54:54→23:29:11 (34.3 min) — Vechelon
+  started 17 s *before* RWGPS and its last sink ping is 50 s before RWGPS's (ride ended in-app first). Full ride tracked.
+
+**Spatial accuracy — intentionally NOT quantified (privacy by design).** There is no cross-track-error
+number because Vechelon **persists no coordinates**: no `location_pings` table, and the sink stores
+cadence/state/latency but never lat/lng. That is the privacy posture (no location history — the property
+that separates Vechelon from RWGPS/Strava), not a missing test. Positional fidelity stays **qualitative**
+(the live breadcrumb followed real roads cleanly across mobile + web). If a number is ever required, the
+privacy-preserving route is an **ephemeral, PoC-only external listener** that captures the in-flight
+broadcasts for one ride and is deleted after analysis — never a persisted store, never a product change.
+Recording tracks as a product capability is a Brain/Pillar decision, out of scope here.
+
+**Verdict:** the RWGPS cross-check produced **zero defects**. Background continuity, the state machine's
+single detected stop (both ends + threshold timing), and the Stopped-vs-Dark distinction all validate
+against independent ground truth. **Remaining open §5 item:** a **>60-min** ride to exercise
+access-token survival past its lifetime — this ride was 34 min and does not cover it. W179 stays open
+pending that long ride.
