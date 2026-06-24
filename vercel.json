@@ -41,6 +41,10 @@
     {
       "source": "/roadmap",
       "destination": "/roadmap.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
     }
   ]
 }
