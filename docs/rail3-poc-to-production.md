@@ -14,6 +14,13 @@ inputs. The only item that *could* have been a Bedrock amendment — position-da
 confidentiality — was **ratified by the Brain as render-only (NOT confidential at the
 data layer), so no amendment is required.**
 
+**How to read this (synthesis added 2026-06-24).** This document is the **technical
+grounding for the Rail 3a Brain session that authors the production Pillar set.** The
+**Pillar-authoring map** immediately below is the synthesis — *decided inputs* (constrain
+the Pillars), *open decisions the Brain owns* (mapped to the Pillar each becomes), and
+*build-sizing*. **§A–§K** are the dated evidence behind every line of that map. The map is
+the entry point; the sections are the depth. Nothing here edits a PoC Pillar.
+
 ---
 
 ## Ratified decisions
@@ -31,6 +38,45 @@ data layer), so no amendment is required.**
   confidentiality as an invariant, that's new production-Pillar authoring — still not a PoC
   amendment.)
 - **No amendments to the PoC Pillars.** They correctly describe the PoC as-built.
+
+---
+
+## Pillar-authoring map — the synthesis
+
+*Read this as the map; §A–§K below are the evidence. This is input to authoring the **production** Pillar set, not an edit to the PoC Pillars.*
+
+### 1. Decided inputs — constrain the Pillars; do not relitigate
+- **Transport:** two-channel role-scoped Broadcast is the production design — scaling-driven, confidentiality a byproduct; position confidentiality is **render-only**, not a data-layer invariant (unless the prod Pillars choose to promise it). *(§A, W193, Ratified decisions.)*
+- **Background-GPS engine:** **Transistorsoft** `react-native-background-geolocation`, validated; license binds to the production bundle id — decide that id before purchase. *(§H, W204.)*
+- **Multi-tenancy of the data layer is DONE (small case A3, not C2):** `beacon_alerts` / `rider_states` already carry `tenant_id` + tenant RLS; pings are ephemeral; the per-ride channel is already tenant-gated (W170). *(§K.)*
+- **Surface architecture (Fork B — RESOLVED):** **two disjoint surfaces** — web owns onboarding/auth/desktop/app-less; a **deliberately narrow native app** owns the in-saddle tactical/safety surface (Option C). Web is the auth front door; the email-keyed account is the only cross-surface link. **No WebView embedding, no auth bridge.** *(§J — supersedes the Option-1/2/3 + auth-bridge exploration in that section.)*
+- **Captain tooling model:** roster = searchable source-of-truth; map = live subset; **three-state model** — **Live** / **Dark** (greyed at last-known) / **Untracked** (roster-only). *(§J.)*
+- **iOS reality:** native is **Android-only** (SD-004) → every iPhone rider is web/roster-only, never on the live map or the safety net. Any safety claim must be **Android-scoped**. *(§J.)*
+
+### 2. Open decisions the Brain owns — these become Pillar content
+- **Pillar I — Charter:**
+  - Fan-out cost vs the **$0 operating-cost target**, and a **target max fleet size**. *(§A.)*
+  - **F-08 — Dark last-known retention vs the 4-hour Hard Purge** (Charter touch vs privacy-as-product D-03). *(§E, §J.)*
+  - **THE governing call: is rider safety a *headline commitment* or a *quiet operational aid*?** Cascades into F-08, the abrupt-dark alarm, and Fork A persistence. *(§J.)*
+- **Pillar II — Specs:**
+  - **Fork A — is a completed ride a durable artifact or ephemeral?** Gates ride-history / GPX-export / post-ride review; "durable" is a **§2 amendment** (ephemerality is load-bearing). *(§J.)*
+  - **Abrupt-dark-at-speed alarm** — net-new, faster than the 15-min Dark. *(§J.)*
+  - **SAG marker shape + in-app SAG designation** — re-authors Feature 1 + the "SAG set before start, no mid-ride reassign" rule. *(§H: W213/W211/W214.)*
+  - **Ride-selection at scale + multi-membership** — participation-scoped list; derive active tenant from the *selected ride* (app-layer **resolution**, distinct from the done data-layer scoping). *(§H, W210.)*
+  - **Breadcrumb full-history for late joiners** — broadcast-only options, no §2 break. *(§H.)*
+  - **Onboarding paths + the field-set / membership-gating model** — mandatory name/email/phone, optional emergency; affiliation = details + (club-optional) approval. *(§J — Product-Trio-pending.)*
+  - **Web spectator mode** — viewer role derived from `ride_participants`; hard-blocked by the §C server-side gate. *(§E.)*
+- **Pillar III — Quality Gate:**
+  - **Innovation Accounting** — value/growth experiments (V1–V4, G1–G3) + pivot-or-persevere thresholds, with **E1–E8** as NFR enablers. *(§I.)*
+  - **Data-layer role-gate regression assertions** (the 3623 class). *(QA structural lesson, §C.)*
+  - Production telemetry home + privacy/retention posture. *(§I.)*
+- **Pillar IV — Ledger:** record the SDs resolved in §1 (engine, surface architecture, three-state model, data-layer tenant-scoping-done).
+
+### 3. Build-sizing the Pillars should assume — Hands work, mostly not Pillar decisions
+- **#1 critical — background GPS is NOT built** (§F): Android Foreground Service + Transistorsoft background task + per-OEM battery allow-listing. Must precede any real field test.
+- **Wire the built-but-dead battery/FGS UX** (§G, W176/W177).
+- **Server-side role gate + API regression** for the RP-16/phone over-read (§C, 3623) — prerequisite for web spectator mode *and* the safety roster.
+- **D58 deep-link / environment-aware ride-join URL** (§H); identity hydration at join (§B); remove orphaned `expo-task-manager` (§H, W209).
 
 ---
 
@@ -156,18 +202,12 @@ Rider session), not just UI checks.
 ---
 
 ## What ships now vs feeds the Brain
-- **Now (The Hands, no Pillar touch):** B (defect), C/3623 (server-side fix + API regression;
-  pending Brain scope call), the role-gate data-layer regression assertions, D ops checklist.
-- **Rail 3a Brain session inputs:** A (fan-out economics + Option A) · the A/C shared
-  "enforcement/topology" theme · the two Charter touchpoints (fan-out $0 cost; S0-011 retention)
-  · E (S0-009/010/011).
+*The full Brain-input planning view is the **Pillar-authoring map** at the top (it spans §A–§K). This is just the near-term execution split:*
+- **Ship now (Hands, no Pillar touch):** §B identity-hydration + §C/3623 server-side gate & API regression (defects), the role-gate data-layer regression assertions, and the §D ops checklist. The critical pre-field-test build is background GPS (§F) + the §G wiring.
+- **Everything else feeds the Brain** — see the map's §2 (open decisions, by Pillar).
 
-## References
-- Stride: **W190** (web fleet view), **W192** (staging hosting/override), **W193** (fan-out scaling),
-  defect **3623** (RP-16). PRs **#70** (W190), **#73** (W192, stacked).
-- Pillars: `productdocuments/rail3/vechelon_rail3_pillar_1_charter.md` (§3 $0 cost, 4-h purge),
-  `..._pillar_2_specs_v1.0.2.md` (§2 transport/NFRs, §4.1 matrix, Feature 1/2),
-  `..._pillar_3_quality_gate_v1.0.0.md` (R3-xx, V-004).
+## Later Brain inputs — §H–§K (added 2026-06-15 → 06-24)
+*Dated evidence accumulated after the original A–G pass; every item is folded into the Pillar-authoring map at the top. References moved to the end of the document.*
 
 ### H. Production considerations — flagged during RC4 testing (2026-06-15)
 
@@ -343,6 +383,8 @@ position/beacon telemetry at production scale.
 
 **Strava is the precedent.** Fully native phone app (recording is native-only; web never records), web retained as a *desktop* surface (analysis + route builder → sync to phone), dual-build tax accepted. The "two homes on one phone" problem dissolves because **web doesn't court the phone** — split by *job* (create/analyze = web, record/ride = native) and *device* (desktop = web, phone = app). Vechelon is already Strava-shaped on the authoring axis (admin builds route → mobile rides it).
 
+> **⚠ Superseded — see "Fork B — RESOLVED" later in this section.** The Option-1/2/3 analysis and the auth-bridge deep-dive that follow are the *reasoning trail*; the decision is **two disjoint surfaces / a narrow native app (Option C)**, which deletes the auth bridge entirely. Kept for the Brain's context, not as live options.
+
 **Three convergence options + LOE** (numbers firm up with a screen-by-screen rider-web↔mobile overlap map):
 - **Option 1 — smart routing / thin PWA (~1–2 wk *incremental*).** PWA detects the installed app and deep-links ride actions in; native owns in-saddle. Mostly glue on top of work already in flight. Risk: Android deep-linking already bit us once (D48 https→`rail3://` 302 drop). Two-icon smell partly remains.
 - **Option 2 — native shell + embedded WebView (~3–6 wk). Highest value-per-effort here.** One native app; non-tracking rider screens are the existing rider web in a WebView (reuse *all* rider-portal code, no rewrite), only the live map/tracking is native. Single icon, seam hidden. **Long pole = the auth-session bridge** (below).
@@ -421,3 +463,10 @@ Searchable roster matters at scale (15–50+). Role-gated to captain/SAG via exi
 **Sizing verdict:** **A3 is the small case.** No tenant-scoping migration on the persisted tables (already done), and no Broadcast rework for tenancy (W170 already gates per-tenant). The C2 "migration + Broadcast rework" scenario does **not** apply.
 
 **One caveat — state, not design:** these tables are **held off prod** (they live on `origin/W172`, applied to **staging** `xybgtbybdhxuwqjfcfkc` and verified, not the prod project). So "as-built they are tenant-scoped" is true on the held branch + staging; promoting them to prod is the additive-migration step already gated in the Rail 3 hold — not net tenant-scoping work.
+
+---
+
+## References
+- **Stride:** W190 (web fleet view), W192 (staging hosting/override), W193 (fan-out scaling), W204 (Transistorsoft engine), W210 (ride-selection at scale), W211/W213/W214 (SAG), W216 (bulk member import); defects 3623 (RP-16), D48 (deep-link/OTP), D58 (ride-join URL). PRs #70 (W190), #73 (W192), #85 (W216).
+- **PoC Pillars (frozen):** `productdocuments/rail3/vechelon_rail3_pillar_1_charter.md` (§3 $0 cost, 4-h purge), `..._pillar_2_specs_v1.0.2.md` (§2 transport/NFRs, §4.1 matrix, Feature 1/2), `..._pillar_3_quality_gate_v1.0.0.md` (R3-xx, V-004), `..._pillar_4_ledger_v1.0.0.md` (F-07/F-08, S0-009/010/011).
+- **Companion docs:** `docs/rail3-transistorsoft-trial-test.md` (engine validation), `docs/rail3-breadcrumb-hands-seed.md`, `docs/rail3-forward-plan.md`, `supabase/migrations/20260610000000_rail3_schema.sql` (rail3 schema, held on origin/W172).
