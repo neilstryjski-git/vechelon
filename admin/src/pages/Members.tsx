@@ -178,9 +178,10 @@ interface ActionMenuProps {
   onArchive:    () => void;
   onReactivate: () => void;
   onChangeEmail: () => void;
+  onEditContact: () => void;
 }
 
-function ActionMenu({ member, isSelf, onSuspend, onUnsuspend, onArchive, onReactivate, onChangeEmail }: ActionMenuProps) {
+function ActionMenu({ member, isSelf, onSuspend, onUnsuspend, onArchive, onReactivate, onChangeEmail, onEditContact }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -222,6 +223,7 @@ function ActionMenu({ member, isSelf, onSuspend, onUnsuspend, onArchive, onReact
   if (member.status === 'initiated' && !isSelf) {
     items.push(item('Archive', 'archive', onArchive, true));
   }
+  items.push(item('Edit Details', 'edit', onEditContact));
   items.push(item('Change Email', 'mail', onChangeEmail));
 
   return (
@@ -365,6 +367,87 @@ function ChangeEmailModal({ member, isPending, onSubmit, onCancel }: ChangeEmail
   );
 }
 
+interface EditContactModalProps {
+  member:    MemberRow;
+  isPending: boolean;
+  onSubmit:  (fields: { name: string; phone: string; emergencyName: string; emergencyPhone: string }) => void;
+  onCancel:  () => void;
+}
+
+function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContactModalProps) {
+  const [name, setName]                   = useState(member.accounts?.name ?? '');
+  const [phone, setPhone]                 = useState(member.accounts?.phone ?? '');
+  const [emergencyName, setEmergencyName] = useState(member.accounts?.emergency_contact_name ?? '');
+  const [emergencyPhone, setEmergencyPhone] = useState(member.accounts?.emergency_contact_phone ?? '');
+
+  const heading = member.accounts?.name ?? member.accounts?.email ?? 'this member';
+  // Completing name + phone promotes an Awaiting member to Approved (admin = approval gesture).
+  const willPromote = member.status === 'initiated' && !!name.trim() && !!phone.trim();
+
+  const field = (
+    label: string, value: string, set: (v: string) => void,
+    type = 'text', placeholder = '', autoFocus = false,
+  ) => (
+    <div>
+      <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+      />
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-low p-8 max-w-md w-full mx-4 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="space-y-2">
+          <h3 className="font-headline font-bold text-lg text-on-background">Edit Contact Details</h3>
+          <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">{heading}</p>
+        </div>
+
+        <div className="space-y-4">
+          {field('Full Name', name, setName, 'text', 'Jane Rider', true)}
+          {field('Phone', phone, setPhone, 'tel', '+1 555 000 0000')}
+          <div className="pt-2 border-t border-outline-variant/15" />
+          <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/60">Emergency Contact (optional)</p>
+          {field('Emergency Contact Name', emergencyName, setEmergencyName, 'text', 'Contact name')}
+          {field('Emergency Contact Phone', emergencyPhone, setEmergencyPhone, 'tel', '+1 555 000 0000')}
+        </div>
+
+        {member.status === 'initiated' && (
+          <p className={`font-label text-xs ${willPromote ? 'text-tertiary' : 'text-on-surface-variant/70'}`}>
+            {willPromote
+              ? 'Saving will approve this member (name + phone complete).'
+              : 'Add a name and phone to approve this member.'}
+          </p>
+        )}
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit({ name, phone, emergencyName, emergencyPhone })}
+            disabled={isPending}
+            className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            {isPending ? 'Saving…' : 'Save Details'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tab config
 // ---------------------------------------------------------------------------
@@ -394,6 +477,7 @@ const Members: React.FC = () => {
     member: MemberRow;
   } | null>(null);
   const [changeEmailTarget, setChangeEmailTarget] = useState<MemberRow | null>(null);
+  const [editContactTarget, setEditContactTarget] = useState<MemberRow | null>(null);
 
   const { addToast }  = useToast();
   const queryClient   = useQueryClient();
@@ -550,6 +634,45 @@ const Members: React.FC = () => {
   });
 
   // -------------------------------------------------------------------------
+  // Edit contact details mutation (admin-gated RPC; may auto-promote to affiliated)
+  // -------------------------------------------------------------------------
+
+  const { mutate: saveContact, isPending: isSavingContact } = useMutation({
+    mutationFn: async (
+      { accountId, fields }: {
+        accountId: string;
+        fields: { name: string; phone: string; emergencyName: string; emergencyPhone: string };
+      },
+    ): Promise<string | null> => {
+      const { data, error } = await supabase.rpc('admin_update_member_contact', {
+        target_account_id:         accountId,
+        p_name:                    fields.name,
+        p_phone:                   fields.phone,
+        p_emergency_contact_name:  fields.emergencyName,
+        p_emergency_contact_phone: fields.emergencyPhone,
+      });
+      if (error) throw error;
+      return (data as string | null) ?? null;
+    },
+    onSuccess: (newStatus) => {
+      const wasInitiated = editContactTarget?.status === 'initiated';
+      addToast(
+        wasInitiated && newStatus === 'affiliated'
+          ? 'Details saved — member approved.'
+          : 'Contact details saved.',
+        'success',
+      );
+      setEditContactTarget(null);
+      // Member list reads account_tenants.status; tier detection reads it too.
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['user-tier'] });
+    },
+    onError: (e: Error) => {
+      addToast(`Failed to save details: ${e.message}`, 'error');
+    },
+  });
+
+  // -------------------------------------------------------------------------
   // Invite mutation
   // -------------------------------------------------------------------------
 
@@ -663,6 +786,15 @@ const Members: React.FC = () => {
           isPending={isChangingEmail}
           onSubmit={(email) => changeEmail({ accountId: changeEmailTarget.account_id, email })}
           onCancel={() => setChangeEmailTarget(null)}
+        />
+      )}
+
+      {editContactTarget && (
+        <EditContactModal
+          member={editContactTarget}
+          isPending={isSavingContact}
+          onSubmit={(fields) => saveContact({ accountId: editContactTarget.account_id, fields })}
+          onCancel={() => setEditContactTarget(null)}
         />
       )}
 
@@ -893,6 +1025,7 @@ const Members: React.FC = () => {
                     onArchive={()    => setConfirmAction({ type: 'archive',    member: m })}
                     onReactivate={() => setConfirmAction({ type: 'reactivate', member: m })}
                     onChangeEmail={()=> setChangeEmailTarget(m)}
+                    onEditContact={()=> setEditContactTarget(m)}
                   />
                 )}
               </div>
