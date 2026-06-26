@@ -11,7 +11,7 @@
       "android"
     ],
     "android": {
-      "package": "ca.vechelon.rail3"
+      "package": "ca.vechelon"
     },
     "plugins": [
       "expo-dev-client",
