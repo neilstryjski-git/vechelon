@@ -216,7 +216,9 @@ function SkeletonCard() {
 function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRow) => void }) {
   const isAdmin = useAppStore((state) => state.isAdmin);
   const regenerate = useRegenerateThumbnail();
-  const [imgFailed, setImgFailed] = useState(false);
+  // Track WHICH url failed (not a sticky boolean) so a fresh thumbnail_url —
+  // e.g. after a successful self-heal — clears the failed state automatically.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const healAttempted = useRef(false);
   const date = new Date(route.created_at).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
@@ -225,15 +227,9 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
   // A thumbnail is unusable if it's missing, the <img> failed to load, or the
   // stored URL is already over Google's length limit (legacy rows from before
   // the D68 fix — detected proactively so we never even attempt the 400).
+  const imgFailed = !!route.thumbnail_url && failedUrl === route.thumbnail_url;
   const overLimit = !!route.thumbnail_url && route.thumbnail_url.length > MAX_STATIC_MAP_URL_LENGTH;
   const showPlaceholder = !route.thumbnail_url || imgFailed || overLimit;
-
-  // A fresh thumbnail_url (e.g. after a successful self-heal) deserves a new
-  // load attempt — clear the sticky onError flag so the healed map can render
-  // without a page reload.
-  useEffect(() => {
-    setImgFailed(false);
-  }, [route.thumbnail_url]);
 
   // Self-heal: an admin viewing a broken/over-limit thumbnail regenerates it
   // once from the stored GPX. Riders (non-admin) just see the placeholder.
@@ -264,7 +260,7 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
           <img
             src={route.thumbnail_url!}
             alt={route.name}
-            onError={() => setImgFailed(true)}
+            onError={() => setFailedUrl(route.thumbnail_url ?? null)}
             className="w-full h-full object-cover opacity-90 group-hover/thumb:opacity-100 transition-all duration-500"
           />
         ) : regenerate.isPending ? (
