@@ -364,3 +364,18 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   `PING_SOUND_ID` is the one first-build validation point. NOTE: validate on a build with
   `debug:false` — `debug:true` chirps every fix regardless of the toggle, masking the on/off
   behaviour. tsc clean (deepLinkAuth.ts only).
+
+## 2026-06-27 — W232 field diagnostics: send-log button + debug:false + accuracy harness
+
+- bgGeo.ts: `debug: true` → **`debug: false`** (the W231 toggle now owns the audible signal,
+  without TS's developer notification). `logLevel: VERBOSE` KEPT on purpose — it's the fetchable
+  on-device diagnostic log (coords + per-fix hAcc). W208 takes logLevel OFF for production.
+- diagnostics.ts (new): `sendDiagnosticLog()` → `BackgroundGeolocation.logger.emailLog(<recipient>)`.
+  MANUAL, consented pull. **Never `uploadLog`** (that would POST coord-bearing logs to a server,
+  breaching the no-coords-on-the-server posture). Lazy require; never throws (returns a result).
+- HomeScreen.tsx: themed "Send diagnostic log" button beside the W231 toggle; Alert on ok/fail.
+- tools/rail3_ts_log_accuracy.py (new): zero-build GPS-accuracy harness. Parses the TS log
+  (lat/lng/hAcc/ts) → hAcc distribution; with `--gpx` aligns vs a synchronous RWGPS track
+  (`--tz-offset` reconstructs TS device-local → UTC) → positional/cross-track error. Smoke-tested
+  3/3 fixes + GPX alignment; graceful on empty input. hAcc is SELF-REPORTED (real error needs the
+  GPX diff); RWGPS is agreement, not survey truth. tsc clean (deepLinkAuth.ts only).

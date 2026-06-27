@@ -100,15 +100,16 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
         title: 'Vechelon — sharing your position',
         text: 'Live with your ride Captain while the ride is active.',
       },
-      // FIELD-BUILD diagnostic (Neil 2026-06-15): debug ON so the TS engine emits its
-      // native audible chirp on each recorded fix — the field-troubleshooting beep Neil
-      // uses to HEAR tracking working from a pocketed phone. This is the engine's own
-      // chirp (the custom expo-av chirp.ts that substituted for it on the now-removed
-      // expo-location path is gone). The dual-engine SELECTOR stays hidden — TS is the
-      // sole, hardwired engine — so nothing customer-switchable is in view. debug:true
-      // also surfaces TS's diagnostic notification; acceptable for the volunteer field
-      // session. Flip back to false for a real club release. logLevel stays verbose.
-      debug: true,
+      // W232: debug OFF. The W231 audible-ping toggle now owns the "hear tracking from a
+      // pocketed phone" signal (TS playSound on each fix) — WITHOUT debug:true's developer
+      // diagnostic notification, which doesn't belong in front of club riders.
+      // logLevel STAYS verbose on purpose: it's the fetchable on-device diagnostic log
+      // (coords + per-fix hAcc) that powers the zero-build accuracy harness — the
+      // "Send diagnostic log" button (logger.emailLog) feeds tools/rail3_ts_log_accuracy.py.
+      // That log is on-device only, auto-expires (logMaxDays default 3), and is pulled
+      // MANUALLY (emailLog/getLog — never uploadLog), so the no-coords-on-the-server posture
+      // holds. W208 takes logLevel OFF for a production release.
+      debug: false,
       logLevel: BG.LOG_LEVEL_VERBOSE,
     });
     configured = true;

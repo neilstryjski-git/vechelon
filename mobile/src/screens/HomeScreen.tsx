@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
   loadTrackingPingFlag,
   setTrackingPingEnabled,
 } from '../lib/trackingPing';
+import { sendDiagnosticLog } from '../lib/diagnostics';
 import AdHocCreator from '../components/AdHocCreator';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
@@ -64,6 +66,17 @@ const HomeScreen: React.FC = () => {
   const onTogglePing = useCallback((next: boolean) => {
     setPingOn(next);
     void setTrackingPingEnabled(next);
+  }, []);
+
+  // W232: pull the TS on-device diagnostic log (coords + per-fix hAcc) for the accuracy
+  // harness. Manual, consented email — never a server upload (privacy posture).
+  const onSendLog = useCallback(async () => {
+    const result = await sendDiagnosticLog();
+    if (result.ok) {
+      Alert.alert('Diagnostic log ready', 'Your mail app should open with the log attached. Send it to share your ride diagnostics.');
+    } else {
+      Alert.alert('Could not prepare log', result.error || 'No log available, or no mail account is set up on this device.');
+    }
   }, []);
 
   useEffect(() => {
@@ -148,6 +161,19 @@ const HomeScreen: React.FC = () => {
         />
       </View>
 
+      {/* W232: pull the TS on-device diagnostic log (coords + per-fix accuracy) for the
+          accuracy harness. Manual emailLog — never a server upload. Closed-test only. */}
+      <TouchableOpacity
+        style={[styles.diagButton, { borderColor: theme.primaryColor }]}
+        onPress={onSendLog}
+        accessibilityRole="button"
+        accessibilityLabel="Send diagnostic log"
+      >
+        <Text style={[styles.diagButtonText, { color: theme.primaryColor }]}>
+          Send diagnostic log
+        </Text>
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Live rides</Text>
       <FlatList
         data={rides}
@@ -231,11 +257,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   settingText: { flex: 1, marginRight: 12 },
   settingLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   settingSub: { color: '#7A7A7A', fontSize: 11, marginTop: 3 },
+  diagButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  diagButtonText: {
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
   empty: { color: '#7A7A7A', fontSize: 13, lineHeight: 19, marginTop: 12 },
   rideCard: {
     flexDirection: 'row',
