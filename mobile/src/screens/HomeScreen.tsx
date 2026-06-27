@@ -3,6 +3,7 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -14,6 +15,11 @@ import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
 import { TENANT_SLUG } from '../lib/env';
+import {
+  isTrackingPingEnabled,
+  loadTrackingPingFlag,
+  setTrackingPingEnabled,
+} from '../lib/trackingPing';
 import AdHocCreator from '../components/AdHocCreator';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
@@ -41,6 +47,24 @@ const HomeScreen: React.FC = () => {
   // ride creators are tenant admins. Show the control only to accounts that
   // can actually use it (PoC captains are seeded as tenant admins).
   const [canCreate, setCanCreate] = useState(false);
+  // W231: opt-in audible tracking-ping toggle (closed-test field-QA aid). Off by
+  // default; hydrate from storage on mount. Source of truth lives in trackingPing.ts.
+  const [pingOn, setPingOn] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadTrackingPingFlag().then(() => {
+      if (mounted) setPingOn(isTrackingPingEnabled());
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const onTogglePing = useCallback((next: boolean) => {
+    setPingOn(next);
+    void setTrackingPingEnabled(next);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -105,6 +129,23 @@ const HomeScreen: React.FC = () => {
         >
           <Text style={[styles.signOutText, { color: theme.primaryColor }]}>Sign Out</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* W231: closed-test field-QA toggle — an audible chirp on each tracking
+          update so a tester can confirm tracking from a pocketed phone. Off by
+          default; strip/lock off for production. */}
+      <View style={styles.settingRow}>
+        <View style={styles.settingText}>
+          <Text style={styles.settingLabel}>Audible tracking ping</Text>
+          <Text style={styles.settingSub}>Chirp on each update — field-test aid</Text>
+        </View>
+        <Switch
+          value={pingOn}
+          onValueChange={onTogglePing}
+          trackColor={{ true: theme.primaryColor, false: '#3A3A3E' }}
+          thumbColor="#FFFFFF"
+          accessibilityLabel="Audible tracking ping"
+        />
       </View>
 
       <Text style={styles.sectionTitle}>Live rides</Text>
@@ -183,6 +224,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16161A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 24,
+  },
+  settingText: { flex: 1, marginRight: 12 },
+  settingLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  settingSub: { color: '#7A7A7A', fontSize: 11, marginTop: 3 },
   empty: { color: '#7A7A7A', fontSize: 13, lineHeight: 19, marginTop: 12 },
   rideCard: {
     flexDirection: 'row',

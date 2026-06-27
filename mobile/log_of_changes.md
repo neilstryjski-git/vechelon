@@ -352,3 +352,15 @@ restarted it. NOT battery (Unrestricted was on), NOT motion, NOT token, NOT noti
   even required, or does free expo-location + the fix now sustain background?" Default 'expo'.
 
 tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — production ships ONE engine.
+
+## 2026-06-27 — W231 audible tracking-ping toggle (closed-test field-QA)
+
+- trackingPing.ts — off-by-default per-device AsyncStorage flag, cached in memory (the onLocation
+  hot path never hits storage); `playTrackingPing(BG)` fires TS-native `playSound('LOCATION_RECORDED')`
+  per recorded fix, fire-and-forget (.catch + try). Wired in bgGeo.ts onLocation; toggle Switch on
+  HomeScreen (themed). LLD: TS `playSound`, NOT re-adding expo-av (W203 removed it) — TS-native audio
+  rings under the FGS screen-locked, which expo-av can't reliably do backgrounded. Purpose: the same
+  chirp as `debug:true` WITHOUT its diagnostic notification, so it survives the W208 debug strip.
+  `PING_SOUND_ID` is the one first-build validation point. NOTE: validate on a build with
+  `debug:false` — `debug:true` chirps every fix regardless of the toggle, masking the on/off
+  behaviour. tsc clean (deepLinkAuth.ts only).

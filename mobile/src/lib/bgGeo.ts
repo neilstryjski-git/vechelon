@@ -1,6 +1,8 @@
 import type BackgroundGeolocationType from 'react-native-background-geolocation';
 import type { Location } from 'react-native-background-geolocation';
 
+import { loadTrackingPingFlag, playTrackingPing } from './trackingPing';
+
 // RC4 engine — Transistorsoft Background Geolocation (sole engine since W203).
 //
 // LAZY NATIVE BINDING: we `require()` the SDK lazily inside startBgGeo (and register
@@ -49,6 +51,9 @@ let listenerBound = false;
 export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
   currentHandler = handler;
   const BG = getBgGeo();
+  // W231: hydrate the audible-ping toggle once so the onLocation hot path reads a
+  // cached flag (never storage). Off by default; see trackingPing.ts.
+  void loadTrackingPingFlag();
   if (!listenerBound) {
     BG.onLocation(
       (location: Location) => {
@@ -58,6 +63,10 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
           isMoving: location.is_moving,
           ts: Date.now(),
         });
+        // W231: opt-in audible field-QA chirp on each recorded fix (no-op unless the
+        // toggle is on). TS-native playSound → rings under the FGS with the screen
+        // locked, without enabling debug:true's diagnostic notification.
+        playTrackingPing(BG);
       },
       (error) => {
         console.warn('[Rail3][bgGeo] location error', error);
