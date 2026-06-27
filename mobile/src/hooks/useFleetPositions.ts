@@ -9,6 +9,7 @@ import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
+import { BREADCRUMB_MIN_GAP_M, BREADCRUMB_WINDOW_POINTS } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 import {
   SenderStateTracker,
@@ -32,6 +33,12 @@ interface PositionPayload {
   lat: number;
   lng: number;
   ts: number;
+  // W233 — the ANCHOR (captain) attaches a bounded RECENT WINDOW of its own decimated
+  // route trail + the sequence number of the window's first point, so a receiver that
+  // was locked/late can fill the portion it missed without the captain re-sending the
+  // whole history. Absent on non-anchor pings (and on older builds). See breadcrumbTrail.ts.
+  trail?: LatLng[];
+  trailBaseSeq?: number;
 }
 
 export interface RideRosterEntry {
@@ -153,6 +160,11 @@ export function useFleetPositions(
   rideIdRef.current = rideId;
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
+  // W233: read MY current role in the send handler (to decide whether to broadcast a
+  // trail window) WITHOUT making roster an effect dep — that would re-bind the FGS
+  // send effect on every roster refresh and churn the foreground service.
+  const rosterRef = useRef(roster);
+  rosterRef.current = roster;
 
   // Re-derive render states as time passes — a rider goes Stopped→…→Dark
   // precisely when NO data arrives, so something must still trigger renders.
@@ -220,13 +232,48 @@ export function useFleetPositions(
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;
+    // W233 — anchor breadcrumb: the captain keeps a BOUNDED recent window of its own
+    // decimated trail (not the whole history) + a monotonic seq of total kept points, so
+    // each broadcast can carry the recent route cheaply. Only the captain (the breadcrumb
+    // leader) sends it; receivers merge by seq. Window/seq are session-scoped to this
+    // effect, so they reset with the ride (same lifetime as the trail).
+    const trailWindow: LatLng[] = [];
+    let trailSeq = 0;
     void startBgGeo((fix) => {
       const coords = { lat: fix.lat, lng: fix.lng };
       setMyCoords(coords);
       const dist = last ? haversineDistanceM(last, coords) : Infinity;
       last = coords;
       const state = tracker.sample({ distanceFromLastM: dist, atMs: fix.ts });
-      void restBroadcast(rideId, { riderId: myRiderId, state, lat: coords.lat, lng: coords.lng, ts: fix.ts });
+
+      // Attach the trail window only when I'm the captain (the only trace the receiver
+      // draws); non-anchor pings stay minimal. Decimate by distance, cap the window length.
+      let trail: LatLng[] | undefined;
+      let trailBaseSeq: number | undefined;
+      if (rosterRef.current[myRiderId]?.role === 'captain') {
+        const lastKept = trailWindow[trailWindow.length - 1];
+        if (!lastKept || haversineDistanceM(lastKept, coords) >= BREADCRUMB_MIN_GAP_M) {
+          trailSeq += 1;
+          trailWindow.push(coords);
+          if (trailWindow.length > BREADCRUMB_WINDOW_POINTS) trailWindow.shift();
+        }
+        if (trailWindow.length > 0) {
+          // Snapshot (not alias): restBroadcast awaits getSession() before serializing,
+          // and a later fix's callback could push/shift trailWindow mid-flight — desyncing
+          // the array from the already-captured trailBaseSeq. A ~250-elem copy is cheap.
+          trail = trailWindow.slice();
+          trailBaseSeq = trailSeq - trailWindow.length + 1; // seq of the window's first point
+        }
+      }
+
+      void restBroadcast(rideId, {
+        riderId: myRiderId,
+        state,
+        lat: coords.lat,
+        lng: coords.lng,
+        ts: fix.ts,
+        ...(trail ? { trail, trailBaseSeq } : {}),
+      });
       void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
     });
     return () => {

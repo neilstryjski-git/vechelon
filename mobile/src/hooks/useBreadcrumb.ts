@@ -3,17 +3,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { POSITION_EVENT, type RideRoster } from './useFleetPositions';
 import { logMeasurement } from '../lib/measure';
-import { haversineDistanceM, LatLng } from '../lib/geo';
-
-// Append a leader fix only when it's at least this far from the last KEPT point.
-// TS background-geo cadence is variable/event-driven, so distance-keyed decimation
-// (not "every Nth fix") is the right bound — O(1) per fix and angular choppiness
-// stays near the native ping spacing (accepted for the PoC).
-const BREADCRUMB_MIN_GAP_M = 20;
-// Hard cap so a long ride can't grow the array without bound. On hit we COARSEN
-// the older head (halve its resolution) rather than drop the oldest point, so the
-// line keeps its session-start origin — just at lower fidelity behind the rider.
-const BREADCRUMB_MAX_POINTS = 1500;
+import { LatLng } from '../lib/geo';
+import { appendTrailPoint, capTrail } from '../lib/breadcrumbTrail';
 
 // Ride-leader breadcrumb (W212). Accumulates the FIRST CAPTAIN's broadcast
 // positions into a DURABLE trail so members can follow the leader's path.
@@ -47,6 +38,9 @@ export function useBreadcrumb(
 
   const trailRef = useRef<LatLng[]>([]);
   const [trail, setTrail] = useState<LatLng[]>([]);
+  // W233: highest captain trail SEQ we've merged. Lets the window-merge append only
+  // genuinely-new points (and detect a gap bigger than the broadcast window).
+  const lastSeqRef = useRef<number>(-1);
   // D67 instrumentation: count pings so we can snapshot match-state periodically
   // to the sink without per-ping spam.
   const pingCountRef = useRef(0);
@@ -58,6 +52,7 @@ export function useBreadcrumb(
     setTrail([]);
     setLeaderId(null);
     pingCountRef.current = 0;
+    lastSeqRef.current = -1;
   }, [rideId]);
 
   // Resolve the leader ONCE per ride from the ROSTER: the first captain entry.
@@ -83,7 +78,13 @@ export function useBreadcrumb(
     if (!channel) return;
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
       const lid = leaderIdRef.current;
-      const p = payload as { riderId?: string; lat?: number; lng?: number };
+      const p = payload as {
+        riderId?: string;
+        lat?: number;
+        lng?: number;
+        trail?: LatLng[];
+        trailBaseSeq?: number;
+      };
       pingCountRef.current += 1;
 
       // D67 instrumentation: snapshot the match-state every 15th ping so a remote
@@ -102,25 +103,38 @@ export function useBreadcrumb(
         });
       }
 
-      if (!lid) return;
-      if (p?.riderId !== lid || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+      if (!lid || p?.riderId !== lid) return;
 
-      const next: LatLng = { lat: p.lat, lng: p.lng };
-      const arr = trailRef.current;
-      const last = arr[arr.length - 1];
-      // Distance-threshold decimation: skip fixes too close to the last kept point.
-      if (last && haversineDistanceM(last, next) < BREADCRUMB_MIN_GAP_M) return;
-
-      let updated = [...arr, next];
-      if (updated.length > BREADCRUMB_MAX_POINTS) {
-        const tail = updated.slice(-Math.floor(BREADCRUMB_MAX_POINTS / 2));
-        const head = updated
-          .slice(0, updated.length - tail.length)
-          .filter((_, i) => i % 2 === 0);
-        updated = [...head, ...tail];
+      // W233 — preferred path: the captain attaches a bounded recent WINDOW of its
+      // decimated trail + the seq of the window's first point. Merge by seq so we append
+      // only points newer than what we already have. This is what makes the breadcrumb
+      // lock-independent: a rider unlocking/late gets the missed portion from the next
+      // single broadcast (bounded by the window — a lock LONGER than the window leaves a
+      // straight jump for the un-covered older part, accepted per Sr PM).
+      if (Array.isArray(p.trail) && typeof p.trailBaseSeq === 'number') {
+        const base = p.trailBaseSeq;
+        const tipSeq = base + p.trail.length - 1;
+        if (tipSeq <= lastSeqRef.current) return; // nothing newer than we have
+        // Points we don't yet have. If our last seq is within the window, slice the
+        // genuinely-new tail; if we fell behind the window (long lock), take it whole.
+        const startIdx = Math.max(0, lastSeqRef.current + 1 - base);
+        const fresh = p.trail.slice(startIdx);
+        if (fresh.length === 0) return;
+        const updated = capTrail([...trailRef.current, ...fresh]);
+        trailRef.current = updated;
+        lastSeqRef.current = tipSeq;
+        setTrail(updated);
+        return;
       }
-      trailRef.current = updated;
-      setTrail(updated);
+
+      // Legacy fallback (a captain on an older build that broadcasts only a single
+      // point): receiver-side decimated single-point append, as before.
+      if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+      const updated = appendTrailPoint(trailRef.current, { lat: p.lat, lng: p.lng });
+      if (updated !== trailRef.current) {
+        trailRef.current = updated;
+        setTrail(updated);
+      }
     });
   }, [channel]);
 
