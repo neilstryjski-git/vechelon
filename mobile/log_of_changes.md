@@ -1,5 +1,23 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-06-27 — W233 enhanced breadcrumb: lock-independent route via windowed broadcast-the-trail
+
+- PROBLEM: the breadcrumb was reconstructed receiver-side from ephemeral broadcasts, so a rider
+  locked for a stretch permanently lost that segment (straight line on unlock).
+- APPROACH (Sr PM, transient/no-table; #1 late-joiner-from-join OK, #2 only-recent-portion OK): the
+  captain (breadcrumb leader) keeps a BOUNDED recent window of its own decimated trail
+  (`BREADCRUMB_WINDOW_POINTS=250` ≈ ~8KB, NOT the ~50KB full history — the perf knob) + a monotonic
+  `trailSeq`, and attaches `{trail, trailBaseSeq}` to each broadcast. Receiver merges by seq: appends
+  only points newer than `lastSeqRef`; a lock WITHIN the window bridges the gap, a lock LONGER than the
+  window takes a single jump (accepted). Late joiner adopts the recent window.
+- New `lib/breadcrumbTrail.ts` (shared decimation/cap + window const, extracted from useBreadcrumb).
+  `useFleetPositions.ts`: captain-gated window broadcast (role via `rosterRef`, NOT an effect dep — no
+  FGS churn); window snapshotted (`.slice()`) into the async-serialized payload to avoid mid-flight
+  mutation desync. `useBreadcrumb.ts`: seq-merge + legacy single-point fallback for older captains.
+- PERF: ~6× lighter than full-trail; only the captain's broadcast grows (~8KB), riders unchanged.
+  Window size is the UAT tuning knob. Reviewer-approved (0 crit/imp; 1 minor .slice() applied).
+  tsc clean (deepLinkAuth.ts only). Live-location R1 unaffected (fleet handler ignores `trail`).
+
 ## 2026-06-14 — D57 + D60 end-ride fixes (fieldbuild batch, cont.)
 
 **D60 — misleading "check your permissions" on an already-saved ride:**
