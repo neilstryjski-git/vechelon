@@ -228,6 +228,13 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
   const overLimit = !!route.thumbnail_url && route.thumbnail_url.length > MAX_STATIC_MAP_URL_LENGTH;
   const showPlaceholder = !route.thumbnail_url || imgFailed || overLimit;
 
+  // A fresh thumbnail_url (e.g. after a successful self-heal) deserves a new
+  // load attempt — clear the sticky onError flag so the healed map can render
+  // without a page reload.
+  useEffect(() => {
+    setImgFailed(false);
+  }, [route.thumbnail_url]);
+
   // Self-heal: an admin viewing a broken/over-limit thumbnail regenerates it
   // once from the stored GPX. Riders (non-admin) just see the placeholder.
   useEffect(() => {
