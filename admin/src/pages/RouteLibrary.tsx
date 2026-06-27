@@ -1,8 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { parseGPXCoords } from '../lib/validation';
-import { getStaticMapUrl, downloadGpx } from '../lib/maps';
+import { getStaticMapUrl, getStaticMapPinUrl, downloadGpx, MAX_STATIC_MAP_URL_LENGTH } from '../lib/maps';
 import { useToast } from '../store/useToast';
 import { useAppStore } from '../store/useAppStore';
 import Modal from '../components/Modal';
@@ -83,7 +83,13 @@ function useUploadRoute() {
                         parsed.name ||
                         file.name.replace(/\.gpx$/i, '').replace(/[_-]/g, ' ');
 
-      const thumbnailUrl = parsed.points ? getStaticMapUrl(parsed.points) : null;
+      // getStaticMapUrl simplifies if needed and returns null for < 2 points;
+      // fall back to a single pin so a degenerate GPX still gets a thumbnail.
+      const pts = parsed.points ?? [];
+      const thumbnailUrl =
+        pts.length >= 2 ? getStaticMapUrl(pts)
+        : pts.length === 1 ? getStaticMapPinUrl(pts[0].lat, pts[0].lon)
+        : null;
 
       const routeId  = crypto.randomUUID();
       const filePath = `${tenantId}/${routeId}.gpx`;
@@ -160,6 +166,37 @@ function useDeleteRoute() {
   });
 }
 
+/**
+ * Regenerates a route's thumbnail_url from its stored GPX. Used to self-heal a
+ * broken/over-limit thumbnail (defect D68) — the .gpx file itself is never
+ * touched; only thumbnail_url is rewritten (admin RLS gates the update).
+ */
+function useRegenerateThumbnail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, filePath }: { id: string; filePath: string }) => {
+      const { data, error } = await supabase.storage.from('gpx-routes').download(filePath);
+      if (error) throw error;
+      const parsed = parseGPXCoords(await data.text());
+      const pts = parsed?.points ?? [];
+      const thumbnailUrl =
+        pts.length >= 2 ? getStaticMapUrl(pts)
+        : pts.length === 1 ? getStaticMapPinUrl(pts[0].lat, pts[0].lon)
+        : null;
+
+      const { error: updateErr } = await supabase
+        .from('route_library')
+        .update({ thumbnail_url: thumbnailUrl })
+        .eq('id', id);
+      if (updateErr) throw updateErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route-library'] });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -178,9 +215,30 @@ function SkeletonCard() {
 
 function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRow) => void }) {
   const isAdmin = useAppStore((state) => state.isAdmin);
+  const regenerate = useRegenerateThumbnail();
+  // Track WHICH url failed (not a sticky boolean) so a fresh thumbnail_url —
+  // e.g. after a successful self-heal — clears the failed state automatically.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const healAttempted = useRef(false);
   const date = new Date(route.created_at).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
+
+  // A thumbnail is unusable if it's missing, the <img> failed to load, or the
+  // stored URL is already over Google's length limit (legacy rows from before
+  // the D68 fix — detected proactively so we never even attempt the 400).
+  const imgFailed = !!route.thumbnail_url && failedUrl === route.thumbnail_url;
+  const overLimit = !!route.thumbnail_url && route.thumbnail_url.length > MAX_STATIC_MAP_URL_LENGTH;
+  const showPlaceholder = !route.thumbnail_url || imgFailed || overLimit;
+
+  // Self-heal: an admin viewing a broken/over-limit thumbnail regenerates it
+  // once from the stored GPX. Riders (non-admin) just see the placeholder.
+  useEffect(() => {
+    if (isAdmin && (overLimit || imgFailed) && !healAttempted.current && route.file_path) {
+      healAttempted.current = true;
+      regenerate.mutate({ id: route.id, filePath: route.file_path });
+    }
+  }, [isAdmin, overLimit, imgFailed, route.id, route.file_path, regenerate]);
 
   return (
     <div className="bg-surface-container-lowest overflow-hidden rounded-xl shadow-ambient hover:bg-surface-container-low transition-colors flex flex-col group relative">
@@ -198,12 +256,18 @@ function RouteCard({ route, onDelete }: { route: RouteRow; onDelete: (r: RouteRo
 
       {/* Thumbnail — clickable when external_url is set */}
       {(() => {
-        const inner = route.thumbnail_url ? (
+        const inner = !showPlaceholder ? (
           <img
-            src={route.thumbnail_url}
+            src={route.thumbnail_url!}
             alt={route.name}
+            onError={() => setFailedUrl(route.thumbnail_url ?? null)}
             className="w-full h-full object-cover opacity-90 group-hover/thumb:opacity-100 transition-all duration-500"
           />
+        ) : regenerate.isPending ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-on-surface-variant/40">
+            <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+            <span className="font-label text-[10px] uppercase tracking-widest">Generating preview…</span>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <span className="material-symbols-outlined text-on-surface-variant/30 text-4xl">map</span>
