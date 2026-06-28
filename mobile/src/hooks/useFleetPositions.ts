@@ -257,12 +257,27 @@ export function useFleetPositions(
         const now = Date.now();
         if (now - lastUpsertMs >= BREADCRUMB_UPSERT_INTERVAL_MS) {
           lastUpsertMs = now;
+          // D69 ROOT CAUSE: this was `void supabase.from(...).upsert(...)`. supabase-js v2
+          // query builders are LAZY thenables — the HTTP request only fires on await/.then().
+          // A bare `void <builder>` builds the query but NEVER executes it, so rail3_breadcrumb
+          // was never written for ANY ride (0 client writes in pg_stat_statements; no error,
+          // because the request was never sent). Every other DB call here is awaited; this lone
+          // bare-void was the bug. Fix: chain .then() so the request actually fires, and log the
+          // result (no longer fire-and-forget) so a silent failure can never hide again and the
+          // validation walk can confirm the write landed.
           void supabase
             .from('rail3_breadcrumb')
             .upsert(
               { ride_id: rideId, path: myPath, updated_at: new Date().toISOString() },
               { onConflict: 'ride_id' },
-            );
+            )
+            .then(({ error }) => {
+              void logMeasurement({
+                rideId,
+                kind: 'breadcrumb_upsert',
+                payload: { ok: !error, pts: myPath.length, ...(error ? { err: error.message } : {}) },
+              });
+            });
         }
       }
     });
