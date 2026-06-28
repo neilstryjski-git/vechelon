@@ -69,6 +69,90 @@ async function calculateHash(text: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ---------------------------------------------------------------------------
+// Route resolution — shared by create and edit (GPX change)
+// ---------------------------------------------------------------------------
+
+interface ResolvedRoute {
+  gpxPath:      string;
+  thumbnailUrl: string | null;
+  startCoords:  string | null;
+  finishCoords: string | null;
+}
+
+/**
+ * Turns a route selection (an existing library route OR a freshly uploaded GPX)
+ * into the four GPX-derived values a ride stores: gpx_path, thumbnail_url, and
+ * start/finish coords. For an uploaded file it also uploads to the gpx-routes
+ * bucket and inserts the route_library row (mirroring create), rolling back the
+ * upload if the insert fails. Returns null when neither input is supplied.
+ */
+async function resolveRouteSelection(opts: {
+  selectedRoute: RouteRow | null;
+  pendingFile:   File | null;
+  tenantId:      string;
+  userId:        string;
+  rideName:      string;
+}): Promise<ResolvedRoute | null> {
+  const { selectedRoute, pendingFile, tenantId, userId, rideName } = opts;
+
+  let startCoords:  string | null = null;
+  let finishCoords: string | null = null;
+  const applyGpxCoords = (parsed: ReturnType<typeof parseGPXCoords>) => {
+    if (!parsed) return;
+    if (parsed.start) startCoords  = formatPoint({ lat: parsed.start.lat, lng: parsed.start.lon });
+    if (parsed.end)   finishCoords = formatPoint({ lat: parsed.end.lat,   lng: parsed.end.lon   });
+  };
+
+  if (selectedRoute) {
+    const { data: gpxBlob } = await supabase.storage.from('gpx-routes').download(selectedRoute.file_path);
+    if (!gpxBlob) throw new Error('Failed to download selected route GPX');
+    const parsed = parseGPXCoords(await gpxBlob.text());
+    if (!parsed) throw new Error('Failed to extract coordinates from selected route GPX');
+    applyGpxCoords(parsed);
+    return { gpxPath: selectedRoute.file_path, thumbnailUrl: selectedRoute.thumbnail_url, startCoords, finishCoords };
+  }
+
+  if (pendingFile) {
+    const text   = await pendingFile.text();
+    const parsed = parseGPXCoords(text);
+    if (!parsed) throw new Error('GPX file contains no track data');
+    applyGpxCoords(parsed);
+
+    const hash      = await calculateHash(text);
+    const routeId   = crypto.randomUUID();
+    const filePath  = `${tenantId}/${routeId}.gpx`;
+    const routeName = rideName.trim() || parsed.name || pendingFile.name.replace(/\.gpx$/i, '');
+    const thumbUrl  = parsed.points ? getStaticMapUrl(parsed.points) : null;
+
+    const { error: upErr } = await supabase.storage
+      .from('gpx-routes')
+      .upload(filePath, pendingFile, { contentType: 'application/gpx+xml', upsert: false });
+    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
+    const { error: insErr } = await supabase.from('route_library').insert({
+      id:               routeId,
+      tenant_id:        tenantId,
+      name:             routeName,
+      file_path:        filePath,
+      distance_km:      parsed.distance_km,
+      elevation_gain_m: parsed.elevation_gain,
+      thumbnail_url:    thumbUrl,
+      file_hash:        hash,
+      created_by:       userId,
+      external_url:     null,
+    });
+    if (insErr) {
+      await supabase.storage.from('gpx-routes').remove([filePath]);
+      throw new Error(`Route library insert failed: ${insErr.message}`);
+    }
+
+    return { gpxPath: filePath, thumbnailUrl: thumbUrl, startCoords, finishCoords };
+  }
+
+  return null;
+}
+
 
 // ---------------------------------------------------------------------------
 // Series date generation
@@ -173,67 +257,18 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
         throw new Error('Not authenticated. Please sign in again.');
       }
 
-      let gpxPath:      string | null = null;
-      let thumbnailUrl: string | null = null;
-      let startCoords:  string | null = null;
-      let finishCoords: string | null = null;
+      const resolved = await resolveRouteSelection({
+        selectedRoute,
+        pendingFile,
+        tenantId,
+        userId,
+        rideName: name,
+      });
 
-      const applyGpxCoords = (parsed: ReturnType<typeof parseGPXCoords>) => {
-        if (!parsed) return;
-        if (parsed.start) startCoords  = formatPoint({ lat: parsed.start.lat, lng: parsed.start.lon });
-        if (parsed.end)   finishCoords = formatPoint({ lat: parsed.end.lat,   lng: parsed.end.lon   });
-      };
-
-      if (selectedRoute) {
-        gpxPath      = selectedRoute.file_path;
-        thumbnailUrl = selectedRoute.thumbnail_url;
-        // Fetch GPX to extract first/last track point
-        const { data: gpxBlob } = await supabase.storage.from('gpx-routes').download(selectedRoute.file_path);
-        if (gpxBlob) {
-          const parsed = parseGPXCoords(await gpxBlob.text());
-          if (!parsed) throw new Error('Failed to extract coordinates from selected route GPX');
-          applyGpxCoords(parsed);
-        } else {
-          throw new Error('Failed to download selected route GPX');
-        }
-      } else if (pendingFile) {
-        const text   = await pendingFile.text();
-        const parsed = parseGPXCoords(text);
-        if (!parsed) throw new Error('GPX file contains no track data');
-
-        applyGpxCoords(parsed);
-
-        const hash        = await calculateHash(text);
-        const routeId     = crypto.randomUUID();
-        const filePath    = `${tenantId}/${routeId}.gpx`;
-        const routeName   = name.trim() || parsed.name || pendingFile.name.replace(/\.gpx$/i, '');
-        const thumbUrl    = parsed.points ? getStaticMapUrl(parsed.points) : null;
-
-        const { error: upErr } = await supabase.storage
-          .from('gpx-routes')
-          .upload(filePath, pendingFile, { contentType: 'application/gpx+xml', upsert: false });
-        if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
-
-        const { error: insErr } = await supabase.from('route_library').insert({
-          id:               routeId,
-          tenant_id:        tenantId,
-          name:             routeName,
-          file_path:        filePath,
-          distance_km:      parsed.distance_km,
-          elevation_gain_m: parsed.elevation_gain,
-          thumbnail_url:    thumbUrl,
-          file_hash:        hash,
-          created_by:       userId,
-          external_url:     null,
-        });
-        if (insErr) {
-          await supabase.storage.from('gpx-routes').remove([filePath]);
-          throw new Error(`Route library insert failed: ${insErr.message}`);
-        }
-
-        gpxPath      = filePath;
-        thumbnailUrl = thumbUrl;
-      }
+      const gpxPath:      string | null = resolved?.gpxPath      ?? null;
+      let   thumbnailUrl: string | null = resolved?.thumbnailUrl ?? null;
+      let   startCoords:  string | null = resolved?.startCoords  ?? null;
+      const finishCoords: string | null = resolved?.finishCoords ?? null;
 
       // For meetup rides: use the admin pin-drop coords instead of GPX coords
       if (rideType === 'meetup' && meetupCoords) {
@@ -307,30 +342,87 @@ function useCreateRide(onCreated?: (rideId: string | null) => void, onClose?: ()
   });
 }
 
-function useUpdateRide(rideId: string | undefined, onClose: () => void) {
+interface UpdateRideInput {
+  values:        EditFormValues;
+  // Route change — both null = text-only edit, no GPX touched.
+  selectedRoute: RouteRow | null;
+  pendingFile:   File | null;
+  // Editor's explicit choices when a new route is staged (W-route-swap).
+  // Both default off so nothing GPX-adjacent is destroyed silently.
+  clearWaypoints: boolean;
+  resetMeetup:    boolean;
+  // Ride meta read at modal open — gates the swap and tells us whether the
+  // route can change at all (status) for a defensive server-side-ish check.
+  rideStatus:    string | null;
+}
+
+function useUpdateRide(rideId: string | undefined, onClose: () => void, tenantId: string | null) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
 
   return useMutation({
-    mutationFn: async (values: EditFormValues) => {
+    mutationFn: async ({ values, selectedRoute, pendingFile, clearWaypoints, resetMeetup, rideStatus }: UpdateRideInput) => {
       if (!rideId) throw new Error('No ride ID for update');
-      const { error } = await supabase
-        .from('rides')
-        .update({
-          name:            values.name.trim(),
-          scheduled_start: values.scheduled_start
-            ? new Date(values.scheduled_start).toISOString()
-            : null,
-          start_label:     values.start_label.trim()  || null,
-          finish_label:    values.finish_label.trim() || null,
-          external_url:    values.external_url.trim() || null,
-        })
-        .eq('id', rideId);
+
+      const update: Record<string, unknown> = {
+        name:            values.name.trim(),
+        scheduled_start: values.scheduled_start
+          ? new Date(values.scheduled_start).toISOString()
+          : null,
+        start_label:     values.start_label.trim()  || null,
+        finish_label:    values.finish_label.trim() || null,
+        external_url:    values.external_url.trim() || null,
+      };
+
+      const hasNewRoute = !!(selectedRoute || pendingFile);
+      if (hasNewRoute) {
+        // The UI gates this control to created rides; re-check here against the
+        // status read at open as a cheap belt-and-braces (not a substitute for a
+        // fresh read — admins can already mutate rides directly either way).
+        if (rideStatus !== 'created') {
+          throw new Error('The route can only be changed before a ride goes live.');
+        }
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData.user?.id;
+        if (!userId) throw new Error('Not authenticated. Please sign in again.');
+        if (!tenantId) throw new Error('Tenant context not yet resolved. Refresh the page and try again.');
+
+        const resolved = await resolveRouteSelection({
+          selectedRoute, pendingFile, tenantId, userId, rideName: values.name,
+        });
+        // rides.start_coords is NOT NULL — never swap to a route that can't supply it.
+        if (!resolved || !resolved.startCoords) {
+          throw new Error('The selected route is missing start coordinates.');
+        }
+
+        // Clear waypoints FIRST when asked: the old waypoints are points on the
+        // old track. Doing this before the rides update means a delete failure
+        // leaves the ride wholly on its old route (consistent) rather than the
+        // new route showing stale waypoints. Skipped when endpoints are
+        // unchanged (the caller keeps clearWaypoints=false in that case).
+        if (clearWaypoints) {
+          const { error: wpErr } = await supabase.from('waypoints').delete().eq('ride_id', rideId);
+          if (wpErr) throw wpErr;
+        }
+
+        // Start/finish/thumbnail ARE the route — they always follow the swap.
+        update.gpx_path      = resolved.gpxPath;
+        update.thumbnail_url = resolved.thumbnailUrl;
+        update.start_coords  = resolved.startCoords;
+        update.finish_coords = resolved.finishCoords;
+
+        // Editor's call: re-anchor the meetup pin to the new start.
+        if (resetMeetup) update.meetup_coords = resolved.startCoords;
+      }
+
+      const { error } = await supabase.from('rides').update(update).eq('id', rideId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar-rides'] });
       queryClient.invalidateQueries({ queryKey: ['ride-detail', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['ride-edit-meta', rideId] });
+      queryClient.invalidateQueries({ queryKey: ['route-library'] });
       addToast('Ride updated.', 'success');
       onClose();
     },
@@ -834,9 +926,93 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   // ── Edit state ───────────────────────────────────────────────────────────
   const [editValues, setEditValues] = useState<EditFormValues>(EMPTY_EDIT);
 
+  // ── Edit: change-route state ───────────────────────────────────────────────
+  // Staged independently of create's selectedRoute/pendingFile so the create
+  // effects (gpxStartCenter download, etc.) never fire in edit mode.
+  const [showRouteChange, setShowRouteChange]   = useState(false);
+  const [editRouteTab, setEditRouteTab]         = useState<'library' | 'upload'>('library');
+  const [editRoute, setEditRoute]               = useState<RouteRow | null>(null);
+  const [editRouteFile, setEditRouteFile]       = useState<File | null>(null);
+  // Editor's explicit clear choices (W-route-swap #2/#3). Default off: a small
+  // route tweak keeps the meetup pin and any hand-tuned waypoints.
+  const [clearWaypoints, setClearWaypoints]     = useState(false);
+  const [resetMeetup, setResetMeetup]           = useState(false);
+
   const createMutation = useCreateRide(onCreated, onClose);
-  const updateMutation = useUpdateRide(rideId, onClose);
+  const updateMutation = useUpdateRide(rideId, onClose, tenantId);
   const isPending      = createMutation.isPending || updateMutation.isPending;
+
+  // Ride meta for edit mode — gates the route-change control (created-only),
+  // surfaces the waypoint count, and carries the current start/finish coords so
+  // we can detect an endpoint-preserving swap (meetup + waypoints stay valid).
+  interface RideMeta {
+    status:        string;
+    type:          string;
+    waypointCount: number;
+    startCoords:   { lat: number; lng: number } | null;
+    finishCoords:  { lat: number; lng: number } | null;
+  }
+  const { data: rideMeta } = useQuery<RideMeta>({
+    queryKey: ['ride-edit-meta', rideId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('rides')
+        .select('status, type, start_coords, finish_coords, waypoints(count)')
+        .eq('id', rideId!)
+        .single();
+      if (error) throw error;
+      // supabase-js returns an aggregate relation as [{ count }]
+      const wp = (data as { waypoints?: { count: number }[] }).waypoints;
+      return {
+        status:        data.status,
+        type:          data.type,
+        waypointCount: wp?.[0]?.count ?? 0,
+        startCoords:   parsePoint(data.start_coords),
+        finishCoords:  parsePoint(data.finish_coords),
+      };
+    },
+    enabled: isOpen && mode === 'edit' && !!rideId,
+  });
+
+  // Route may only be swapped on a not-yet-run route ride (never meetup rides).
+  const canChangeRoute = mode === 'edit' && rideMeta?.status === 'created' && rideMeta?.type !== 'meetup';
+  const stagedRoute    = editRoute || editRouteFile;
+
+  // null = unknown/computing; true = staged route keeps both endpoints (meetup +
+  // waypoints stay valid, no prompt); false = an endpoint moved (offer to clear).
+  const [endpointsMatch, setEndpointsMatch] = useState<boolean | null>(null);
+
+  // Compare the staged route's first/last point to the ride's current ones.
+  // GPX coordinates carry ~5 decimals (~1 m); round to that before comparing.
+  useEffect(() => {
+    // No staged route → nothing to compare. The staged-route panels are hidden
+    // in this state, so a stale endpointsMatch value is never shown; it is
+    // recomputed (below) the moment a route is staged.
+    if (!stagedRoute || !rideMeta?.startCoords || !rideMeta?.finishCoords) return;
+    let cancelled = false;
+    const eq = (a: number, b: number) => Math.round(a * 1e5) === Math.round(b * 1e5);
+    (async () => {
+      let parsed: ReturnType<typeof parseGPXCoords> | null = null;
+      if (editRoute) {
+        const { data: blob } = await supabase.storage.from('gpx-routes').download(editRoute.file_path);
+        if (blob) parsed = parseGPXCoords(await blob.text());
+      } else if (editRouteFile) {
+        parsed = parseGPXCoords(await editRouteFile.text());
+      }
+      if (cancelled) return;
+      if (!parsed?.start || !parsed?.end || !rideMeta.startCoords || !rideMeta.finishCoords) {
+        setEndpointsMatch(null);
+        return;
+      }
+      const match =
+        eq(parsed.start.lat, rideMeta.startCoords.lat) && eq(parsed.start.lon, rideMeta.startCoords.lng) &&
+        eq(parsed.end.lat,   rideMeta.finishCoords.lat) && eq(parsed.end.lon,  rideMeta.finishCoords.lng);
+      setEndpointsMatch(match);
+      // Endpoints preserved → keep meetup + waypoints, clear any stale opt-ins.
+      if (match) { setClearWaypoints(false); setResetMeetup(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [editRoute, editRouteFile, rideMeta?.startCoords, rideMeta?.finishCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: routes = [] } = useQuery<RouteRow[]>({
     queryKey: ['route-library', tenantId],
@@ -849,7 +1025,7 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: isOpen && mode === 'create' && !!tenantId,
+    enabled: isOpen && (mode === 'create' || canChangeRoute) && !!tenantId,
   });
 
   // Reset on open
@@ -872,6 +1048,12 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
       setGpxStartCenter(null);
     } else {
       setEditValues({ ...EMPTY_EDIT, ...initialValues });
+      setShowRouteChange(false);
+      setEditRouteTab('library');
+      setEditRoute(null);
+      setEditRouteFile(null);
+      setClearWaypoints(false);
+      setResetMeetup(false);
     }
   }, [isOpen, mode]);
 
@@ -935,7 +1117,17 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
   const handleSubmitEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editValues.name.trim()) return;
-    updateMutation.mutate(editValues);
+    // Only pass a staged route when changing is actually allowed — guards a
+    // ride that transitioned out of 'created' while the modal sat open.
+    const swapping = canChangeRoute && showRouteChange;
+    updateMutation.mutate({
+      values:         editValues,
+      selectedRoute:  swapping ? editRoute : null,
+      pendingFile:    swapping ? editRouteFile : null,
+      clearWaypoints: swapping ? clearWaypoints : false,
+      resetMeetup:    swapping ? resetMeetup : false,
+      rideStatus:     rideMeta?.status ?? null,
+    });
   };
 
   if (!isOpen) return null;
@@ -1345,6 +1537,138 @@ const RideFormModal: React.FC<RideFormModalProps> = ({
                   className={inputClass}
                 />
               </div>
+
+              {/* ── Change route — created-only, route rides only ───────────── */}
+              {canChangeRoute && (
+                <div className="border-t border-outline-variant/15 pt-4">
+                  {!showRouteChange ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteChange(true)}
+                      className="flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-primary hover:opacity-80 transition-opacity"
+                    >
+                      <span className="material-symbols-outlined text-base">swap_horiz</span>
+                      Change route (GPX)
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className={labelClass + ' mb-0'}>Replace Route</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowRouteChange(false);
+                            setEditRoute(null);
+                            setEditRouteFile(null);
+                            setClearWaypoints(false);
+                            setResetMeetup(false);
+                          }}
+                          className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant/60 hover:text-on-background transition-colors"
+                        >
+                          Keep current route
+                        </button>
+                      </div>
+
+                      <div className="flex gap-1 bg-surface-container-low p-1 rounded-lg">
+                        {(['library', 'upload'] as const).map(tab => (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setEditRouteTab(tab)}
+                            className={`flex-1 py-1.5 rounded-md font-label text-[9px] uppercase tracking-widest transition-all ${
+                              editRouteTab === tab
+                                ? 'bg-surface-container-lowest text-on-background shadow-sm'
+                                : 'text-on-surface-variant hover:text-on-background'
+                            }`}
+                          >
+                            {tab === 'library' ? 'From Library' : 'Upload GPX'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {editRouteTab === 'library' ? (
+                        <RoutePickerLibrary
+                          routes={routes}
+                          selectedId={editRoute?.id ?? null}
+                          onSelect={r => { setEditRoute(r); setEditRouteFile(null); }}
+                        />
+                      ) : (
+                        <RouteUploader
+                          routes={routes}
+                          onRouteReady={({ file, duplicate }) => {
+                            if (duplicate) {
+                              setEditRoute(duplicate);
+                              setEditRouteFile(null);
+                            } else {
+                              setEditRouteFile(file);
+                              setEditRoute(null);
+                            }
+                          }}
+                        />
+                      )}
+
+                      {/* Endpoint-preserving swap — meetup + waypoints stay valid, no prompt */}
+                      {stagedRoute && endpointsMatch === true && (
+                        <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-2">
+                          <span className="material-symbols-outlined text-primary text-base shrink-0 mt-0.5">check_circle</span>
+                          <p className="font-body text-xs text-on-background">
+                            Same start and finish — the meetup point
+                            {rideMeta && rideMeta.waypointCount > 0 ? ' and waypoints stay' : ' stays'} as-is.
+                            Only the route line and thumbnail update.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Endpoint changed (or not yet known) — let the editor choose what to keep */}
+                      {stagedRoute && endpointsMatch !== true && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl space-y-3">
+                          <div className="flex items-start gap-2">
+                            <span className="material-symbols-outlined text-amber-500 text-base shrink-0 mt-0.5">info</span>
+                            <p className="font-body text-xs text-amber-800 dark:text-amber-200">
+                              {endpointsMatch === false
+                                ? "The start or finish moves with this route. Choose what to keep below."
+                                : "Saving replaces this ride's route, thumbnail, and start/finish points. Choose what to keep below."}
+                            </p>
+                          </div>
+
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={clearWaypoints}
+                              onChange={e => setClearWaypoints(e.target.checked)}
+                              className="mt-0.5 accent-primary"
+                            />
+                            <span className="font-body text-xs text-on-background">
+                              Clear custom waypoints
+                              {rideMeta && rideMeta.waypointCount > 0 && (
+                                <span className="text-on-surface-variant/70"> ({rideMeta.waypointCount} on the old route)</span>
+                              )}
+                              <span className="block font-label text-[9px] text-on-surface-variant/60 normal-case">
+                                Leave off for a small tweak; turn on if this is a different route.
+                              </span>
+                            </span>
+                          </label>
+
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={resetMeetup}
+                              onChange={e => setResetMeetup(e.target.checked)}
+                              className="mt-0.5 accent-primary"
+                            />
+                            <span className="font-body text-xs text-on-background">
+                              Reset meetup point to the new route's start
+                              <span className="block font-label text-[9px] text-on-surface-variant/60 normal-case">
+                                Leave off to keep the current meetup location.
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3 pt-1">
                 <button
