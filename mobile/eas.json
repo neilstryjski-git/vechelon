@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "channel": "development",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -17,6 +18,7 @@
       }
     },
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -28,6 +30,7 @@
       }
     },
     "trial": {
+      "channel": "trial",
       "distribution": "internal",
       "developmentClient": false,
       "android": {
@@ -40,6 +43,8 @@
         "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production"
+    }
   }
 }
