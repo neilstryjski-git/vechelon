@@ -1,5 +1,30 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-06-27 — W234 breadcrumb → 4h-purged anchor-route TABLE (replaces the W233 window)
+
+- DECISION (Sr PM): the table is the cleaner DESTINATION, not a fallback — complete route on
+  every device, full course on a late open (hours-in), no tail/jump/divergence, and it's
+  SIMPLER than the W233 seq-merge. Relaxes the no-server-coords posture under C1 (4h purge);
+  the captain's route is ANONYMIZED (table keyed by ride_id, NO person-id). Live privacy
+  policy updated to disclose it.
+- SENDER (useFleetPositions): the captain accumulates its decimated route (`appendTrailPoint`,
+  capped 1500) and UPSERTS it to `rail3_breadcrumb` on a ~60s throttle (BREADCRUMB_UPSERT_
+  INTERVAL_MS). Route accumulated on EVERY device (so the captain's origin is caught from fix
+  #1, pre-roster), upsert gated to captain via rosterRef. Broadcast reverted to a SINGLE point
+  (no trail/trailBaseSeq) — the table carries history, not the broadcast. updated_at set every
+  upsert so the 4h purge tracks LAST activity.
+- RECEIVER (useBreadcrumb): FETCH the captain's full route from the table on mount + on
+  AppState 'active' (resume) — one read restores the whole route after any absence; adopt only
+  if `path.length >= current` (no truncation of a fresher live tail). Live single-point appends
+  extend the tip between fetches. DELETED the W233 seq-merge/lastSeqRef/window + BREADCRUMB_
+  WINDOW_POINTS.
+- DB (live on staging xybgtbybdhxuwqjfcfkc): rail3_breadcrumb + RLS (read=participant,
+  write=captain via SECURITY DEFINER helpers, no recursion) + role-matched GRANTs + pg_cron 4h
+  purge. Migration reviewer-approved 0 issues; mobile reviewer-approved 0 crit/imp (3 minor
+  comment/early-fix, applied). tsc clean (deepLinkAuth.ts only). Net -36 lines vs W233.
+  Tomorrow's ride still runs the already-flashed transient W233; the table version is the next
+  build.
+
 ## 2026-06-27 — W233 enhanced breadcrumb: lock-independent route via windowed broadcast-the-trail
 
 - PROBLEM: the breadcrumb was reconstructed receiver-side from ephemeral broadcasts, so a rider

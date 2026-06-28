@@ -9,7 +9,7 @@ import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
-import { BREADCRUMB_MIN_GAP_M, BREADCRUMB_WINDOW_POINTS } from '../lib/breadcrumbTrail';
+import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 import {
   SenderStateTracker,
@@ -33,12 +33,6 @@ interface PositionPayload {
   lat: number;
   lng: number;
   ts: number;
-  // W233 — the ANCHOR (captain) attaches a bounded RECENT WINDOW of its own decimated
-  // route trail + the sequence number of the window's first point, so a receiver that
-  // was locked/late can fill the portion it missed without the captain re-sending the
-  // whole history. Absent on non-anchor pings (and on older builds). See breadcrumbTrail.ts.
-  trail?: LatLng[];
-  trailBaseSeq?: number;
 }
 
 export interface RideRosterEntry {
@@ -111,6 +105,9 @@ const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
 // Dark needs no inbound data to happen — re-derive every 15s (cheap: a state
 // bump re-runs the in-memory join; no DB, no network).
 const STATE_TICK_MS = 15000;
+// W234: how often the captain upserts its route to rail3_breadcrumb (throttled — not per
+// fix, to keep writes cheap; receivers fetch on open/resume and extend live in between).
+const BREADCRUMB_UPSERT_INTERVAL_MS = 60000;
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
@@ -160,9 +157,9 @@ export function useFleetPositions(
   rideIdRef.current = rideId;
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
-  // W233: read MY current role in the send handler (to decide whether to broadcast a
-  // trail window) WITHOUT making roster an effect dep — that would re-bind the FGS
-  // send effect on every roster refresh and churn the foreground service.
+  // W234: read MY current role in the send handler (to decide whether to upsert the
+  // captain's route to rail3_breadcrumb) WITHOUT making roster an effect dep — that would
+  // re-bind the FGS send effect on every roster refresh and churn the foreground service.
   const rosterRef = useRef(roster);
   rosterRef.current = roster;
 
@@ -232,13 +229,12 @@ export function useFleetPositions(
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;
-    // W233 — anchor breadcrumb: the captain keeps a BOUNDED recent window of its own
-    // decimated trail (not the whole history) + a monotonic seq of total kept points, so
-    // each broadcast can carry the recent route cheaply. Only the captain (the breadcrumb
-    // leader) sends it; receivers merge by seq. Window/seq are session-scoped to this
-    // effect, so they reset with the ride (same lifetime as the trail).
-    const trailWindow: LatLng[] = [];
-    let trailSeq = 0;
+    // W234 — captain breadcrumb ROUTE TABLE: the captain accumulates its OWN decimated
+    // route (full, capped) and UPSERTS it to rail3_breadcrumb on a ~60s throttle, so any
+    // device can FETCH the complete route on open — lock-independent for ANY duration. The
+    // broadcast is back to a single point; the table carries history, not the broadcast.
+    let myPath: LatLng[] = [];
+    let lastUpsertMs = 0;
     void startBgGeo((fix) => {
       const coords = { lat: fix.lat, lng: fix.lng };
       setMyCoords(coords);
@@ -246,35 +242,29 @@ export function useFleetPositions(
       last = coords;
       const state = tracker.sample({ distanceFromLastM: dist, atMs: fix.ts });
 
-      // Attach the trail window only when I'm the captain (the only trace the receiver
-      // draws); non-anchor pings stay minimal. Decimate by distance, cap the window length.
-      let trail: LatLng[] | undefined;
-      let trailBaseSeq: number | undefined;
+      // Single-point broadcast — live position for the fleet marker and the live breadcrumb
+      // tip. No trail in the payload; the route lives in the table.
+      void restBroadcast(rideId, { riderId: myRiderId, state, lat: coords.lat, lng: coords.lng, ts: fix.ts });
+      void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
+
+      // Accumulate the decimated route on EVERY device (cheap, bounded) so the captain's
+      // route is captured from the very first fix — even before useRideRoster resolves the
+      // role. Only the CAPTAIN upserts it to rail3_breadcrumb (throttled). REST/Supabase
+      // writes escape the screen-lock freeze, so the route records even while pocketed; we set
+      // updated_at on every upsert so the 4h purge tracks LAST activity, not first insert.
+      myPath = appendTrailPoint(myPath, coords);
       if (rosterRef.current[myRiderId]?.role === 'captain') {
-        const lastKept = trailWindow[trailWindow.length - 1];
-        if (!lastKept || haversineDistanceM(lastKept, coords) >= BREADCRUMB_MIN_GAP_M) {
-          trailSeq += 1;
-          trailWindow.push(coords);
-          if (trailWindow.length > BREADCRUMB_WINDOW_POINTS) trailWindow.shift();
-        }
-        if (trailWindow.length > 0) {
-          // Snapshot (not alias): restBroadcast awaits getSession() before serializing,
-          // and a later fix's callback could push/shift trailWindow mid-flight — desyncing
-          // the array from the already-captured trailBaseSeq. A ~250-elem copy is cheap.
-          trail = trailWindow.slice();
-          trailBaseSeq = trailSeq - trailWindow.length + 1; // seq of the window's first point
+        const now = Date.now();
+        if (now - lastUpsertMs >= BREADCRUMB_UPSERT_INTERVAL_MS) {
+          lastUpsertMs = now;
+          void supabase
+            .from('rail3_breadcrumb')
+            .upsert(
+              { ride_id: rideId, path: myPath, updated_at: new Date().toISOString() },
+              { onConflict: 'ride_id' },
+            );
         }
       }
-
-      void restBroadcast(rideId, {
-        riderId: myRiderId,
-        state,
-        lat: coords.lat,
-        lng: coords.lng,
-        ts: fix.ts,
-        ...(trail ? { trail, trailBaseSeq } : {}),
-      });
-      void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
     });
     return () => {
       void stopBgGeo();

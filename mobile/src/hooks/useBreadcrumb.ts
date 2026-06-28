@@ -1,29 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { POSITION_EVENT, type RideRoster } from './useFleetPositions';
+import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { LatLng } from '../lib/geo';
-import { appendTrailPoint, capTrail } from '../lib/breadcrumbTrail';
+import { appendTrailPoint } from '../lib/breadcrumbTrail';
 
-// Ride-leader breadcrumb (W212). Accumulates the FIRST CAPTAIN's broadcast
-// positions into a DURABLE trail so members can follow the leader's path.
+// Ride-leader breadcrumb (W212 → W234). Draws the CAPTAIN's route so members can follow it.
 //
-// D67 FIX: the leader is resolved from the ROSTER (the same RLS-gated read the
-// fleet markers already use), NOT a standalone `ride_participants … role='captain'
-// maybeSingle()` query. The trail drew on the captain's OWN device but never on a
-// remote SAG, even though the SAG received the captain's pings AND rendered the
-// captain's dot — i.e. the roster contained the captain on the SAG while the
-// standalone query did not take effect there. Sourcing the leader from the roster
-// removes that divergence. (PoC: first captain entry found; multi-captain
-// joined_at ordering is a follow-up — there is one captain in the PoC.)
+// W234 — the route now persists in the anonymized, 4h-purged `rail3_breadcrumb` table
+// (keyed by ride_id, no person-id; written only by the captain). The receiver FETCHES the
+// full route on open AND on app-resume — so a device that was locked/away for any duration
+// gets the COMPLETE route in a single read (replaces the transient W233 broadcast window).
+// Between fetches, the leader's live single-point broadcasts extend the tip in real time.
 //
-// Two load-bearing rules from the brief still hold:
-//  1. Source from the RAW 'pos' broadcasts (piggyback the shared channel — no new
-//     channel), accumulated in a DURABLE ref reset only on rideId change, so the
-//     line survives screen-lock / reconnect.
-//  2. Leader fixed for the session; if it goes Dark the append stops and the line
-//     freezes at last-known.
+// D67: the leader is resolved from the ROSTER (the same RLS-gated read the fleet markers
+// use), so the live tip extends on every device incl. a remote SAG (not just the captain's).
 export function useBreadcrumb(
   rideId: string | null,
   channel: RealtimeChannel | null,
@@ -38,27 +32,21 @@ export function useBreadcrumb(
 
   const trailRef = useRef<LatLng[]>([]);
   const [trail, setTrail] = useState<LatLng[]>([]);
-  // W233: highest captain trail SEQ we've merged. Lets the window-merge append only
-  // genuinely-new points (and detect a gap bigger than the broadcast window).
-  const lastSeqRef = useRef<number>(-1);
-  // D67 instrumentation: count pings so we can snapshot match-state periodically
-  // to the sink without per-ping spam.
+  // D67 instrumentation: count pings so we snapshot match-state periodically (no per-ping spam).
   const pingCountRef = useRef(0);
 
-  // Reset the accumulator ONLY on ride change — ties the trail's lifetime to the
-  // ride, not the volatile channel (durable across re-subscribe / screen-lock).
+  // Reset the trail ONLY on ride change.
   useEffect(() => {
     trailRef.current = [];
     setTrail([]);
     setLeaderId(null);
     pingCountRef.current = 0;
-    lastSeqRef.current = -1;
   }, [rideId]);
 
-  // Resolve the leader ONCE per ride from the ROSTER: the first captain entry.
-  // Runs whenever the roster updates until a captain is found and fixed.
+  // Resolve the leader ONCE per ride from the ROSTER (first captain) — used to filter which
+  // live broadcasts extend the tip. The table fetch is keyed by ride_id and needs no leaderId.
   useEffect(() => {
-    if (leaderIdRef.current) return; // already fixed for this ride
+    if (leaderIdRef.current) return;
     const captainId =
       Object.keys(roster).find((id) => roster[id]?.role === 'captain') ?? null;
     if (captainId) {
@@ -71,24 +59,47 @@ export function useBreadcrumb(
     }
   }, [roster]);
 
-  // Append the leader's positions from the shared 'pos' broadcast. Bound once per
-  // channel; reads leaderId/rideId via refs so it never re-binds (which would add a
-  // duplicate handler). trailRef is NOT reset here — durable across re-subscribe.
+  // W234 — fetch the captain's full route from the table. ADOPT only if it's at least as long
+  // as what we have, so a fetch can never truncate a fresher live-extended tail (on resume the
+  // table is authoritative + longer because we were away; foreground stays on live appends).
+  const fetchRoute = useCallback(async () => {
+    const rid = rideIdRef.current;
+    if (!rid) return;
+    const { data, error } = await supabase
+      .from('rail3_breadcrumb')
+      .select('path')
+      .eq('ride_id', rid)
+      .maybeSingle();
+    if (error || !data) return;
+    const path = (data.path as LatLng[] | null) ?? [];
+    if (path.length >= trailRef.current.length) {
+      trailRef.current = path;
+      setTrail(path);
+    }
+  }, []);
+
+  // Fetch on mount / ride change, and again whenever the app returns to the foreground
+  // (the lock-independent catch-up: one read restores the whole route after any absence).
+  useEffect(() => {
+    void fetchRoute();
+  }, [rideId, fetchRoute]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void fetchRoute();
+    });
+    return () => sub.remove();
+  }, [fetchRoute]);
+
+  // Live forward-extension: append the leader's broadcast single-points so the trail tip
+  // tracks the marker in real time between the ~60s table upserts. Bound once per channel;
+  // reads leaderId/rideId via refs so it never re-binds (which would stack handlers).
   useEffect(() => {
     if (!channel) return;
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
       const lid = leaderIdRef.current;
-      const p = payload as {
-        riderId?: string;
-        lat?: number;
-        lng?: number;
-        trail?: LatLng[];
-        trailBaseSeq?: number;
-      };
+      const p = payload as { riderId?: string; lat?: number; lng?: number };
       pingCountRef.current += 1;
 
-      // D67 instrumentation: snapshot the match-state every 15th ping so a remote
-      // failure (lid null? riderId mismatch?) is diagnosable from the sink alone.
       if (pingCountRef.current % 15 === 0) {
         void logMeasurement({
           rideId: rideIdRef.current ?? '',
@@ -103,33 +114,7 @@ export function useBreadcrumb(
         });
       }
 
-      if (!lid || p?.riderId !== lid) return;
-
-      // W233 — preferred path: the captain attaches a bounded recent WINDOW of its
-      // decimated trail + the seq of the window's first point. Merge by seq so we append
-      // only points newer than what we already have. This is what makes the breadcrumb
-      // lock-independent: a rider unlocking/late gets the missed portion from the next
-      // single broadcast (bounded by the window — a lock LONGER than the window leaves a
-      // straight jump for the un-covered older part, accepted per Sr PM).
-      if (Array.isArray(p.trail) && typeof p.trailBaseSeq === 'number') {
-        const base = p.trailBaseSeq;
-        const tipSeq = base + p.trail.length - 1;
-        if (tipSeq <= lastSeqRef.current) return; // nothing newer than we have
-        // Points we don't yet have. If our last seq is within the window, slice the
-        // genuinely-new tail; if we fell behind the window (long lock), take it whole.
-        const startIdx = Math.max(0, lastSeqRef.current + 1 - base);
-        const fresh = p.trail.slice(startIdx);
-        if (fresh.length === 0) return;
-        const updated = capTrail([...trailRef.current, ...fresh]);
-        trailRef.current = updated;
-        lastSeqRef.current = tipSeq;
-        setTrail(updated);
-        return;
-      }
-
-      // Legacy fallback (a captain on an older build that broadcasts only a single
-      // point): receiver-side decimated single-point append, as before.
-      if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+      if (!lid || p?.riderId !== lid || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
       const updated = appendTrailPoint(trailRef.current, { lat: p.lat, lng: p.lng });
       if (updated !== trailRef.current) {
         trailRef.current = updated;
