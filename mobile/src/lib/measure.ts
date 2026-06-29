@@ -45,6 +45,9 @@ export type MeasureKind =
   | 'gps_time_to_kill'
   | 'state_transition'
   | 'beacon_latency'
+  // W234 captain breadcrumb: result of each rail3_breadcrumb upsert (D69 made this
+  // fire; the kind was missing from the union, so tsc flagged it — Metro ran fine).
+  | 'breadcrumb_upsert'
   // UX-event kinds — instrument these so they're DATA, not tester-checklist items:
   | 'ux_explainer_shown'
   | 'ux_battery_prompt_shown'

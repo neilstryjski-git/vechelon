@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import * as Location from 'expo-location';
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -162,6 +163,26 @@ export function useFleetPositions(
   // re-bind the FGS send effect on every roster refresh and churn the foreground service.
   const rosterRef = useRef(roster);
   rosterRef.current = roster;
+
+  // W244 perceived-start: seed myCoords from the OS last-known fix the instant the
+  // map opens, so the camera frames the rider and the Centre/Fit controls enable
+  // WITHOUT waiting for the first live TS fix (~2–5s cold acquisition). The
+  // functional update never clobbers a real fix that already landed (cur ?? …), so
+  // the live position always wins the moment it arrives. Requires foreground
+  // permission; returns null otherwise — RideMapScreen then frames ride.start. This
+  // is read-only (no tracking started), so it's safe before the explainer/D63 flow.
+  useEffect(() => {
+    let cancelled = false;
+    void Location.getLastKnownPositionAsync()
+      .then((pos) => {
+        if (cancelled || !pos) return;
+        setMyCoords((cur) => cur ?? { lat: pos.coords.latitude, lng: pos.coords.longitude });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Re-derive render states as time passes — a rider goes Stopped→…→Dark
   // precisely when NO data arrives, so something must still trigger renders.

@@ -12,6 +12,7 @@ export interface RideDetails {
   tenantId: string; // denormalized onto beacon_alerts rows (W173)
   thresholds: StateThresholds; // per-tenant rider-state thresholds (W174)
   qrCode: string | null; // rides.qr_code — full-screen display (W175/R3-27)
+  start: LatLng | null; // rides.start_coords — initial map frame before the first GPS fix (W244)
   finish: LatLng | null; // null ⇒ no Edge Indicator (R3-14, e.g. Ad Hoc rides)
   myRole: RideRole;
 }
@@ -46,7 +47,7 @@ export function useRideDetails(rideId: string | null): {
           .from('rides')
           // Single string literal — supabase-js infers row types from it.
           .select(
-            'id, name, status, tenant_id, finish_coords, qr_code, tenants(rail3_stopped_threshold_minutes, rail3_inactive_threshold_minutes, rail3_dark_threshold_minutes)',
+            'id, name, status, tenant_id, start_coords, finish_coords, qr_code, tenants(rail3_stopped_threshold_minutes, rail3_inactive_threshold_minutes, rail3_dark_threshold_minutes)',
           )
           .eq('id', rideId)
           .maybeSingle(),
@@ -59,33 +60,43 @@ export function useRideDetails(rideId: string | null): {
         return;
       }
 
-      const userId = auth.user?.id;
-      let myRole: RideRole = 'member';
-      if (userId) {
-        const { data: me } = await supabase
-          .from('ride_participants')
-          .select('role')
-          .eq('ride_id', rideId)
-          .eq('account_id', userId)
-          .maybeSingle();
-        if (me?.role) myRole = me.role as RideRole;
-      }
-
-      if (cancelled) return;
+      // W244 render-first: publish the ride the instant its row resolves, with
+      // myRole defaulted to 'member', and clear loading NOW. The participant-role
+      // read below is taken OFF the critical path — RideMapScreen renders the live
+      // map immediately and the role hydrates a beat later. The momentary 'member'
+      // default is FAIL-CLOSED on both consumers of myRole: it hides captain-only
+      // chrome (RideControls), AND it restricts visibleParticipants to the §4.1
+      // most-restrictive set (Captain+SAG only) — so it can only ever UNDER-show,
+      // never leak peer positions. Real role only ever patches UP. Lane-A latency win.
+      const row = rideRes.data;
       setRide({
-        id: rideRes.data.id,
-        name: rideRes.data.name,
-        status: rideRes.data.status,
-        tenantId: rideRes.data.tenant_id,
-        qrCode: rideRes.data.qr_code ?? null,
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        tenantId: row.tenant_id,
+        qrCode: row.qr_code ?? null,
         // PostgREST embeds the FK'd tenants row; per-field default fallback.
         thresholds: thresholdsFromTenant(
-          rideRes.data.tenants as Parameters<typeof thresholdsFromTenant>[0],
+          row.tenants as Parameters<typeof thresholdsFromTenant>[0],
         ),
-        finish: parsePoint(rideRes.data.finish_coords),
-        myRole,
+        start: parsePoint(row.start_coords),
+        finish: parsePoint(row.finish_coords),
+        myRole: 'member',
       });
       setLoading(false);
+
+      // Hydrate the real role asynchronously and patch it onto the already-rendered
+      // ride. Guarded against a ride change mid-flight (cur.id === row.id).
+      const userId = auth.user?.id;
+      if (!userId) return;
+      const { data: me } = await supabase
+        .from('ride_participants')
+        .select('role')
+        .eq('ride_id', rideId)
+        .eq('account_id', userId)
+        .maybeSingle();
+      if (cancelled || !me?.role) return;
+      setRide((cur) => (cur && cur.id === row.id ? { ...cur, myRole: me.role as RideRole } : cur));
     })();
 
     return () => {

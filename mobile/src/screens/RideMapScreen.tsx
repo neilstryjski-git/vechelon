@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView from 'react-native-map-clustering';
-import { PROVIDER_GOOGLE, Polyline, Region } from 'react-native-maps';
+import { PROVIDER_GOOGLE, Marker, Polyline, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -48,17 +48,21 @@ const FALLBACK_REGION: Region = {
   longitudeDelta: 0.5,
 };
 
-// Starting frame ~25m radius (street level) once the device position is known
-// (≈ latitudeDelta 0.0006 at mid-latitudes). Used by the auto-centre and the
-// Centre button (D53).
-const START_ZOOM_DELTA = 0.0006;
+// Starting frame ~70m radius (street level + breathing room) once the device
+// position is known (≈ latitudeDelta 0.0018 at mid-latitudes). Used by the
+// auto-centre, the start-frame (W244) and the Centre button (D53). Widened 3×
+// from the original 0.0006 — the ~25m frame read as too tight on recenter (Neil,
+// 2026-06-28); this keeps nearby riders/road context in view.
+const START_ZOOM_DELTA = 0.0018;
 
 const RideMapScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'RideMap'>>();
   const navigation = useNavigation();
   const rideId = route.params.rideId;
 
-  const { ride, loading, error } = useRideDetails(rideId);
+  // `loading` is intentionally not consumed: W244 render-first means we never gate
+  // the screen on it — the map shell mounts immediately and ride fields hydrate async.
+  const { ride, error } = useRideDetails(rideId);
   const [myRiderId, setMyRiderId] = useState<string | null>(null);
   const { roster, refetchRoster } = useRideRoster(rideId);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
@@ -276,7 +280,7 @@ const RideMapScreen: React.FC = () => {
     : 0;
 
   // R3-12: Centre button returns the camera to the device's current position,
-  // zoomed to the ~25m starting frame.
+  // zoomed to the ~70m starting frame (START_ZOOM_DELTA).
   const centreOnMe = useCallback(() => {
     if (!myCoords) return;
     setFollowing(true); // D56: tapping Centre re-engages follow
@@ -342,17 +346,34 @@ const RideMapScreen: React.FC = () => {
     );
   }, [myCoords, following]);
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.dim}>Loading ride…</Text>
-      </View>
+  // W244 — until the first position (a seeded last-known fix or the first live TS
+  // fix) arrives, frame the camera on the ride's start so the opener sees the right
+  // place immediately instead of the neutral fallback region. Runs once when the
+  // ride resolves; if myCoords is already present (last-known seeded faster) this
+  // no-ops and the follow effect above owns the camera.
+  const hasFramedStartRef = useRef(false);
+  useEffect(() => {
+    if (hasFramedStartRef.current || myCoords || !ride?.start) return;
+    hasFramedStartRef.current = true;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: ride.start.lat,
+        longitude: ride.start.lng,
+        latitudeDelta: START_ZOOM_DELTA,
+        longitudeDelta: START_ZOOM_DELTA,
+      },
+      300,
     );
-  }
-  if (error || !ride) {
+  }, [ride, myCoords]);
+
+  // W244 render-first: only a HARD error short-circuits the live map. While `ride`
+  // is still loading (null, no error) we render the map shell immediately — the
+  // full-screen "Loading ride…" gate is off the perceived-start critical path, and
+  // every ride-dependent overlay below null-guards on `ride`.
+  if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.dim}>{error ?? 'Ride unavailable'}</Text>
+        <Text style={styles.dim}>{error}</Text>
       </View>
     );
   }
@@ -400,6 +421,20 @@ const RideMapScreen: React.FC = () => {
             lineJoin="round"
           />
         ) : null}
+        {/* W244 start-pin fallback: until the FIRST position arrives (seeded
+            last-known OR first live fix) there is no OS blue dot — e.g. a cold
+            first-ride rider who hasn't yet granted foreground location. Drop a
+            muted pin at the ride's start so the opener always has a position
+            marker, per the AC. It disappears the instant myCoords exists (the
+            blue dot / live marker takes over). */}
+        {!myCoords && ride?.start ? (
+          <Marker
+            coordinate={{ latitude: ride.start.lat, longitude: ride.start.lng }}
+            title="Ride start"
+            pinColor="#9A9A9A"
+            tracksViewChanges={false}
+          />
+        ) : null}
         {visible.map((p) => {
           const beacon = beacons[p.riderId];
           // W206 (§4.1 amended): self + Captain/SAG see all beacons, AND every
@@ -444,7 +479,7 @@ const RideMapScreen: React.FC = () => {
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}
       <View style={styles.topBar} pointerEvents="box-none">
         <TouchableOpacity style={styles.backChip} onPress={() => navigation.goBack()}>
-          <Text style={styles.chipText}>‹ {ride.name}</Text>
+          <Text style={styles.chipText}>‹ {ride?.name ?? 'Ride'}</Text>
         </TouchableOpacity>
         <View style={styles.topRight}>
           {channelStatus !== 'SUBSCRIBED' ? (
@@ -470,17 +505,22 @@ const RideMapScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* §4.1: End Ride is Captain-only — SAG and Riders never mount this. */}
-      {myRole === 'captain' ? (
+      {/* §4.1: End Ride is Captain-only — SAG and Riders never mount this. The
+          `ride &&` guard covers the render-first window: until the role hydrates,
+          myRole defaults to 'member' so this is already hidden, and ride.id is only
+          read once the ride exists. */}
+      {ride && myRole === 'captain' ? (
         <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} />
       ) : null}
 
-      <FullScreenQR
-        visible={qrOpen}
-        qrCode={ride.qrCode}
-        rideName={ride.name}
-        onClose={() => setQrOpen(false)}
-      />
+      {ride ? (
+        <FullScreenQR
+          visible={qrOpen}
+          qrCode={ride.qrCode}
+          rideName={ride.name}
+          onClose={() => setQrOpen(false)}
+        />
+      ) : null}
 
       {finishOffscreen ? (
         <EdgeIndicator

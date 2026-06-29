@@ -422,3 +422,24 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   (`--tz-offset` reconstructs TS device-local → UTC) → positional/cross-track error. Smoke-tested
   3/3 fixes + GPX alignment; graceful on empty input. hAcc is SELF-REPORTED (real error needs the
   GPX diff); RWGPS is agreement, not survey truth. tsc clean (deepLinkAuth.ts only).
+
+## W244 (Lane A) — Ride-start ≤2s: render-first, OTA-safe (2026-06-28)
+- RideMapScreen.tsx: removed the full-screen "Loading ride…" gate (render-first); only a HARD
+  error short-circuits the live map now. Ride name/role/QR/captain-controls null-guard on `ride`
+  and hydrate async. Added a one-time start-frame effect (camera → ride.start until first fix) and
+  a muted start-PIN fallback (`!myCoords && ride.start`) so a cold/no-permission rider still gets a
+  position marker per AC. Widened START_ZOOM_DELTA 0.0006→0.0018 (~25m→~70m) — recenter read too
+  tight (Neil). Dropped unused `loading` from the useRideDetails destructure.
+- useRideDetails.ts: render-first restructure — publish the ride the instant the rides row resolves
+  with myRole defaulted to 'member' + clear loading NOW; the participant-role read is OFF the
+  critical path and patches myRole UP when it lands. Fail-closed (member → most-restrictive §4.1
+  visibility, hides captain chrome). Added `start` (rides.start_coords) to RideDetails + select.
+- useFleetPositions.ts: seed myCoords from getLastKnownPositionAsync on open (read-only, starts no
+  tracking; `cur ?? …` so a live fix always wins) → instant centering + enabled Centre/Fit.
+- measure.ts: added 'breadcrumb_upsert' to MeasureKind (D69 fired it; the kind was missing — tsc
+  flagged it, Metro ran fine).
+- Reviewer (stride:task-reviewer): approved w/ changes — all safety-critical checks pass (fail-closed
+  myRole, stable hook order, D69 breadcrumb + FGS lock-survival untouched, read-only seed). 1
+  important (start-pin fallback) + 3 minor all addressed. tsc clean on all touched files.
+- JS-only / OTA-safe (lands via EAS Update once W243 OTA is un-parked). Lane B = W245 (GPS pre-warm
+  + parallelize reads), gated on on-device lock-survival re-test.
