@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { formatPoint, getStaticMapUrl, getStaticMapPinUrl } from '../lib/maps';
+import { formatPoint, getStaticMapUrl, getStaticMapPinUrl, parsePoint } from '../lib/maps';
 import { parseGPXCoords } from '../lib/validation';
 import { useToast } from '../store/useToast';
 import { useAppStore, type RideType } from '../store/useAppStore';
