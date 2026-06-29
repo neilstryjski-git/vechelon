@@ -6,7 +6,7 @@
     "admin"
   ],
   "scripts": {
-    "build": "npm run build --prefix admin && rm -rf public dist_production && mkdir -p public/portal dist_production/portal && cp -r admin/dist/. public/portal/ && cp -r admin/dist/. dist_production/portal/ && cp index.html public/landing.html && cp index.html dist_production/landing.html && cp prototype.html roadmap.html echelon-logo-v10.html privacy.html public/ && cp prototype.html roadmap.html echelon-logo-v10.html privacy.html dist_production/ && cp -r admin/public/. public/portal/ && cp -r admin/public/. dist_production/portal/ && (cp admin/public/*-logo.png admin/public/*.svg public/ 2>/dev/null; cp admin/public/*-logo.png admin/public/*.svg dist_production/ 2>/dev/null) || true"
+    "build": "npm run build --prefix admin && rm -rf public dist_production && mkdir -p public/portal dist_production/portal && cp -r admin/dist/. public/portal/ && cp -r admin/dist/. dist_production/portal/ && cp index.html public/landing.html && cp index.html dist_production/landing.html && cp prototype.html roadmap.html echelon-logo-v10.html privacy.html public/ && cp prototype.html roadmap.html echelon-logo-v10.html privacy.html dist_production/ && cp -r admin/public/. public/portal/ && cp -r admin/public/. dist_production/portal/ && (cp admin/public/*-logo.png admin/public/*.svg public/ 2>/dev/null; cp admin/public/*-logo.png admin/public/*.svg dist_production/ 2>/dev/null) || true && (test -f dist_production/portal/index.html || (echo '::error::BUILD GUARD: dist_production/portal/index.html missing — the admin build produced no portal bundle (likely a tsc/vite failure). Failing the build to prevent shipping an empty portal.' && exit 1))"
   },
   "devDependencies": {
     "react": "^19.2.4",
