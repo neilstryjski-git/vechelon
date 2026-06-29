@@ -98,6 +98,20 @@ const withBundleInDebug: ConfigPlugin = (config) =>
 //    live position pings on the fleet map. Background-mode permissions land
 //    with W176/W179 (Foreground Service explainer / background GPS validation).
 export default ({ config }: ConfigContext): ExpoConfig => {
+  // W204/W217 — the 'production' profile is the ONLY one that licenses
+  // Transistorsoft and locks the Play package to ca.vechelon. Every other
+  // profile (development/preview/trial) stays on the unlicensed PoC package
+  // ca.vechelon.rail3, so existing field-test builds are byte-for-byte unaffected.
+  const isProd = process.env.EAS_BUILD_PROFILE === 'production';
+
+  // RNBG plugin form: bare string = free/unlicensed (only runs in a debug build);
+  // the licensed object form embeds the key (injected from the RNBG_LICENSE EAS
+  // secret) for the production release build. Cast pins it to the plugin element
+  // union so the mixed string|tuple array still type-checks.
+  const rnbgPlugin = (isProd
+    ? ['react-native-background-geolocation', { license: process.env.RNBG_LICENSE ?? '' }]
+    : 'react-native-background-geolocation') as NonNullable<ExpoConfig['plugins']>[number];
+
   const base: ExpoConfig = {
   ...(config as ExpoConfig),
   // Build fingerprint for remote build identification (staging measurement sink).
@@ -112,6 +126,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   },
   android: {
     ...config.android,
+    // PoC/test builds keep ca.vechelon.rail3; only the store build locks
+    // ca.vechelon — the identifier the Transistorsoft licence + prod Maps key
+    // bind to. Coexists on-device with the .rail3 test app (different package).
+    package: isProd ? 'ca.vechelon' : config.android?.package,
     config: {
       ...config.android?.config,
       googleMaps: {
@@ -142,7 +160,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // before the $399 buy. FREE in this debug/trial build — no license key. The plugins add
     // the maven repo + manifest entries (FGS location type) at prebuild. jitpack flake is
     // handled by withPinnedTsBackgroundFetch (force concrete version, never query jitpack).
-    'react-native-background-geolocation',
+    rnbgPlugin,
     'react-native-background-fetch',
     [
       // Pin play-services-location to 21.x so bg-geo selects the matching
