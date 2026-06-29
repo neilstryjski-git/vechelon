@@ -1,0 +1,83 @@
+name: Web Build Gate
+
+# Pre-merge build gate for the admin/ web portal — the Vechelon implementation
+# of the product-trio PTAP "Build Verification Gate" (qa-protocol.md, v1.3.0).
+#
+# Runs the REAL production build (`npm run build`, which type-checks admin via
+# `tsc -b` and assembles dist_production) on every PR that touches the web app,
+# and verifies the portal bundle is actually emitted. A type error or an
+# empty-portal build fails the PR here instead of shipping a green-looking,
+# portal-less deploy to Vercel.
+#
+# Origin: a single missing import passed at runtime but failed `tsc`, and Vercel
+# shipped an EMPTY /portal as a "successful" deploy — a total prod outage
+# (2026-06-29). This gate makes that class of failure impossible to merge.
+#
+# NOTE: for this to BLOCK merges (not just report), add "Build admin/web portal +
+# verify artifact" as a required status check in the repo's branch-protection
+# rules for master.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'admin/**'
+      - 'index.html'
+      - 'prototype.html'
+      - 'roadmap.html'
+      - 'privacy.html'
+      - 'echelon-logo-v10.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - '.github/workflows/web-build.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'admin/**'
+      - 'index.html'
+      - 'prototype.html'
+      - 'roadmap.html'
+      - 'privacy.html'
+      - 'echelon-logo-v10.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - '.github/workflows/web-build.yml'
+  workflow_dispatch:
+
+# Don't pile up redundant runs on rapid pushes to the same ref.
+concurrency:
+  group: web-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build admin/web portal + verify artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        # Root is an npm workspace ("workspaces": ["admin"]), so a root install
+        # also installs admin's deps — the same way Vercel builds it.
+        run: npm install --legacy-peer-deps
+
+      - name: Production build (admin tsc + vite + assemble dist_production)
+        # `npm run build` includes the build guard that fails if the portal
+        # bundle is missing, so a broken/empty admin build fails this step.
+        run: npm run build
+
+      - name: Verify portal bundle emitted
+        run: |
+          if [ ! -s dist_production/portal/index.html ]; then
+            echo "::error::dist_production/portal/index.html is missing or empty — the admin build produced no portal."
+            exit 1
+          fi
+          echo "portal bundle OK: $(wc -c < dist_production/portal/index.html) bytes"
