@@ -41,6 +41,7 @@
       }
     },
     "production": {
+      "node": "22.11.0",
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
@@ -52,6 +53,7 @@
       }
     },
     "validate": {
+      "node": "22.11.0",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
