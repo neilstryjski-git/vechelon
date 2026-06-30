@@ -58,16 +58,18 @@ export async function setTrackingPingEnabled(next: boolean): Promise<void> {
 
 // Minimal slice of the TS engine this util needs — passed in by the caller (bgGeo
 // already holds the singleton) to avoid an import cycle with bgGeo.ts.
-type SoundPlayer = { playSound: (soundId: unknown) => Promise<void> };
+// v5: BackgroundGeolocation.playSound(soundId: number | string): void — synchronous,
+// not a Promise (was Promise<void> in v4). soundId stays a string ('LOCATION_RECORDED').
+type SoundPlayer = { playSound: (soundId: number | string) => void };
 
 // Fire-and-forget: one short chirp per recorded fix when the toggle is on. Never let a
 // failed chirp disrupt tracking or tear down the FGS (mirrors the old chirp.ts contract).
 export function playTrackingPing(bg: SoundPlayer): void {
   if (!enabled) return;
   try {
-    // .catch handles an ASYNC rejection (a sync throw is caught below); either way a
-    // failed chirp must never surface into onLocation or tear down the FGS.
-    void bg.playSound(PING_SOUND_ID).catch(() => {});
+    // v5 playSound is synchronous (returns void). A sync throw is caught here; a failed
+    // chirp must never surface into onLocation or tear down the FGS.
+    bg.playSound(PING_SOUND_ID);
   } catch {
     // diagnostic aid only — swallow
   }

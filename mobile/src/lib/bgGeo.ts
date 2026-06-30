@@ -77,8 +77,14 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
   if (!configured) {
     // v4 (Expo SDK 52-compatible) FLAT config. On Android `foregroundService: true`
     // runs the persistent-notification service that keeps GPS streaming through Doze.
-    await BG.ready({
-      desiredAccuracy: BG.DESIRED_ACCURACY_HIGH,
+    // v5's Config type is compound (geolocation/app/logger/authorization sub-groups), but the
+    // legacy FLAT config below is still accepted at RUNTIME (v5.0.0 migration guide, with
+    // deprecation warnings — the native layer maps the flat keys). We keep the v4-proven flat
+    // config and cast through the compound type: re-nesting all ~15 keys by hand is riskier
+    // (a misplaced key silently degrades tracking) than trusting the documented flat compat.
+    // A full compound-config migration is a deferred cleanup (W208-class).
+    const readyConfig = {
+      desiredAccuracy: BG.DesiredAccuracy.High, // v5: renamed from BG.DESIRED_ACCURACY_HIGH
       distanceFilter: 0, // 0 → time-based on Android via the interval below
       locationUpdateInterval: 5000, // ~match the legacy PING_INTERVAL_MS
       fastestLocationUpdateInterval: 5000,
@@ -110,8 +116,9 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
       // MANUALLY (emailLog/getLog — never uploadLog), so the no-coords-on-the-server posture
       // holds. W208 takes logLevel OFF for a production release.
       debug: false,
-      logLevel: BG.LOG_LEVEL_VERBOSE,
-    });
+      logLevel: BG.LogLevel.Verbose, // v5: renamed from BG.LOG_LEVEL_VERBOSE
+    };
+    await BG.ready(readyConfig as unknown as Parameters<typeof BG.ready>[0]);
     configured = true;
   }
   await BG.start();

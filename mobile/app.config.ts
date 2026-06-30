@@ -115,8 +115,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ? ['react-native-background-geolocation', { license: process.env.RNBG_LICENSE ?? '' }]
     : 'react-native-background-geolocation') as NonNullable<ExpoConfig['plugins']>[number];
 
+  // Per-variant display name so the three coexisting installs are distinguishable on the
+  // home screen (they're different packages, but inherited the same app.json name/logo):
+  //   production → "Vechelon"  ·  validate → "Vechelon (Staging)"  ·  else → "Vechelon Rail 3".
+  const profile = process.env.EAS_BUILD_PROFILE;
+  const appName = profile === 'production' ? 'Vechelon'
+                : profile === 'validate'   ? 'Vechelon (Staging)'
+                : (config.name ?? 'Vechelon Rail 3');
+
   const base: ExpoConfig = {
   ...(config as ExpoConfig),
+  name: appName,
   // Build fingerprint for remote build identification (staging measurement sink).
   // EAS sets these env vars during the build; baked into extra so the running app
   // can report exactly which build it is (maps the APK/commit to a device's rows
