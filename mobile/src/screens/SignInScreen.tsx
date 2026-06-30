@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -13,7 +14,7 @@ import {
 
 import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
-import { TENANT_SLUG } from '../lib/env';
+import { TENANT_SLUG, PRIVACY_POLICY_URL } from '../lib/env';
 import { useTheme } from '../theme/ThemeProvider';
 
 // Stages of the passwordless OTP flow:
@@ -217,6 +218,13 @@ const SignInScreen: React.FC = () => {
       <Text style={styles.fine}>
         Passwordless sign-in · code expires in 60 minutes
       </Text>
+
+      <Text
+        style={styles.privacyLink}
+        onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+      >
+        Privacy Policy
+      </Text>
     </KeyboardAvoidingView>
   );
 };
@@ -296,6 +304,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 24,
+  },
+  privacyLink: {
+    color: '#7A7A7A',
+    fontSize: 11,
+    textDecorationLine: 'underline',
+    marginTop: 14,
   },
 });
 

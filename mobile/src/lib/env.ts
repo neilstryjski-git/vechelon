@@ -10,6 +10,10 @@ export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 // brands the email for the right club.
 export const TENANT_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG ?? '';
 
+// Hosted privacy policy (W224) — linked in-app for Play compliance. Single source
+// so SignInScreen (pre-auth) and HomeScreen (post-auth) stay in sync.
+export const PRIVACY_POLICY_URL = 'https://vechelon.productdelivered.ca/privacy';
+
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL &&
     SUPABASE_ANON_KEY &&

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Linking,
   RefreshControl,
   StyleSheet,
   Switch,
@@ -15,7 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
-import { TENANT_SLUG } from '../lib/env';
+import { TENANT_SLUG, PRIVACY_POLICY_URL } from '../lib/env';
 import {
   isTrackingPingEnabled,
   loadTrackingPingFlag,
@@ -174,6 +175,14 @@ const HomeScreen: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
+      <Text
+        style={styles.privacyLink}
+        onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+        accessibilityRole="link"
+      >
+        Privacy Policy
+      </Text>
+
       <Text style={styles.sectionTitle}>Live rides</Text>
       <FlatList
         data={rides}
@@ -231,6 +240,14 @@ const styles = StyleSheet.create({
   },
   label: { color: '#9A9A9A', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' },
   email: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 4 },
+  privacyLink: {
+    color: '#7A7A7A',
+    fontSize: 11,
+    textDecorationLine: 'underline',
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 20,
+  },
   signOut: {
     borderWidth: 1,
     borderRadius: 10,
