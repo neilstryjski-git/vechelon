@@ -146,6 +146,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // ca.vechelon — the identifier the Transistorsoft licence + prod Maps key
     // bind to. Coexists on-device with the .rail3 test app (different package).
     package: isProd ? 'ca.vechelon' : config.android?.package,
+    // Android 8+ uses the ADAPTIVE icon over the top-level `icon`, so the ca.vechelon
+    // variant must override it too (overriding only `icon` left the rs78 adaptive icon
+    // showing). Keep the dark backdrop; the chainring is masked to the launcher shape.
+    adaptiveIcon: isProd
+      ? { foregroundImage: './assets/icon.png', backgroundColor: '#1A1A1A' }
+      : config.android?.adaptiveIcon,
     config: {
       ...config.android?.config,
       googleMaps: {
