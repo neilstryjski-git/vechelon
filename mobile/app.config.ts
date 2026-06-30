@@ -98,11 +98,14 @@ const withBundleInDebug: ConfigPlugin = (config) =>
 //    live position pings on the fleet map. Background-mode permissions land
 //    with W176/W179 (Foreground Service explainer / background GPS validation).
 export default ({ config }: ConfigContext): ExpoConfig => {
-  // W204/W217 — the 'production' profile is the ONLY one that licenses
-  // Transistorsoft and locks the Play package to ca.vechelon. Every other
-  // profile (development/preview/trial) stays on the unlicensed PoC package
-  // ca.vechelon.rail3, so existing field-test builds are byte-for-byte unaffected.
-  const isProd = process.env.EAS_BUILD_PROFILE === 'production';
+  // W204/W217 — the licensed ca.vechelon variant. 'production' is the Play
+  // (AAB) build; 'validate' is its sideloadable APK twin for on-device proof
+  // (same package + licence, but staging data so you can sign in and reach a
+  // ride map). Every OTHER profile (development/preview/trial) stays on the
+  // unlicensed PoC package ca.vechelon.rail3, so existing field-test builds are
+  // byte-for-byte unaffected.
+  const LICENSED_CA_VECHELON = ['production', 'validate'];
+  const isProd = LICENSED_CA_VECHELON.includes(process.env.EAS_BUILD_PROFILE ?? '');
 
   // RNBG plugin form: bare string = free/unlicensed (only runs in a debug build);
   // the licensed object form embeds the key (injected from the RNBG_LICENSE EAS
