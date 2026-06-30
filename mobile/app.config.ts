@@ -126,6 +126,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const base: ExpoConfig = {
   ...(config as ExpoConfig),
   name: appName,
+  // The real Vechelon icon for the licensed ca.vechelon variant (production + validate);
+  // the rail3 trial keeps the Expo default so the installs stay visually distinct. 256×256
+  // covers every Android launcher density (the Play Store listing still needs a 512 hi-res).
+  icon: isProd ? './assets/icon.png' : config.icon,
   // Build fingerprint for remote build identification (staging measurement sink).
   // EAS sets these env vars during the build; baked into extra so the running app
   // can report exactly which build it is (maps the APK/commit to a device's rows
