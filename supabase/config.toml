@@ -416,3 +416,6 @@ verify_jwt = false
 
 [functions.guest-rsvp]
 verify_jwt = false
+
+[functions.guest-cancel-rsvp]
+verify_jwt = false
