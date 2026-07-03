@@ -153,26 +153,35 @@ serve(async (req) => {
     }
 
     // ── 7. Write contact details to the accounts profile ───────────────────
-    const { error: updError } = await adminClient
-      .from('accounts')
-      .update({
-        name: v_name,
-        phone: v_phone,
-        emergency_contact_name: v_ec_name,
-        emergency_contact_phone: v_ec_phone,
-      })
-      .eq('id', accountId)
-    if (updError) throw updError
+    // MERGE, don't clobber: only write columns the admin actually provided. An
+    // existing member can re-RSVP anonymously (same email) and surface in the
+    // RSVP'd tab; the guest modal prefills phone/emergency as null (they aren't
+    // read from the account), so a blind overwrite would wipe a real member's
+    // phone + emergency contact. For a freshly createUser'd account every prior
+    // value is null, so this behaves identically to a full write.
+    const patch: Record<string, string> = {}
+    if (v_name) patch.name = v_name
+    if (v_phone) patch.phone = v_phone
+    if (v_ec_name) patch.emergency_contact_name = v_ec_name
+    if (v_ec_phone) patch.emergency_contact_phone = v_ec_phone
+    if (Object.keys(patch).length > 0) {
+      const { error: updError } = await adminClient
+        .from('accounts')
+        .update(patch)
+        .eq('id', accountId)
+      if (updError) throw updError
+    }
 
     // ── 8. Create/keep the tenant membership ───────────────────────────────
     // name+phone complete => affiliated (mirrors W216 import + W230 member rule);
     // otherwise initiated (pending). Never downgrade an existing affiliation.
-    const { data: currentLink } = await adminClient
+    const { data: currentLink, error: currentLinkError } = await adminClient
       .from('account_tenants')
       .select('status')
       .eq('account_id', accountId)
       .eq('tenant_id', tenantId)
       .maybeSingle()
+    if (currentLinkError) throw currentLinkError  // never downgrade on a failed read
 
     const wantAffiliated = !!v_name && !!v_phone
     let newStatus: 'affiliated' | 'initiated'
