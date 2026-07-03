@@ -598,7 +598,10 @@ const RideDetailSideSheet: React.FC = () => {
                   ) : participants.length > 0 ? (
                     <>
                       {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => {
-                        const canRemove = isAdmin;
+                        // Admins can remove anyone; a rider can cancel their own RSVP —
+                        // same affordance (the roster trash icon), scoped to their own row.
+                        const isOwnRow = !!currentUser && p.account_id === currentUser.id;
+                        const canRemove = isAdmin || isOwnRow;
                         return (
                           <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
                             <div className="flex items-center gap-3">
@@ -624,9 +627,10 @@ const RideDetailSideSheet: React.FC = () => {
                               <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
                               {canRemove && (
                                 <button
-                                  onClick={() => setRemoveTarget(p)}
-                                  aria-label={`Remove ${p.display_name} from roster`}
-                                  className="p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors"
+                                  onClick={() => (isAdmin ? setRemoveTarget(p) : setShowCancelConfirm(true))}
+                                  disabled={!isAdmin && isCancelling}
+                                  aria-label={isAdmin ? `Remove ${p.display_name} from roster` : 'Cancel your RSVP'}
+                                  className="p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                                 >
                                   <span className="material-symbols-outlined text-base">person_remove</span>
                                 </button>
@@ -668,19 +672,9 @@ const RideDetailSideSheet: React.FC = () => {
                 )}
 
                 {hasJoined && (
-                  <div className="space-y-2 mb-2">
-                    <div className="flex items-center justify-center gap-2 py-4 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20">
-                      <span className="material-symbols-outlined text-lg">check_circle</span>
-                      <span className="font-headline font-bold uppercase tracking-widest text-xs">RSVP Confirmed</span>
-                    </div>
-                    <button
-                      onClick={() => setShowCancelConfirm(true)}
-                      disabled={isCancelling}
-                      className="w-full bg-surface-container-high text-on-surface-variant py-3 rounded-xl font-label text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
-                    >
-                      <span className="material-symbols-outlined text-sm">event_busy</span>
-                      {isCancelling ? 'Cancelling…' : 'Cancel RSVP'}
-                    </button>
+                  <div className="flex items-center justify-center gap-2 py-4 bg-tertiary/10 text-tertiary rounded-xl border border-tertiary/20 mb-2">
+                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span className="font-headline font-bold uppercase tracking-widest text-xs">RSVP Confirmed</span>
                   </div>
                 )}
 
