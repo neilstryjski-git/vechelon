@@ -138,13 +138,30 @@ serve(async (req) => {
       }
       accountId = existingAccount.id
     } else {
-      // ── 6. Provision a new auth identity + accounts row ──────────────────
-      const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+      // ── 6. Resolve or create the auth identity, then ensure an accounts row ─
+      // A guest who RSVP'd with an email already has an auth.users row (the RSVP
+      // flow fires a magic link, which creates the user) but usually NO accounts
+      // row — that's created on first real sign-in via ensure_account_exists. So
+      // createUser would fail with "already registered" for the common case.
+      // Mirror invite-member: generateLink 'invite' creates a brand-new user; on
+      // error (user already exists) fall back to 'magiclink' to reference the
+      // existing one. generateLink does NOT send email — provisioning stays silent.
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.generateLink({
+        type: 'invite',
         email: normalizedEmail,
-        email_confirm: true,
       })
-      if (createError || !created?.user) throw new Error(`Could not create account: ${createError?.message ?? 'unknown error'}`)
-      accountId = created.user.id
+      if (inviteError || !inviteData?.user) {
+        const { data: mlData, error: mlError } = await adminClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email: normalizedEmail,
+        })
+        if (mlError || !mlData?.user) {
+          throw new Error(`Could not resolve account: ${(inviteError ?? mlError)?.message ?? 'unknown error'}`)
+        }
+        accountId = mlData.user.id
+      } else {
+        accountId = inviteData.user.id
+      }
 
       const { error: acctError } = await adminClient
         .from('accounts')
