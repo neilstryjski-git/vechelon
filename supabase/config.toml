@@ -408,6 +408,9 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.invite-member]
 verify_jwt = false
 
+[functions.bulk-create-members]
+verify_jwt = false
+
 [functions.admin-complete-guest]
 verify_jwt = false
 
