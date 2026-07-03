@@ -509,11 +509,11 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-low p-8 max-w-md w-full mx-4 space-y-6 max-h-[90vh] overflow-y-auto">
         <div className="space-y-2">
-          <h3 className="font-headline font-bold text-lg text-on-background">{isGuest ? 'Add Member' : 'Edit Contact Details'}</h3>
+          <h3 className="font-headline font-bold text-lg text-on-background">{isGuest ? 'Complete Account' : 'Edit Contact Details'}</h3>
           <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">{heading}</p>
           {isGuest && (
             <p className="font-body text-xs text-on-surface-variant/70">
-              Creating a member account for <span className="font-semibold">{member.accounts?.email}</span> from their guest RSVP.
+              Completing the account for <span className="font-semibold">{member.accounts?.email}</span> from their guest RSVP.
             </p>
           )}
         </div>
@@ -531,8 +531,8 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
           <p className={`font-label text-xs ${willPromote ? 'text-tertiary' : 'text-on-surface-variant/70'}`}>
             {isGuest
               ? (willPromote
-                  ? 'Saving will add this rider as an approved member (name + phone complete).'
-                  : 'Add a name and phone to approve this member (otherwise they are added as Awaiting).')
+                  ? 'Saving will complete this rider’s account and approve them (name + phone complete).'
+                  : 'Add a name and phone to approve this rider (otherwise the account is created as Awaiting).')
               : (willPromote
                   ? 'Saving will approve this member (name + phone complete).'
                   : 'Add a name and phone to approve this member.')}
@@ -551,7 +551,7 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
             disabled={isPending}
             className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
           >
-            {isPending ? 'Saving…' : isGuest ? 'Add Member' : 'Save Details'}
+            {isPending ? 'Saving…' : isGuest ? 'Complete Account' : 'Save Details'}
           </button>
         </div>
       </div>
@@ -802,7 +802,7 @@ const Members: React.FC = () => {
       const wasInitiated = editContactTarget?.status === 'initiated';
       addToast(
         wasGuest
-          ? (newStatus === 'affiliated' ? 'Member added and approved.' : 'Member added (Awaiting — add phone to approve).')
+          ? (newStatus === 'affiliated' ? 'Account completed — member approved.' : 'Account completed (Awaiting — add phone to approve).')
           : (wasInitiated && newStatus === 'affiliated' ? 'Details saved — member approved.' : 'Contact details saved.'),
         'success',
       );
@@ -1425,7 +1425,7 @@ const Members: React.FC = () => {
                     onClick={() => setEditContactTarget(m)}
                     className="px-4 py-2 rounded-md border border-outline-variant/40 font-label text-xs font-medium text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all active:scale-95"
                   >
-                    Add Member
+                    Complete Account
                   </button>
                 )}
                 {m.status !== 'rsvpd' && (
