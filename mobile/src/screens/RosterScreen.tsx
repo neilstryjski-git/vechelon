@@ -17,10 +17,14 @@ import { useTheme } from '../theme/ThemeProvider';
 
 // Captain roster (W250 — native slice). A read-only view over ride_participants
 // for the tenant's current ride: name + phone + tap-to-call. The captain sees
-// every rider's number via the existing participant_tactical_select RLS
-// (is_captain_or_support grants full-row visibility); regular riders do not,
-// which is the intended role-scoping. No live tracking, no map — this works on
-// any ride and exists so riders know the captain can reach them on the road.
+// every rider's number via participant_tactical_select (is_captain_or_support =
+// full-row access). No live tracking, no map — works on any ride and exists so
+// riders know the captain can reach them on the road.
+//
+// NOTE — role-scoping is NOT yet enforced: participant_tactical_select's tier-3
+// clause over-exposes phone to ANY affiliated member (defect D50, deferred to
+// the W197 promotion gate). Fine for the captain-calling use case (only the
+// captain runs the app today); rider-facing use of this screen needs D50 fixed.
 
 type Participant = {
   id: string;
