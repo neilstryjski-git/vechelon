@@ -30,17 +30,29 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 // no looser. The participant_tactical_select policy still over-returns phone to
 // affiliated riders (D50), so the true server-side fix remains owed.
 
+type AccountEmbed = { name: string | null; phone: string | null };
 type Row = {
   id: string;
   account_id: string | null;
   display_name: string | null;
   phone: string | null;
   role: RideRole;
+  accounts: AccountEmbed | AccountEmbed[] | null;
 };
 
 const dialable = (phone: string): string => phone.replace(/[^\d+]/g, '');
 const isCommand = (r: RideRole) => r === 'captain' || r === 'support';
 const roleRank: Record<RideRole, number> = { captain: 0, support: 1, member: 2, guest: 3 };
+
+// The account record is the source of truth for a member's current name + phone
+// (editing the member page must show here even if the ride row predates it).
+// The ride row's own name/phone is the fallback — used for guests with no account.
+const acctOf = (r: Row): AccountEmbed | null =>
+  (Array.isArray(r.accounts) ? r.accounts[0] : r.accounts) ?? null;
+const nameOf = (r: Row): string =>
+  acctOf(r)?.name?.trim() || r.display_name?.trim() || 'Unnamed rider';
+const phoneOf = (r: Row): string | null =>
+  acctOf(r)?.phone?.trim() || r.phone?.trim() || null;
 
 const RosterScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -64,7 +76,7 @@ const RosterScreen: React.FC = () => {
     try {
       const { data, error: pErr } = await supabase
         .from('ride_participants')
-        .select('id, account_id, display_name, phone, role')
+        .select('id, account_id, display_name, phone, role, accounts(name, phone)')
         .eq('ride_id', rideId);
       if (pErr) throw pErr;
       setRows((data ?? []) as Row[]);
@@ -100,21 +112,24 @@ const RosterScreen: React.FC = () => {
     .filter((r) => !(myUserId && r.account_id === myUserId)) // never list self
     .filter((r) => (iAmCommand ? true : isCommand(r.role))) // riders see only captain/SAG
     .sort(
-      (a, b) =>
-        roleRank[a.role] - roleRank[b.role] ||
-        (a.display_name ?? '').localeCompare(b.display_name ?? ''),
+      (a, b) => roleRank[a.role] - roleRank[b.role] || nameOf(a).localeCompare(nameOf(b)),
     );
 
   const renderItem = ({ item }: { item: Row }) => {
-    const name = item.display_name?.trim() || 'Unnamed rider';
+    const name = nameOf(item);
+    const resolvedPhone = phoneOf(item);
     const lead = isCommand(item.role);
-    const phoneAllowed = canSeePhone(myRole, item.role);
-    const hasPhone = !!item.phone?.trim();
+    // Roster rule: command roles (captain/SAG) can call ANYONE on the ride,
+    // incl. co-captains — this is a call sheet, not the tactical map. Riders keep
+    // the strict map gate (captain/SAG numbers only). Slight divergence from the
+    // map's canSeePhone (which hides captain<->captain); may warrant a §4.1 note.
+    const phoneAllowed = iAmCommand || canSeePhone(myRole, item.role);
+    const hasPhone = !!resolvedPhone;
     const showCall = phoneAllowed && hasPhone;
     const phoneLine = !phoneAllowed
       ? 'Contact held by the ride team'
       : hasPhone
-        ? (item.phone as string)
+        ? (resolvedPhone as string)
         : 'No number on file';
 
     return (
@@ -133,7 +148,7 @@ const RosterScreen: React.FC = () => {
         {showCall && (
           <TouchableOpacity
             style={[styles.callBtn, { backgroundColor: theme.primaryColor }]}
-            onPress={() => call(item.phone as string)}
+            onPress={() => call(resolvedPhone as string)}
             accessibilityLabel={`Call ${name}`}
           >
             <Text style={styles.callBtnText}>Call</Text>
