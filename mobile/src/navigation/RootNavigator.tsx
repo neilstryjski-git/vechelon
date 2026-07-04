@@ -6,11 +6,13 @@ import { useAuth } from '../auth/AuthContext';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import RideMapScreen from '../screens/RideMapScreen';
+import RosterScreen from '../screens/RosterScreen';
 
 export type RootStackParamList = {
   Home: undefined;
   SignIn: undefined;
   RideMap: { rideId: string };
+  Roster: { rideId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -37,6 +39,7 @@ const RootNavigator: React.FC = () => {
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="RideMap" component={RideMapScreen} />
+          <Stack.Screen name="Roster" component={RosterScreen} />
         </>
       ) : (
         <Stack.Screen name="SignIn" component={SignInScreen} />

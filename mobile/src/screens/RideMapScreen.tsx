@@ -482,6 +482,13 @@ const RideMapScreen: React.FC = () => {
           <Text style={styles.chipText}>‹ {ride?.name ?? 'Ride'}</Text>
         </TouchableOpacity>
         <View style={styles.topRight}>
+          <TouchableOpacity
+            style={styles.backChip}
+            onPress={() => (navigation as any).navigate('Roster', { rideId })}
+            accessibilityLabel="Open ride roster"
+          >
+            <Text style={styles.chipText}>Roster</Text>
+          </TouchableOpacity>
           {channelStatus !== 'SUBSCRIBED' ? (
             <View style={styles.statusChip}>
               <Text style={styles.chipText}>
