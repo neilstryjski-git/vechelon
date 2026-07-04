@@ -1,0 +1,17 @@
+{
+  "name": "vechelon-loadtest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "W180 — Rail 3 synthetic-fleet load-test harness (staging only)",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "seed": "node loadtest.mjs seed",
+    "run": "node loadtest.mjs run",
+    "teardown": "node loadtest.mjs teardown",
+    "all": "node loadtest.mjs all"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

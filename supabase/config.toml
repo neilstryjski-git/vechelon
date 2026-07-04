@@ -416,3 +416,11 @@ verify_jwt = false
 
 [functions.guest-rsvp]
 verify_jwt = false
+
+# W180 load-test harness (STAGING ONLY — never deploy to prod). Secret-gated on
+# x-loadtest-secret == LOADTEST_SECRET, so no user JWT is verified.
+[functions.loadtest-seed]
+verify_jwt = false
+
+[functions.loadtest-teardown]
+verify_jwt = false
