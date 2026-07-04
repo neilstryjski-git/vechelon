@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
+import RosterScreen from '../screens/RosterScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,7 +28,10 @@ const RootNavigator: React.FC = () => {
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0E0E10' } }}
     >
       {session ? (
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Roster" component={RosterScreen} />
+        </>
       ) : (
         <Stack.Screen name="SignIn" component={SignInScreen} />
       )}

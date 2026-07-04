@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeProvider';
@@ -10,6 +11,7 @@ import { useTheme } from '../theme/ThemeProvider';
 const HomeScreen: React.FC = () => {
   const { session, signOut } = useAuth();
   const theme = useTheme();
+  const navigation = useNavigation<any>();
 
   return (
     <View style={styles.container}>
@@ -19,9 +21,12 @@ const HomeScreen: React.FC = () => {
       <Text style={styles.label}>Signed in as</Text>
       <Text style={styles.email}>{session?.user.email ?? 'unknown'}</Text>
 
-      <Text style={styles.note}>
-        Rail 3 authenticated shell. Ride surfaces arrive in later tasks.
-      </Text>
+      <TouchableOpacity
+        style={[styles.primaryButton, { backgroundColor: theme.primaryColor }]}
+        onPress={() => navigation.navigate('Roster')}
+      >
+        <Text style={styles.primaryButtonText}>Ride Roster</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.button, { borderColor: theme.primaryColor }]}
@@ -57,12 +62,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   email: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginTop: 8 },
-  note: {
-    color: '#7A7A7A',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 19,
-    marginTop: 24,
+  primaryButton: {
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 44,
+    marginTop: 44,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    fontSize: 14,
   },
   button: {
     borderColor: '#2C2C30',
@@ -70,7 +81,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 32,
-    marginTop: 40,
+    marginTop: 16,
   },
   buttonText: {
     color: '#E11D2A',
