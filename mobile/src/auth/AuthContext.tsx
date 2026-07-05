@@ -89,6 +89,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      // Keep the REALTIME socket's JWT current on every auth event that carries a
+      // session (SIGNED_IN, TOKEN_REFRESHED). Without this the socket keeps whatever
+      // token it held at first channel-subscribe; once it expires (~1h) any websocket
+      // reconnect (screen-lock / dead-zone) re-auths with a STALE token, the Rail 3
+      // tenant RLS (get_my_tenant_id) denies, and the channel dies with a permanent
+      // CHANNEL_ERROR. Field ride 2026-07-05 (108km out-and-back): a rider's channel
+      // died ~20 min in and never recovered — receive-blind the whole ride. Refreshing
+      // the socket auth here is half the fix; useRideChannel now also re-subscribes.
+      if (nextSession?.access_token) {
+        supabase.realtime.setAuth(nextSession.access_token);
+      }
     });
 
     return () => {

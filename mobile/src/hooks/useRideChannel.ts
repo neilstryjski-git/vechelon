@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
@@ -50,45 +51,90 @@ export function useRideChannel(rideId: string | null): {
     }
 
     const topic = rail3RideTopic(rideId);
-    let ch: RealtimeChannel | null = null;
     let cancelled = false;
+    let ch: RealtimeChannel | null = null;
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastStatus: RideChannelStatus = null;
 
     // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which
     // needs the signed-in user's JWT ON THE REALTIME SOCKET so get_my_tenant_id()
-    // resolves. supabase-js auto-syncs that token, but NOT reliably right after a fresh
-    // sign-in (e.g. a 2nd rider who just signed in / auto-joined via W191) — the socket
-    // can still be anon when the channel subscribes, so the tenant send/receive policies
-    // fail: that rider neither broadcasts nor receives, and the Captain never sees them
-    // (cross-device fleet appears broken). Set the auth EXPLICITLY from the current
-    // session before subscribing.
-    void (async () => {
+    // resolves. We set it EXPLICITLY from the CURRENT session before every (re)subscribe
+    // — getSession() returns a live token (refreshing an expired one), which is the
+    // crux of the 2026-07-05 field failure: a ride outlives the 1h token, and a
+    // reconnect that re-auths with a STALE token is denied by the tenant RLS and dies
+    // with CHANNEL_ERROR. AuthContext also pushes refreshed tokens onto the socket.
+    const connect = async () => {
+      if (cancelled) return;
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
       if (data.session?.access_token) {
         supabase.realtime.setAuth(data.session.access_token);
       }
-      ch = supabase.channel(topic, {
+      if (ch) {
+        const stale = ch;
+        ch = null;
+        supabase.removeChannel(stale);
+      }
+      const thisCh = supabase.channel(topic, {
         // private: true → realtime evaluates the realtime.messages RLS (the tenant gate).
         // self: true so the captain also sees their own broadcasts on the map.
-        // ack: true → channel.send() resolves on SERVER acknowledgment instead of
-        // unconditionally 'ok' (realtime-js socket path). Load-bearing for W173:
-        // the Support Beacon's NO SIGNAL detection is only real with server acks.
-        // Position pings share the channel and are void-sent — the per-ping ack
-        // costs nothing client-side.
+        // ack: true → channel.send() resolves on SERVER acknowledgment (load-bearing
+        // for W173's Support Beacon NO SIGNAL detection). Position pings are void-sent.
         config: { private: true, broadcast: { self: true, ack: true } },
       });
-      ch.subscribe((s, err) => {
-        setStatus(s as RideChannelStatus);
-        if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
-          // A cross-tenant / no-membership rider is denied here (server-side gate).
-          console.warn(`[Rail3] ride channel "${topic}" subscription ${s}`, err);
+      ch = thisCh;
+      setChannel(thisCh);
+      thisCh.subscribe((s, err) => {
+        if (cancelled || ch !== thisCh) return; // drop callbacks from a superseded channel
+        lastStatus = s as RideChannelStatus;
+        setStatus(lastStatus);
+        if (s === 'SUBSCRIBED') {
+          attempt = 0; // recovered — reset backoff
+        } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') {
+          // A drop is now RECOVERABLE, not terminal. Previously this was a bare
+          // console.warn with no retry — so a screen-lock/dead-zone drop (esp. after
+          // token expiry) left the channel dead for the rest of the ride. Reconnect.
+          console.warn(`[Rail3] ride channel "${topic}" ${s} — reconnecting`, err);
+          scheduleReconnect();
         }
       });
-      setChannel(ch);
-    })();
+    };
+
+    // Capped exponential backoff (2s→4s→8s→15s) with JITTER. Jitter is load-bearing at
+    // fleet scale: a whole peloton exits the same dead-zone together, so without it
+    // every device reconnects in lockstep and thundering-herds the realtime server.
+    const scheduleReconnect = () => {
+      if (cancelled || retryTimer) return;
+      attempt += 1;
+      const base = Math.min(15000, 1000 * 2 ** Math.min(attempt, 4));
+      const delay = base / 2 + Math.random() * (base / 2);
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void connect();
+      }, delay);
+    };
+
+    // Pull the channel back the instant the app returns to foreground, so a captain
+    // GLANCING at the phone sees live positions within ~1s rather than waiting on the
+    // next backoff tick. Gated on lastStatus so a HEALTHY channel is never torn down
+    // (which would needlessly blink the fleet).
+    const appSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && !cancelled && lastStatus !== 'SUBSCRIBED') {
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+          retryTimer = null;
+        }
+        void connect();
+      }
+    });
+
+    void connect();
 
     return () => {
       cancelled = true;
+      appSub.remove();
+      if (retryTimer) clearTimeout(retryTimer);
       if (ch) supabase.removeChannel(ch);
       setChannel(null);
       setStatus(null);
