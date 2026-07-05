@@ -28,6 +28,10 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/ed4b587b-124e-439f-9b2a-4fb683cf9def"
+    },
+    "runtimeVersion": "0.1.0",
     "extra": {
       "eas": {
         "projectId": "ed4b587b-124e-439f-9b2a-4fb683cf9def"
