@@ -428,3 +428,6 @@ verify_jwt = false
 
 [functions.mint-completion-link]
 verify_jwt = false
+
+[functions.complete-profile-submit]
+verify_jwt = false
