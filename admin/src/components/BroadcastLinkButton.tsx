@@ -2,14 +2,23 @@ import React, { useState } from 'react';
 import { useToast } from '../store/useToast';
 
 interface BroadcastLinkButtonProps {
-  /** The link to copy. Required — an empty url disables the button. */
-  url: string;
+  /**
+   * The link to copy (static case). Optional when `resolveText` is provided —
+   * an empty url with no resolver disables the button.
+   */
+  url?: string;
   /**
    * Full text to place on the clipboard. Defaults to the url alone. Pass a
    * ready-to-send SMS/WhatsApp message (with the link embedded) so an admin can
    * paste straight into a conversation.
    */
   message?: string;
+  /**
+   * Async source of the text to copy, resolved on click (e.g. re-mint a fresh
+   * link). Takes precedence over url/message. Return null to abort the copy
+   * (the resolver is expected to have surfaced its own error).
+   */
+  resolveText?: () => Promise<string | null>;
   /** Button label. Defaults to "Copy link". */
   label?: string;
   /** Toast shown on success. Defaults to "Link copied — paste into SMS or WhatsApp." */
@@ -30,16 +39,33 @@ interface BroadcastLinkButtonProps {
 const BroadcastLinkButton: React.FC<BroadcastLinkButtonProps> = ({
   url,
   message,
+  resolveText,
   label = 'Copy link',
   successToast = 'Link copied — paste into SMS or WhatsApp.',
   className = '',
 }) => {
   const { addToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const handleCopy = async () => {
-    if (!url) return;
-    const text = message ?? url;
+    if (busy) return;
+    let text: string | null;
+    if (resolveText) {
+      setBusy(true);
+      try {
+        text = await resolveText();
+      } catch {
+        // A resolver that throws (rather than returning null) is treated as an
+        // abort — it is expected to have surfaced its own error.
+        text = null;
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      text = message ?? url ?? null;
+    }
+    if (!text) return; // resolver aborted (and surfaced its own error) or nothing to copy
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
@@ -66,13 +92,13 @@ const BroadcastLinkButton: React.FC<BroadcastLinkButtonProps> = ({
     <button
       type="button"
       onClick={handleCopy}
-      disabled={!url}
+      disabled={busy || (!url && !resolveText)}
       className={`inline-flex items-center gap-2 px-4 py-2 rounded font-label text-[10px] tracking-widest uppercase transition-all bg-brand-primary text-on-primary hover:bg-brand-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
     >
-      <span className="material-symbols-outlined text-sm">
-        {copied ? 'check' : 'content_copy'}
+      <span className={`material-symbols-outlined text-sm ${busy ? 'animate-spin' : ''}`}>
+        {busy ? 'sync' : copied ? 'check' : 'content_copy'}
       </span>
-      {copied ? 'Copied' : label}
+      {busy ? 'Preparing…' : copied ? 'Copied' : label}
     </button>
   );
 };
