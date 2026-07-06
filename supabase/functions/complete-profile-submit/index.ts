@@ -47,13 +47,13 @@ serve(async (req) => {
     const token = norm(body.token)
     if (!token) throw new Error('This link is invalid.')
 
+    // Peek mode: the public page validates the token on load and prefills the
+    // admin-seeded details WITHOUT provisioning. Read-only, email not required.
+    const isPeek = body.peek === true
+
     const normalizedEmail = typeof body.email === 'string'
       ? body.email.trim().toLowerCase()
       : ''
-    if (!normalizedEmail) {
-      // Email is the auth identity — without it the rider could never sign in.
-      throw new Error('An email is required to finish setting up your account.')
-    }
 
     const v_name = norm(body.name)
     const v_phone = norm(body.phone)
@@ -74,7 +74,7 @@ serve(async (req) => {
 
     const { data: shell, error: shellError } = await adminClient
       .from('pending_members')
-      .select('id, tenant_id, phone, status, expires_at')
+      .select('id, tenant_id, phone, name, emergency_contact_name, emergency_contact_phone, status, expires_at')
       .eq('token_hash', token_hash)
       .maybeSingle()
     if (shellError) throw shellError
@@ -92,6 +92,27 @@ serve(async (req) => {
         .eq('id', shell.id)
         .eq('status', 'pending')
       throw new Error('This link has expired. Please ask your club to send you a new one.')
+    }
+
+    // Peek: token is valid → return the admin-seeded details for the form to
+    // prefill. No writes, no email requirement.
+    if (isPeek) {
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          name: shell.name ?? null,
+          phone: shell.phone ?? null,
+          emergency_contact_name: shell.emergency_contact_name ?? null,
+          emergency_contact_phone: shell.emergency_contact_phone ?? null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
+    }
+
+    // Submit path requires the email — it becomes the auth identity, so without
+    // it the rider could never sign in.
+    if (!normalizedEmail) {
+      throw new Error('An email is required to finish setting up your account.')
     }
 
     const tenantId = shell.tenant_id
