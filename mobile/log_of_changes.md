@@ -39,6 +39,36 @@
   self-scoped participant write (no captain-clobber), D69 lazy-thenable avoided (awaited IIFE),
   one-per-stop privacy posture, valid 'stopped' payload, and once-bound motion-handler cleanup.
 
+## 2026-07-06 — W262 fetch-on-focus render of stopped riders + live-supersedes (G32)
+
+- CONSUMER of W261: a rider who STOPS goes quiet under the un-force (no more live pings), and
+  on a focus-reconnect the receiver's `pings` map is cleared — so a stopped rider would simply
+  DROP off the map. W262 renders them at their persisted last-known position instead.
+- useFleetPositions.ts: new `lastKnown` state (Record<account_id,{lat,lng,ts}>) fetched from
+  ride_participants(last_lat/last_long/last_ping) on OPEN and on every AppState→active. §4.1
+  gated SERVER-SIDE by participant_tactical_select (the same policy the roster read uses — RLS
+  returns only visible rows; same RP-16 affiliated-tenant breadth caveat noted on the roster).
+  Fetch is at a meaningful event, never per-ping (Pillar II §2).
+- FLEET MERGE rewritten from "iterate pings" to "iterate pings ∪ lastKnown, joined to roster."
+  PRECEDENCE (the documented bug-that-bites): per rider, render the MORE RECENT of live-ping vs
+  last-known — both are the SAME sender's clock (p.ts / last_ping both stamped Date.now() on
+  that device), so directly comparable. `live && (!lk || live.ts >= lk.ts)` → live wins the
+  instant it's fresher (no freeze at a rest stop after a rider rolls again); else last-known
+  renders as 'stopped', greying to Dark on staleness. Moving riders render EXACTLY as before
+  (fresh pings, no/older last-known) — existing behavior preserved. onUnknownRider fires ONLY
+  for a live ping from an unrostered rider (mid-ride joiner), not for an RLS-hidden last-known.
+- Keys align across all three sources (pings, roster, lastKnown ALL keyed by account_id;
+  confirmed roster/useFleetPositions), so precedence matching is exact — the W261 write keyed
+  by account_id was deliberately consistent with this.
+- SCOPE NOTE: precedence merge kept INLINE (not extracted to a unit-tested pure fn) — the fleet
+  loop was never unit-tested (hooks need RN test infra this repo lacks; tests are pure-logic
+  node --test), and breaking the type import-cycle to extract it is disproportionate for a
+  bike-validated PoC surface. Verified by review + on-device instead.
+- VERIFIED: tsc clean on useFleetPositions (only pre-existing deepLinkAuth ×2); riderState 8/8 +
+  mapLogic 11/11. Ships via OTA with the G32 chain (JS only, no migration). Validate on the same
+  bike ride as W261/D73: stop a rider, background+refocus the SAG phone, confirm the stopped
+  rider renders at their last spot and SNAPS to live the moment they roll again.
+
 ## 2026-06-27 — W234 breadcrumb → 4h-purged anchor-route TABLE (replaces the W233 window)
 
 - DECISION (Sr PM): the table is the cleaner DESTINATION, not a fallback — complete route on

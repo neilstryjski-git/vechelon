@@ -103,6 +103,9 @@ export function useRideRoster(rideId: string | null): {
 }
 
 const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
+// W262: coalesce focus-triggered last-known fetches so a rapid active-state flap costs one
+// read. Short (a real re-focus after minutes of background still refetches); only kills flaps.
+const LAST_KNOWN_REFETCH_DEBOUNCE_MS = 3000;
 // Dark needs no inbound data to happen — re-derive every 15s (cheap: a state
 // bump re-runs the in-memory join; no DB, no network).
 const STATE_TICK_MS = 15000;
@@ -191,6 +194,48 @@ export function useFleetPositions(
     const t = setInterval(() => setStateTick((n) => n + 1), STATE_TICK_MS);
     return () => clearInterval(t);
   }, []);
+
+  // W262: persisted last-known positions (the W261 write), keyed by account_id like pings
+  // and the roster. A rider who STOPS goes quiet (un-forced SDK → no more live pings), so on
+  // FOCUS the fleet loop below renders them at this last-known spot instead of dropping them.
+  // §4.1-gated SERVER-SIDE by participant_tactical_select (same policy as the roster read) —
+  // RLS returns only rows this viewer may see; same RP-16 affiliated-tenant breadth caveat as
+  // useRideRoster applies. Fetched on open and on every return-to-foreground: a MEANINGFUL
+  // event, never per-ping (Pillar II §2).
+  const [lastKnown, setLastKnown] = useState<Record<string, { lat: number; lng: number; ts: number }>>({});
+  useEffect(() => {
+    if (!rideId) return;
+    let cancelled = false;
+    // Debounce the focus fetch: an Android/iOS active-state flap (or a quick app switch)
+    // must not storm the DB. Mirrors ROSTER_REFETCH_DEBOUNCE_MS / the background-only gate on
+    // the dormant handler. Per-effect-run state (resets on rideId change → a new ride fetches
+    // fresh); the first call always runs since lastFetchMs starts at 0.
+    let lastFetchMs = 0;
+    const fetchLastKnown = async () => {
+      const now = Date.now();
+      if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
+      lastFetchMs = now;
+      const { data, error } = await supabase
+        .from('ride_participants')
+        .select('account_id, last_lat, last_long, last_ping')
+        .eq('ride_id', rideId);
+      if (cancelled || error || !data) return;
+      const next: Record<string, { lat: number; lng: number; ts: number }> = {};
+      for (const row of data) {
+        if (row.account_id == null || row.last_lat == null || row.last_long == null || !row.last_ping) continue;
+        next[row.account_id] = { lat: row.last_lat, lng: row.last_long, ts: Date.parse(row.last_ping) };
+      }
+      setLastKnown(next);
+    };
+    void fetchLastKnown();
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') void fetchLastKnown();
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [rideId]);
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {
@@ -388,31 +433,59 @@ export function useFleetPositions(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pingKeys, rosterKeys, rideId]);
 
-  // Join pings to the server-gated roster. Unknown riderIds are dropped — for
-  // a Rider, "unknown" is exactly the set RLS hid (other riders), so the §4.1
-  // visibility boundary holds even before the client-side role filter runs.
+  // Join LIVE pings + persisted last-known (W262) to the server-gated roster. Unknown
+  // riderIds are dropped — for a Rider, "unknown" is exactly the set RLS hid (other riders),
+  // so the §4.1 visibility boundary holds even before the client-side role filter runs.
+  //
+  // PRECEDENCE (the bug that bites if missed): a rider's stored last-known is a FALLBACK; the
+  // instant they broadcast a FRESHER live ping it must win, so nobody renders frozen at a rest
+  // stop after they roll again. We pick the more RECENT of the two per rider — both timestamps
+  // are the SAME sender's own clock (p.ts and last_ping were both stamped Date.now() on that
+  // device), so they're directly comparable. A moving rider (fresh pings, no/older last-known)
+  // renders from live exactly as before; a stopped rider (gone quiet) renders from last-known.
+  const nowMs = Date.now();
   const fleet: FleetParticipant[] = [];
-  for (const [riderId, p] of Object.entries(pings)) {
+  const riderIds = new Set([...Object.keys(pings), ...Object.keys(lastKnown)]);
+  for (const riderId of riderIds) {
     const entry = roster[riderId];
     if (!entry) {
-      // Likely a mid-ride joiner — ask for a (debounced) roster refresh; the
-      // ping stays hidden until the server-gated roster can identify them.
-      onUnknownRider?.();
+      // Only a LIVE ping from an unidentified rider signals a mid-ride joiner (refetch the
+      // roster, debounced). A stored last-known with no roster row is just a rider RLS hid
+      // from us — stay quiet; the §4.1 boundary holds.
+      if (pings[riderId]) onUnknownRider?.();
       continue;
     }
-    fleet.push({
-      riderId,
-      displayName: entry.displayName,
-      role: entry.role,
-      phone: entry.phone,
-      accountStatus: entry.participantStatus,
-      // W174 receiver half: staleness past the dark threshold overrides the
-      // last self-reported state; the marker stays greyed AT the last known
-      // position (p.lat/lng below) — exactly the committed Dark rendering.
-      state: deriveRenderState(p.state ?? 'active', p.receivedAtMs, Date.now(), thresholds),
-      position: { lat: p.lat, lng: p.lng },
-      lastPingAt: p.ts,
-    });
+    const live = pings[riderId];
+    const lk = lastKnown[riderId];
+    if (live && (!lk || live.ts >= lk.ts)) {
+      fleet.push({
+        riderId,
+        displayName: entry.displayName,
+        role: entry.role,
+        phone: entry.phone,
+        accountStatus: entry.participantStatus,
+        // W174 receiver half: staleness past the dark threshold overrides the last
+        // self-reported state; the marker stays greyed AT the last known position.
+        state: deriveRenderState(live.state ?? 'active', live.receivedAtMs, nowMs, thresholds),
+        position: { lat: live.lat, lng: live.lng },
+        lastPingAt: live.ts,
+      });
+    } else if (lk) {
+      fleet.push({
+        riderId,
+        displayName: entry.displayName,
+        role: entry.role,
+        phone: entry.phone,
+        accountStatus: entry.participantStatus,
+        // Last-known is written on the STOP transition (W261), carrying no self-reported
+        // state, so render it as 'stopped' and let receiver staleness derive Dark as it ages.
+        // ts is the sender's clock; nowMs is ours — the skew is negligible at the 2/5/15-min
+        // thresholds this feeds.
+        state: deriveRenderState('stopped', lk.ts, nowMs, thresholds),
+        position: { lat: lk.lat, lng: lk.lng },
+        lastPingAt: lk.ts,
+      });
+    }
   }
 
   return { fleet, myCoords, channelStatus: status };
