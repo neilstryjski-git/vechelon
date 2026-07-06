@@ -580,7 +580,7 @@ const TABS: { key: ActiveTab; label: string }[] = [
 
 /** Ready-to-send SMS/WhatsApp copy wrapping a completion link. */
 const inviteMessage = (url: string) =>
-  `You're invited to join the club on Vechelon. Complete your profile here: ${url}`;
+  `Complete your Vechelon profile here: ${url}`;
 
 /** Pull the human-readable reason out of a supabase-js functions.invoke error. */
 async function invokeErrorMessage(error: unknown): Promise<string> {
