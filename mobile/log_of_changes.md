@@ -1,5 +1,44 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-07-06 — W261 un-force tracking + last-position-on-stop (G32)
+
+- CONTEXT: under the "for the trial" forced-streaming scaffold (`disableStopDetection:true` +
+  `changePace(true)` + `distanceFilter:0` @ 5s), W261 was INERT — a rider never went stationary,
+  so there was no stop transition to persist and no quieting. This un-forces, which is the
+  prerequisite that makes W261 meaningful. Ships via OTA (JS/config only, no native, no migration).
+- bgGeo.ts (un-force): removed `disableStopDetection:true` and `changePace(true)`; `distanceFilter
+  0→40` (DISTANCE-based cadence, speed-adaptive; ~40m is a STARTING point to tune on a real ride via
+  OTA — NOT the SDK default 10m ≈ 1s at bike speed). Kept `disableElasticity:true` so 40m is a
+  literal, predictable filter (elasticity would COARSEN at speed — the opposite of intent). Added
+  `onMotionChange` plumbing (swappable `currentMotionHandler`, bound once alongside onLocation;
+  cleared in stopBgGeo) exposing the moving↔stationary transition + the stop `location`.
+- useFleetPositions.ts (W261 write): on `onMotionChange(isMoving:false)` send ONE 'stopped' broadcast
+  at the stop position (fleet sees the stop immediately, not via Dark-staleness) AND persist
+  last_lat/last_long/last_ping to the rider's OWN ride_participants row. Pillar II §2 — last-known at
+  a MEANINGFUL EVENT, not a per-ping trail. RLS: `participant_update_policy` already allows
+  `account_id = auth.uid()` → PURE CLIENT WRITE, no migration (ticket text overstated a new policy).
+  SCOPED to `account_id = my uid` EXPLICITLY — the policy also lets a captain update anyone, so an
+  unscoped update from a captain would clobber the whole fleet's last position. Both events land in
+  the sink (`motion_change`, `last_position_write`) so a silent failure surfaces as data.
+- measure.ts: added `motion_change` + `last_position_write` to MeasureKind.
+- DEFERRED (noted, not built): keying SenderStateTracker off isMoving + deleting the MOVE_EPSILON_M
+  distance heuristic. Under un-force the tracker's distance path is INERT (a stopped rider stops
+  feeding it samples), so removing it now would churn tested code (riderState.test.mjs 8/8) for zero
+  functional gain — cleaner as a fast-follow. Consequence for now: a stopped rider shows 'stopped'
+  then decays to Dark on staleness, skipping the sender-side 'inactive' middle state (acceptable;
+  receiver-side 'inactive' derivation is the deferred refinement).
+- VALIDATION: MUST be on a BIKE incl. a slow seated climb (a walk is a bad proxy). THE risk to watch:
+  the SDK false-judging a slow climber as stationary → a spurious 'stopped' + drop from the live
+  fleet — exactly what the forced scaffold used to mask. stopTimeout (~5min default) governs
+  stopped-latency and is the first knob to tune. Pairs with W262 (fetch-on-focus render) as the
+  consumer of the persisted last-known.
+- VERIFIED: tsc clean on all touched files (only the pre-existing deepLinkAuth ×2 remain);
+  riderState.test.mjs 8/8. Pre-existing test failures unrelated (rlsIsolation needs creds;
+  rideControlsLogic date-locale) — confirmed identical on the branch point.
+- Reviewer (stride:task-reviewer): APPROVED, 0 issues (critical/important/minor). Verified the
+  self-scoped participant write (no captain-clobber), D69 lazy-thenable avoided (awaited IIFE),
+  one-per-stop privacy posture, valid 'stopped' payload, and once-bound motion-handler cleanup.
+
 ## 2026-06-27 — W234 breadcrumb → 4h-purged anchor-route TABLE (replaces the W233 window)
 
 - DECISION (Sr PM): the table is the cleaner DESTINATION, not a fallback — complete route on

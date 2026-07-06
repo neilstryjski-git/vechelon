@@ -301,6 +301,36 @@ export function useFleetPositions(
             });
         }
       }
+    }, (isMoving, motionFix) => {
+      // W261: the SDK's moving↔stationary transition (un-forced in bgGeo.ts). On STOP,
+      // persist last-known position (Pillar II §2 — last-known at a MEANINGFUL EVENT, not a
+      // per-ping trail) and send ONE 'stopped' ping so the fleet sees the stop immediately
+      // instead of waiting to decay into Dark on staleness. On resume, onLocation takes over.
+      void logMeasurement({ rideId, kind: 'motion_change', payload: { isMoving } });
+      if (isMoving) return;
+      const coords = motionFix ? { lat: motionFix.lat, lng: motionFix.lng } : myCoordsRef.current;
+      if (!coords) return;
+      const ts = motionFix?.ts ?? Date.now();
+      void restBroadcast(rideId, { riderId: myRiderId, state: 'stopped', lat: coords.lat, lng: coords.lng, ts });
+      // Persist to MY participant row. SCOPE TO MY ROW EXPLICITLY: participant_update_policy
+      // also lets a captain update anyone, so an unscoped update from a captain would clobber
+      // the whole fleet's last position. RLS already permits account_id = auth.uid() — pure
+      // client write, no migration (W261).
+      void (async () => {
+        const { data } = await supabase.auth.getSession();
+        const uid = data.session?.user?.id;
+        if (!uid) return;
+        const { error } = await supabase
+          .from('ride_participants')
+          .update({ last_lat: coords.lat, last_long: coords.lng, last_ping: new Date(ts).toISOString() })
+          .eq('ride_id', rideId)
+          .eq('account_id', uid);
+        void logMeasurement({
+          rideId,
+          kind: 'last_position_write',
+          payload: { ok: !error, ...(error ? { err: error.message } : {}) },
+        });
+      })();
     });
     return () => {
       void stopBgGeo();

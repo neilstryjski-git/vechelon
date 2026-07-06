@@ -38,18 +38,34 @@ export interface BgFix {
   ts: number; // device clock at receipt (we time on client_ts, never server ingest)
 }
 
-// onLocation is registered ONCE (the first time tracking starts), then persists for the
-// process — so we route it through a swappable ref rather than re-subscribing per ride
-// (re-subscribing would stack listeners: the duplicate-handler bug we saw on the FGS path).
+// onLocation / onMotionChange are registered ONCE (the first time tracking starts), then
+// persist for the process — so we route them through swappable refs rather than
+// re-subscribing per ride (re-subscribing would stack listeners: the duplicate-handler bug
+// we saw on the FGS path).
 let currentHandler: ((fix: BgFix) => void) | null = null;
+let currentMotionHandler: ((isMoving: boolean, fix: BgFix | null) => void) | null = null;
 let configured = false;
 let listenerBound = false;
 
-// Start continuous high-accuracy tracking for a ride. Idempotent: ready() configures once;
-// start()+changePace(true) force the "moving" state so we stream a steady cadence even at a
-// stoplight (otherwise the SDK's stop-detection would pause updates and read as a gap).
-export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
+// Start high-accuracy tracking for a ride. Idempotent: ready() configures once.
+//
+// W261 un-force: the "for the trial" forced-streaming scaffold is GONE. We no longer set
+// disableStopDetection or call changePace(true) — the SDK's native motion-activity
+// detection now governs moving↔stationary, so a stopped phone goes QUIET (no redundant
+// pings, the quota/traffic win) and fires an `onMotionChange(isMoving:false)` we hook to
+// persist last-known position (W261). Cadence is DISTANCE-based (distanceFilter) instead of
+// a forced 5s: speed-adaptive for free (tighter when fast/spread, looser when slow) with no
+// state machine of ours. The optional `onMotionChange` handler is how the caller learns of
+// the stationary transition. TUNING: distanceFilter (below) is a starting point to dial on a
+// real ride via OTA. VALIDATION RISK (must be a BIKE incl. a slow seated climb, not a walk):
+// the SDK false-judging a slow climber as stationary and dropping them from the live fleet —
+// exactly the failure the forced scaffold used to paper over.
+export async function startBgGeo(
+  handler: (fix: BgFix) => void,
+  onMotionChange?: (isMoving: boolean, fix: BgFix | null) => void,
+): Promise<void> {
   currentHandler = handler;
+  currentMotionHandler = onMotionChange ?? null;
   const BG = getBgGeo();
   // W231: hydrate the audible-ping toggle once so the onLocation hot path reads a
   // cached flag (never storage). Off by default; see trackingPing.ts.
@@ -72,6 +88,17 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
         console.warn('[Rail3][bgGeo] location error', error);
       },
     );
+    // W261: the stationary transition. `event.location` is the fix AT the stop, so it's the
+    // position we persist as last-known (falls back to the caller's last coords if absent).
+    BG.onMotionChange((event) => {
+      const loc = event.location;
+      currentMotionHandler?.(
+        event.isMoving,
+        loc
+          ? { lat: loc.coords.latitude, lng: loc.coords.longitude, isMoving: event.isMoving, ts: Date.now() }
+          : null,
+      );
+    });
     listenerBound = true;
   }
   if (!configured) {
@@ -85,11 +112,16 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
     // A full compound-config migration is a deferred cleanup (W208-class).
     const readyConfig = {
       desiredAccuracy: BG.DesiredAccuracy.High, // v5: renamed from BG.DESIRED_ACCURACY_HIGH
-      distanceFilter: 0, // 0 → time-based on Android via the interval below
-      locationUpdateInterval: 5000, // ~match the legacy PING_INTERVAL_MS
+      // W261: DISTANCE-based cadence. ~40m is the STARTING point (tune on a real ride via
+      // OTA). At road speed this sits near the old ~5s feel and tightens as riders speed up;
+      // a stopped rider covers 0m → the SDK quiets and (after stopTimeout) fires the
+      // stationary onMotionChange we persist last-known position from. NOT the SDK default
+      // 10m (≈1s at bike speed, too chatty). locationUpdateInterval is now a provider RATE
+      // CAP (a floor on spacing), not the cadence driver.
+      distanceFilter: 40,
+      locationUpdateInterval: 5000,
       fastestLocationUpdateInterval: 5000,
-      disableElasticity: true, // steady cadence; don't auto-scale with speed
-      disableStopDetection: true, // keep streaming even when judged stationary (no false gaps)
+      disableElasticity: true, // pure fixed-distance filter — predictable to tune; elasticity would COARSEN at speed
       stopOnTerminate: false,
       startOnBoot: false,
       foregroundService: true,
@@ -122,13 +154,13 @@ export async function startBgGeo(handler: (fix: BgFix) => void): Promise<void> {
     configured = true;
   }
   await BG.start();
-  // Force the moving state so we get a continuous stream for the trial (vs. the SDK
-  // pausing when it decides we're stationary).
-  await BG.changePace(true);
+  // W261: no changePace(true) — we let the SDK's motion detection decide moving vs stationary
+  // rather than forcing the moving state. Tracking begins as soon as the rider actually moves.
 }
 
 export async function stopBgGeo(): Promise<void> {
   currentHandler = null;
+  currentMotionHandler = null;
   if (!BackgroundGeolocation) return; // never started (e.g. expo-only build) — nothing to stop
   try {
     await BackgroundGeolocation.stop();

@@ -48,6 +48,10 @@ export type MeasureKind =
   // W234 captain breadcrumb: result of each rail3_breadcrumb upsert (D69 made this
   // fire; the kind was missing from the union, so tsc flagged it — Metro ran fine).
   | 'breadcrumb_upsert'
+  // W261 last-position-on-stop: the SDK moving↔stationary transition, and the result of the
+  // last-known write to ride_participants on stop (so a silent failure surfaces as data).
+  | 'motion_change'
+  | 'last_position_write'
   // UX-event kinds — instrument these so they're DATA, not tester-checklist items:
   | 'ux_explainer_shown'
   | 'ux_battery_prompt_shown'
