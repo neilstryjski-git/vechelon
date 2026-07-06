@@ -51,6 +51,9 @@ const CompleteProfile: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [ecName, setEcName] = useState('');
   const [ecPhone, setEcPhone] = useState('');
+  // The phone the admin seeded is shown locked (this is the number the club has
+  // for you); "Wrong number?" unlocks it for an inline edit.
+  const [phoneLocked, setPhoneLocked] = useState(false);
 
   // ── Validate the token on load and prefill admin-seeded details (peek) ────
   useEffect(() => {
@@ -74,7 +77,7 @@ const CompleteProfile: React.FC = () => {
         return;
       }
       if (data.name) setName(data.name);
-      if (data.phone) setPhone(data.phone);
+      if (data.phone) { setPhone(data.phone); setPhoneLocked(true); }
       if (data.emergency_contact_name) setEcName(data.emergency_contact_name);
       if (data.emergency_contact_phone) setEcPhone(data.emergency_contact_phone);
       setStage('form');
@@ -217,7 +220,35 @@ const CompleteProfile: React.FC = () => {
         <div className="space-y-4">
           {field('Email address', email, setEmail, 'email', 'you@example.com', true)}
           {field('Full name', name, setName, 'text', 'First Last')}
-          {field('Mobile number', phone, setPhone, 'tel', '+1 555 123 4567')}
+          {/* Mobile number — locked to the seeded value with an inline "Wrong number?" edit */}
+          <div>
+            <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2 px-1">
+              Mobile number
+            </label>
+            {phoneLocked ? (
+              <div className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 flex items-center justify-between gap-3 shadow-sm">
+                <span className="font-body text-sm text-on-background truncate">{phone || '—'}</span>
+                <button
+                  type="button"
+                  onClick={() => setPhoneLocked(false)}
+                  disabled={busy}
+                  className="font-label text-[10px] uppercase tracking-widest text-brand-primary hover:opacity-80 transition-opacity shrink-0 disabled:opacity-50"
+                >
+                  Wrong number?
+                </button>
+              </div>
+            ) : (
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 555 123 4567"
+                disabled={busy}
+                autoFocus
+                className="w-full bg-surface-container-low border border-outline-variant/30 rounded-xl px-5 py-4 font-body text-sm text-on-background placeholder:text-on-surface-variant/30 focus:outline-none focus:border-brand-primary transition-all shadow-sm disabled:opacity-50"
+              />
+            )}
+          </div>
           <div className="pt-2">
             <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/60 mb-3 px-1">
               Emergency contact (optional)
