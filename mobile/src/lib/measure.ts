@@ -1,17 +1,22 @@
 import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 
 import { supabase } from './supabase';
+import { VERSION_INFO } from './version';
 
-// Build fingerprint, resolved ONCE per run. extra.* is baked at build time by
-// app.config.ts from EAS env vars; version is the app version string. Lets us
-// determine EXACTLY which build a given device is running, remotely, from the
-// sink — critical for triaging field bugs (e.g. 'is this device on the fix?').
+// Bundle fingerprint, resolved ONCE per run — so we can determine EXACTLY which JS a device
+// is running, remotely, from the sink ('is this device on the fix?'). Sourced from version.ts
+// (same source as the on-screen HomeScreen label). git_commit now comes from
+// EXPO_PUBLIC_GIT_COMMIT (set at `eas update` export), so OTA bundles carry their REAL commit
+// instead of the "{}" the build-only EAS_BUILD_* vars produced. update_id / is_embedded make
+// EVERY event self-label OTA-vs-baked, so no ride or kind-inference is needed to tell them apart.
 const BUILD_INFO = {
-  app_version: Constants.expoConfig?.version ?? null,
-  build_id: (Constants.expoConfig?.extra?.buildId as string | null) ?? null,
-  git_commit: (Constants.expoConfig?.extra?.gitCommit as string | null) ?? null,
-  build_profile: (Constants.expoConfig?.extra?.buildProfile as string | null) ?? null,
+  app_version: VERSION_INFO.appVersion,
+  build_id: VERSION_INFO.buildId,
+  git_commit: VERSION_INFO.gitCommit,
+  build_profile: VERSION_INFO.buildProfile,
+  update_id: VERSION_INFO.updateId,
+  is_embedded: VERSION_INFO.isEmbedded,
+  update_channel: VERSION_INFO.channel,
 } as const;
 
 // Rail 3 PoC measurement sink (W189 / Pillar II §2 Performance NFRs — PoC tooling).
@@ -136,7 +141,7 @@ export async function logMeasurement(args: LogMeasurementArgs): Promise<void> {
         manufacturer: Device.manufacturer ?? null,
         os: Device.osName ?? null,
         os_version: Device.osVersion ?? null,
-        ...BUILD_INFO, // app_version / build_id / git_commit / build_profile
+        ...BUILD_INFO, // app_version / build_id / git_commit / build_profile / update_id / is_embedded / update_channel
         ...(args.payload ? { payload: args.payload } : {}),
       },
     });

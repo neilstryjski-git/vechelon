@@ -32,6 +32,11 @@ const GIT_COMMIT =
 export const VERSION_INFO = {
   appVersion: asStr(Constants.expoConfig?.version),
   gitCommit: GIT_COMMIT,
+  // Native SHELL identity (baked at build time). Over OTA these describe the underlying
+  // build, not the running JS — the running bundle is updateId/isEmbedded. Coerced so an
+  // absent value logs null, never the "{}" that made these useless in the sink.
+  buildId: asStr(Constants.expoConfig?.extra?.buildId),
+  buildProfile: asStr(Constants.expoConfig?.extra?.buildProfile),
   updateId: u.updateId,
   isEmbedded: u.isEmbedded,
   channel: u.channel,
