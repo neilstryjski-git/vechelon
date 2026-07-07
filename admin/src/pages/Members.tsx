@@ -1715,11 +1715,13 @@ const Members: React.FC = () => {
                     Complete Account
                   </button>
                 )}
-                {(m.status === 'affiliated' || m.status === 'initiated') && m.accounts?.email && !m.accounts?.phone && (
+                {(m.status === 'affiliated' || m.status === 'initiated' || m.status === 'rsvpd') && m.accounts?.email && !m.accounts?.phone && (
                   <button
-                    onClick={() => sendLoginLink(m.accounts.email)}
+                    onClick={() => sendLoginLink(m.accounts!.email)}
                     disabled={isSendingLogin}
-                    title="Email a sign-in link so they can add their phone"
+                    title={m.status === 'rsvpd'
+                      ? 'Email a sign-in link — they confirm their email, get affiliated per your club policy, and add their details'
+                      : 'Email a sign-in link so they can add their phone'}
                     className="px-4 py-2 rounded-md border border-outline-variant/40 font-label text-xs font-medium text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all active:scale-95 disabled:opacity-50"
                   >
                     Request phone
