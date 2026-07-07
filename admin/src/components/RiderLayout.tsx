@@ -9,6 +9,7 @@ import MobileMenu from './MobileMenu';
 import ToastContainer from './ToastContainer';
 import RideDetailSideSheet from './RideDetailSideSheet';
 import VocFeedbackModal from './VocFeedbackModal';
+import ProfileCompletionPrompt from './ProfileCompletionPrompt';
 
 function useCurrentAvatar() {
   return useQuery<{ name: string | null; avatar_url: string | null } | null>({
@@ -97,6 +98,9 @@ const RiderLayout: React.FC = () => {
           Membership Pending — Awaiting admin approval
         </div>
       )}
+
+      {/* Profile-completion nudge (W264) — any logged-in rider missing a name */}
+      <ProfileCompletionPrompt />
 
       {/* HUD / Navigation Header */}
       <header className="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-surface-container-low transition-colors duration-500">
