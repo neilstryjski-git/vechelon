@@ -172,7 +172,8 @@ serve(async (req) => {
             let phoneOwner: { email: string; name: string | null } | null = null
             if (normPhone) {
               const { data: owners } = await adminClient
-                .from('accounts').select('email, name').eq('phone', normPhone).neq('email', email).limit(1)
+                .from('accounts').select('email, name, account_tenants!inner(tenant_id)')
+                .eq('phone', normPhone).eq('account_tenants.tenant_id', tenantId).neq('email', email).limit(1)
               if (owners && owners.length > 0) phoneOwner = owners[0] as { email: string; name: string | null }
             }
             if (phoneOwner) {
