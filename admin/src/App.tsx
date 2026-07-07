@@ -10,6 +10,7 @@ import Members from './pages/Members';
 import RouteLibraryPage from './pages/RouteLibrary';
 import RideBuilder from './pages/RideBuilder';
 import AuthPage from './pages/rider/AuthPage';
+import CompleteProfile from './pages/CompleteProfile';
 import RiderHome from './pages/rider/RiderHome';
 import RideLanding from './pages/rider/RideLanding';
 import Profile from './pages/rider/Profile';
@@ -273,7 +274,9 @@ function AppContent() {
     <Router basename={PORTAL_BASE}>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
-        
+        {/* Public phone-shell onboarding (G31) — no session yet, sibling of /auth */}
+        <Route path="/complete-profile" element={<CompleteProfile />} />
+
         {/* ONE UNIFIED ENTRY POINT — AdaptiveLayout renders either admin Layout or RiderLayout */}
         <Route path="/" element={<AdaptiveLayout tenant={tenant} />}>
           {/* Index: SmartHome switches based on role */}

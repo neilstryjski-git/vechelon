@@ -21,6 +21,7 @@ export type ProvisionOutcome =
   | 'updated' // existing this-tenant row re-affirmed (single-invite re-issue)
   | 'skipped_existing' // already a member of this tenant (bulk skips, no email)
   | 'failed_cross_club' // email belongs to another tenant — rejected, club NOT named
+  | 'failed_duplicate_phone' // the phone already belongs to a different account — a phone is unique to a rider
   | 'failed_error' // unexpected error for this member
 
 export interface ProvisionResult {
@@ -118,6 +119,28 @@ export async function provisionMember(
     return { email, outcome: 'skipped_existing', message: 'Already a member of this club.' }
   }
 
+  // ── 1b. Phone dedup — a phone is unique to a rider (hard-prevent) ───────
+  // Block if the (normalized) phone already belongs to a DIFFERENT account.
+  if (input.phone) {
+    const { data: canon } = await adminClient.rpc('normalize_phone', { raw: input.phone })
+    if (canon) {
+      const { data: owners } = await adminClient
+        .from('accounts')
+        .select('email, name')
+        .eq('phone', canon)
+        .neq('email', email)
+        .limit(1)
+      if (owners && owners.length > 0) {
+        const o = owners[0] as { email: string; name: string | null }
+        return {
+          email,
+          outcome: 'failed_duplicate_phone',
+          message: `That number already belongs to ${o.name || o.email}.`,
+        }
+      }
+    }
+  }
+
   // ── 2. Generate invite link (fallback to magic link if user exists) ────
   let inviteLink: string
   let invitedUserId: string
@@ -171,10 +194,22 @@ export async function provisionMember(
   // ── 5. Upsert account_tenants at the requested status ──────────────────
   // Full UNIQUE(account_id, tenant_id) constraint → onConflict is valid
   // (supabase-patterns Pattern 3 — not a partial index).
+  // Never DOWNGRADE an existing admin to member — a re-invite / re-import must
+  // not silently demote an admin. Upgrades (member -> admin) still apply.
+  let effectiveRole = input.role
+  if (alreadyThisTenant) {
+    const { data: existing } = await adminClient
+      .from('account_tenants')
+      .select('role')
+      .eq('account_id', invitedUserId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    if (existing?.role === 'admin') effectiveRole = 'admin'
+  }
   const { error: tenantError } = await adminClient
     .from('account_tenants')
     .upsert(
-      { account_id: invitedUserId, tenant_id: tenantId, role: input.role, status: input.status },
+      { account_id: invitedUserId, tenant_id: tenantId, role: effectiveRole, status: input.status },
       { onConflict: 'account_id,tenant_id' },
     )
   if (tenantError) throw tenantError

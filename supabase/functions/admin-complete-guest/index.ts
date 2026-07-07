@@ -194,7 +194,7 @@ serve(async (req) => {
     // otherwise initiated (pending). Never downgrade an existing affiliation.
     const { data: currentLink, error: currentLinkError } = await adminClient
       .from('account_tenants')
-      .select('status')
+      .select('status, role')
       .eq('account_id', accountId)
       .eq('tenant_id', tenantId)
       .maybeSingle()
@@ -207,11 +207,13 @@ serve(async (req) => {
     } else {
       newStatus = wantAffiliated ? 'affiliated' : 'initiated'
     }
+    // Never downgrade an existing admin to member (the upsert would clobber role).
+    const keepRole = currentLink?.role === 'admin' ? 'admin' : 'member'
 
     const { error: linkUpsertError } = await adminClient
       .from('account_tenants')
       .upsert(
-        { account_id: accountId, tenant_id: tenantId, role: 'member', status: newStatus },
+        { account_id: accountId, tenant_id: tenantId, role: keepRole, status: newStatus },
         { onConflict: 'account_id,tenant_id' }
       )
     if (linkUpsertError) throw linkUpsertError

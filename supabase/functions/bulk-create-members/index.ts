@@ -55,6 +55,20 @@ interface RowReport {
 
 const clean = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
+// Mirror the DB normalize_phone() (E.164, default +1) so in-file dedup compares
+// canonical values without a per-row RPC round-trip.
+const normalizePhone = (raw: string): string | null => {
+  const t = (raw ?? '').trim()
+  if (!t) return null
+  const hadPlus = t.startsWith('+')
+  const digits = t.replace(/[^0-9]/g, '')
+  if (!digits) return null
+  if (hadPlus) return '+' + digits
+  if (digits.length === 11 && digits[0] === '1') return '+' + digits
+  if (digits.length === 10) return '+1' + digits
+  return '+' + digits
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -112,6 +126,7 @@ serve(async (req) => {
     // ── 4. Per-row provisioning (collect, never abort the batch) ────────────
     const reports: RowReport[] = []
     const seen = new Set<string>()
+    const seenPhones = new Set<string>()
 
     for (let i = 0; i < members.length; i++) {
       const raw = members[i]
@@ -130,6 +145,16 @@ serve(async (req) => {
       }
       seen.add(email)
 
+      // In-file phone dedup (normalized) — a phone is unique to a rider.
+      const normPhone = normalizePhone(phone)
+      if (normPhone) {
+        if (seenPhones.has(normPhone)) {
+          reports.push({ row: rowNum, email, result: 'skipped-duplicate', reason: 'Duplicate phone in this file.' })
+          continue
+        }
+        seenPhones.add(normPhone)
+      }
+
       // Status gate: full contact details -> affiliated, else initiated.
       const status: 'affiliated' | 'initiated' = name && phone ? 'affiliated' : 'initiated'
       const role: 'admin' | 'member' = clean(raw.role).toLowerCase() === 'admin' ? 'admin' : 'member'
@@ -143,7 +168,18 @@ serve(async (req) => {
           } else if (alreadyThisTenant) {
             reports.push({ row: rowNum, email, result: 'skipped-already-member', reason: 'Already a member of this club.' })
           } else {
-            reports.push({ row: rowNum, email, result: status === 'affiliated' ? 'created-affiliated' : 'created-initiated' })
+            // Preview a phone that already belongs to a different account.
+            let phoneOwner: { email: string; name: string | null } | null = null
+            if (normPhone) {
+              const { data: owners } = await adminClient
+                .from('accounts').select('email, name').eq('phone', normPhone).neq('email', email).limit(1)
+              if (owners && owners.length > 0) phoneOwner = owners[0] as { email: string; name: string | null }
+            }
+            if (phoneOwner) {
+              reports.push({ row: rowNum, email, result: 'skipped-duplicate', reason: `Number already belongs to ${phoneOwner.name || phoneOwner.email}.` })
+            } else {
+              reports.push({ row: rowNum, email, result: status === 'affiliated' ? 'created-affiliated' : 'created-initiated' })
+            }
           }
         } catch (err) {
           reports.push({ row: rowNum, email, result: 'failed', reason: (err as Error).message })
@@ -169,6 +205,8 @@ serve(async (req) => {
 
         if (r.outcome === 'failed_cross_club') {
           reports.push({ row: rowNum, email, result: 'failed', reason: r.message })
+        } else if (r.outcome === 'failed_duplicate_phone') {
+          reports.push({ row: rowNum, email, result: 'skipped-duplicate', reason: r.message })
         } else if (r.outcome === 'skipped_existing') {
           reports.push({ row: rowNum, email, result: 'skipped-already-member', reason: r.message })
         } else {

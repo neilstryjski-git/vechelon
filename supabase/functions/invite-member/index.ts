@@ -51,9 +51,10 @@ serve(async (req) => {
     const tenantId = adminRow.tenant_id
 
     // ── 3. Parse request body ──────────────────────────────────────────────
-    const { email, role } = await req.json()
+    const { email, role, phone } = await req.json()
     if (!email || typeof email !== 'string') throw new Error('email is required')
     const inviteRole: 'admin' | 'member' = role === 'admin' ? 'admin' : 'member'
+    const v_phone = typeof phone === 'string' ? phone.trim() || null : null
 
     // Service-role client for cross-tenant lookups + account pre-creation.
     const adminClient = createClient(
@@ -74,6 +75,7 @@ serve(async (req) => {
       {
         email,
         role: inviteRole,
+        phone: v_phone,
         status: 'affiliated',
         sendEmail: true,
         skipExisting: false, // single-invite re-issues the link for an existing member
@@ -85,6 +87,20 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 409,
       })
+    }
+    // A phone is unique to a rider — reject a duplicate with the conflicting name.
+    if (result.outcome === 'failed_duplicate_phone') {
+      return new Response(JSON.stringify({ error: result.message }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 409,
+      })
+    }
+    // Already a member of this club — caught (not a silent re-send).
+    if (result.outcome === 'updated') {
+      return new Response(
+        JSON.stringify({ success: true, alreadyMember: true, message: `${email} is already a member — re-sent their sign-in link.` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
     }
 
     return new Response(JSON.stringify({ success: true }), {

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { AUTH_HREF } from '../lib/portalBase';
 import PageHeader from '../components/PageHeader';
 import { useToast } from '../store/useToast';
 import { useAppStore } from '../store/useAppStore';
+import BroadcastLinkButton from '../components/BroadcastLinkButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,9 +13,11 @@ import { useAppStore } from '../store/useAppStore';
 
 type AccountRole   = 'admin' | 'member' | 'guest';
 type AccountStatus = 'initiated' | 'affiliated' | 'suspended' | 'archived' | 'deleted';
-// 'rsvpd' is a synthetic display status for guest RSVPs — not present in account_tenants.
-type DisplayStatus = AccountStatus | 'rsvpd';
-type ActiveTab     = 'all' | 'validated' | 'pending' | 'suspended' | 'archived' | 'rsvpd';
+// Synthetic display statuses — NOT present in account_tenants:
+//   'rsvpd'         — a guest RSVP (ride_participants, no account yet).
+//   'pending_phone' — a phone-only shell awaiting profile completion (pending_members, G31).
+type DisplayStatus = AccountStatus | 'rsvpd' | 'pending_phone';
+type ActiveTab     = 'all' | 'validated' | 'pending' | 'suspended' | 'archived' | 'rsvpd' | 'pending_phone';
 
 type ConfirmActionType = 'suspend' | 'unsuspend' | 'archive' | 'reactivate';
 
@@ -22,6 +26,7 @@ interface MemberRow {
   role:       AccountRole;
   status:     DisplayStatus;
   joined_at:  string;
+  pendingExpiresAt?: string;   // set only for status='pending_phone' rows (pending_members.expires_at)
   accounts: {
     name:       string | null;
     email:      string;
@@ -222,7 +227,19 @@ const statusConfig = (status: DisplayStatus) => {
   if (status === 'suspended')  return { dot: 'bg-amber-500 rounded-full',       label: 'Paused'     };
   if (status === 'archived')   return { dot: 'bg-outline-variant rounded-none', label: 'Archived'   };
   if (status === 'rsvpd')      return { dot: 'bg-primary rounded-full',         label: "RSVP'd"     };
+  if (status === 'pending_phone') return { dot: 'bg-amber-500 rounded-full',    label: 'Lead'       };
   return                              { dot: 'bg-error rounded-none',           label: 'Awaiting'   };
+};
+
+/**
+ * Data-gap flags for a roster row — orthogonal to state (rsvp'd/affiliated).
+ * Email → can log in; phone → reachable by support/captain on a ride.
+ */
+const dataGapFlags = (m: MemberRow): { label: string; cls: string }[] => {
+  const flags: { label: string; cls: string }[] = [];
+  if (!m.accounts?.email) flags.push({ label: 'no email', cls: 'bg-amber-100 text-amber-800' });
+  if (!m.accounts?.phone) flags.push({ label: 'no phone', cls: 'bg-error-container text-on-error-container' });
+  return flags;
 };
 
 // ---------------------------------------------------------------------------
@@ -474,10 +491,9 @@ interface EditContactModalProps {
 }
 
 function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContactModalProps) {
-  const [name, setName]                   = useState(member.accounts?.name ?? '');
-  const [phone, setPhone]                 = useState(member.accounts?.phone ?? '');
-  const [emergencyName, setEmergencyName] = useState(member.accounts?.emergency_contact_name ?? '');
-  const [emergencyPhone, setEmergencyPhone] = useState(member.accounts?.emergency_contact_phone ?? '');
+  const [name, setName]   = useState(member.accounts?.name ?? '');
+  const [phone, setPhone] = useState(member.accounts?.phone ?? '');
+  // Emergency contact is the rider's to add on their completion page — not here.
 
   const heading = member.accounts?.name ?? member.accounts?.email ?? 'this member';
   // A guest RSVP ('rsvpd') has no account yet — saving provisions one and (with
@@ -521,10 +537,9 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
         <div className="space-y-4">
           {field('Full Name', name, setName, 'text', 'Jane Rider', true)}
           {field('Phone', phone, setPhone, 'tel', '+1 555 000 0000')}
-          <div className="pt-2 border-t border-outline-variant/15" />
-          <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/60">Emergency Contact (optional)</p>
-          {field('Emergency Contact Name', emergencyName, setEmergencyName, 'text', 'Contact name')}
-          {field('Emergency Contact Phone', emergencyPhone, setEmergencyPhone, 'tel', '+1 555 000 0000')}
+          <p className="font-label text-[10px] text-on-surface-variant/50 italic pt-1">
+            Emergency contact is added by the rider on their profile.
+          </p>
         </div>
 
         {(member.status === 'initiated' || isGuest) && (
@@ -547,7 +562,7 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
             Cancel
           </button>
           <button
-            onClick={() => onSubmit({ name, phone, emergencyName, emergencyPhone })}
+            onClick={() => onSubmit({ name, phone, emergencyName: '', emergencyPhone: '' })}
             disabled={isPending}
             className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
           >
@@ -564,13 +579,30 @@ function EditContactModal({ member, isPending, onSubmit, onCancel }: EditContact
 // ---------------------------------------------------------------------------
 
 const TABS: { key: ActiveTab; label: string }[] = [
-  { key: 'all',       label: 'All'       },
-  { key: 'validated', label: 'Approved'  },
-  { key: 'pending',   label: 'Awaiting'  },
-  { key: 'rsvpd',     label: "RSVP'd"    },
-  { key: 'suspended', label: 'Paused'    },
-  { key: 'archived',  label: 'Archived'  },
+  { key: 'all',           label: 'All'       },
+  { key: 'validated',     label: 'Approved'  },
+  { key: 'pending',       label: 'Awaiting'  },
+  { key: 'pending_phone', label: 'Phone Invites' },
+  { key: 'rsvpd',         label: "RSVP'd"    },
+  { key: 'suspended',     label: 'Paused'    },
+  { key: 'archived',      label: 'Archived'  },
 ];
+
+/** Ready-to-send SMS/WhatsApp copy wrapping a completion link. */
+const inviteMessage = (url: string) =>
+  `Complete your Vechelon profile here: ${url}`;
+
+/** Pull the human-readable reason out of a supabase-js functions.invoke error. */
+async function invokeErrorMessage(error: unknown): Promise<string> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      const body = await ctx.json();
+      if (body?.error) return String(body.error);
+    } catch { /* fall through */ }
+  }
+  return (error as { message?: string })?.message || 'Something went wrong. Please try again.';
+}
 
 // ---------------------------------------------------------------------------
 // Members page
@@ -580,8 +612,14 @@ const Members: React.FC = () => {
   const [activeTab, setActiveTab]     = useState<ActiveTab>('all');
   const [showInvite, setShowInvite]   = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
   const [inviteRole, setInviteRole]   = useState<'member' | 'admin'>('member');
   const [showImport, setShowImport]   = useState(false);
+  // Phone-invite panel (G31)
+  const [showPhoneInvite, setShowPhoneInvite] = useState(false);
+  const [phoneInvite, setPhoneInvite] = useState({ phone: '', name: '' });
+  const [phoneInviteLink, setPhoneInviteLink] = useState<string | null>(null);
+  const [isMintingInvite, setIsMintingInvite] = useState(false);
   const [importParse, setImportParse] = useState<ParseResult | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importDryRun, setImportDryRun] = useState<ImportReport | null>(null);
@@ -677,6 +715,72 @@ const Members: React.FC = () => {
       return unique;
     },
     enabled: !!currentTenantId,
+  });
+
+  // Phone-only shells awaiting profile completion (G31). RLS on pending_members
+  // scopes this to tenants where the caller is admin; the tenant_id + status
+  // filters narrow it further. No account exists yet — email is blank until the
+  // rider completes the link.
+  const { data: pendingShells = [], isLoading: isLoadingPending } = useQuery<MemberRow[]>({
+    queryKey: ['members', 'pending_phone', currentTenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pending_members')
+        .select('id, name, phone, emergency_contact_name, emergency_contact_phone, expires_at, created_at')
+        .eq('tenant_id', currentTenantId!)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []).map((p: {
+        id: string; name: string | null; phone: string;
+        emergency_contact_name: string | null; emergency_contact_phone: string | null;
+        expires_at: string; created_at: string;
+      }) => ({
+        account_id:       p.id,
+        role:             'guest' as AccountRole,
+        status:           'pending_phone' as DisplayStatus,
+        joined_at:        p.created_at,
+        pendingExpiresAt: p.expires_at,
+        accounts: {
+          name:       p.name,
+          email:      '',            // no auth identity yet
+          phone:      p.phone,
+          avatar_url: null,
+          emergency_contact_name:  p.emergency_contact_name,
+          emergency_contact_phone: p.emergency_contact_phone,
+        },
+      }));
+    },
+    enabled: !!currentTenantId,
+  });
+
+  // Mint (or re-mint) a completion link via the edge function. Returns the URL.
+  const { mutateAsync: mintLink } = useMutation({
+    mutationFn: async (body: {
+      pending_member_id?: string;
+      phone?: string;
+      name?: string;
+      emergency_contact_name?: string;
+      emergency_contact_phone?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('mint-completion-link', { body });
+      if (error) throw new Error(await invokeErrorMessage(error));
+      if (!data?.url) throw new Error('No link was returned.');
+      return data.url as string;
+    },
+  });
+
+  // Email a member a sign-in link so they can complete a missing detail (e.g.
+  // their phone) themselves — reuses send-magic-link (lands on /auth).
+  const { mutate: sendLoginLink, isPending: isSendingLogin } = useMutation({
+    mutationFn: async (email: string) => {
+      const redirectTo = `${window.location.origin}${AUTH_HREF}`;
+      const { error } = await supabase.functions.invoke('send-magic-link', { body: { email, redirectTo } });
+      if (error) throw new Error(await invokeErrorMessage(error));
+    },
+    onSuccess: () => addToast('Sign-in link emailed — they can add their phone once signed in.', 'success'),
+    onError: (e: Error) => addToast(e.message, 'error'),
   });
 
   // -------------------------------------------------------------------------
@@ -821,10 +925,10 @@ const Members: React.FC = () => {
   // -------------------------------------------------------------------------
 
   const { mutate: sendInvite, isPending: isSending } = useMutation({
-    mutationFn: async ({ email, role }: { email: string; role: 'member' | 'admin' }) => {
+    mutationFn: async ({ email, role, phone }: { email: string; role: 'member' | 'admin'; phone?: string }) => {
       const { data: { session } } = await supabase.auth.getSession();
-      const { error } = await supabase.functions.invoke('invite-member', {
-        body: { email, role },
+      const { data, error } = await supabase.functions.invoke('invite-member', {
+        body: { email, role, phone },
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       });
       if (error) {
@@ -837,23 +941,33 @@ const Members: React.FC = () => {
         }
         throw new Error(msg);
       }
+      return data as { alreadyMember?: boolean; message?: string } | null;
     },
-    onSuccess: (_, { email, role }) => {
-      addToast(`Invitation sent to ${email} as ${role}`, 'success');
+    onSuccess: (data, { email, role }) => {
+      if (data?.alreadyMember) {
+        addToast(data.message || `${email} is already a member.`, 'info');
+      } else {
+        addToast(`Invitation sent to ${email} as ${role}`, 'success');
+      }
       setInviteEmail('');
+      setInvitePhone('');
       setInviteRole('member');
       setShowInvite(false);
       queryClient.invalidateQueries({ queryKey: ['members'] });
     },
     onError: (e: any) => {
-      addToast(`Failed to send invite: ${e.message}`, 'error');
+      // e.message carries the edge fn's reason (e.g. "That number already belongs to …").
+      addToast(e.message, 'error');
     },
   });
 
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-    sendInvite({ email: inviteEmail.trim(), role: inviteRole });
+    const email = inviteEmail.trim();
+    // The input's required + type=email + pattern (full domain) enforce a valid
+    // address via native inline validation, so submit only fires when it's valid.
+    if (!email) return;
+    sendInvite({ email, role: inviteRole, phone: invitePhone.trim() || undefined });
   };
 
   // -------------------------------------------------------------------------
@@ -982,20 +1096,48 @@ const Members: React.FC = () => {
   const suspended = rows.filter((r) => r.status === 'suspended');
   const archived  = rows.filter((r) => r.status === 'archived');
 
-  const allRows = [...rows, ...rsvpd].sort((a, b) =>
+  const allRows = [...rows, ...rsvpd, ...pendingShells].sort((a, b) =>
     a.joined_at < b.joined_at ? 1 : a.joined_at > b.joined_at ? -1 : 0
   );
 
   const visibleRows =
-    activeTab === 'validated' ? validated :
-    activeTab === 'pending'   ? pending   :
-    activeTab === 'suspended' ? suspended :
-    activeTab === 'archived'  ? archived  :
-    activeTab === 'rsvpd'     ? rsvpd     :
+    activeTab === 'validated'     ? validated :
+    activeTab === 'pending'       ? pending   :
+    activeTab === 'suspended'     ? suspended :
+    activeTab === 'archived'      ? archived  :
+    activeTab === 'rsvpd'         ? rsvpd     :
+    activeTab === 'pending_phone' ? pendingShells :
     allRows;
 
   const handleTabClick = (key: ActiveTab) =>
     setActiveTab(activeTab === key && key !== 'all' ? 'all' : key);
+
+  // Create a phone-only shell + mint its first completion link.
+  const handlePhoneInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phoneInvite.phone.trim()) return;
+    setIsMintingInvite(true);
+    try {
+      const url = await mintLink({
+        phone: phoneInvite.phone.trim(),
+        name: phoneInvite.name.trim() || undefined,
+        // Emergency contact is the rider's to add on the completion page.
+      });
+      setPhoneInviteLink(url);
+      addToast('Invite link ready — copy it below to send.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['members', 'pending_phone', currentTenantId] });
+    } catch (err) {
+      addToast((err as Error).message, 'error');
+    } finally {
+      setIsMintingInvite(false);
+    }
+  };
+
+  const closePhoneInvite = () => {
+    setShowPhoneInvite(false);
+    setPhoneInvite({ phone: '', name: '' });
+    setPhoneInviteLink(null);
+  };
 
   // -------------------------------------------------------------------------
   // Render
@@ -1096,14 +1238,21 @@ const Members: React.FC = () => {
       >
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setShowImport((v) => !v); setShowInvite(false); }}
+            onClick={() => { setShowImport((v) => !v); setShowInvite(false); setShowPhoneInvite(false); }}
             className="px-5 py-2.5 rounded-xl border border-outline-variant/30 font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2 hover:bg-surface-container-high transition-colors active:scale-[0.98]"
           >
             <span className="material-symbols-outlined text-base">upload_file</span>
             Import CSV
           </button>
           <button
-            onClick={() => { setShowInvite((v) => !v); setShowImport(false); }}
+            onClick={() => { setShowPhoneInvite((v) => !v); setShowInvite(false); setShowImport(false); }}
+            className="px-5 py-2.5 rounded-xl border border-outline-variant/30 font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2 hover:bg-surface-container-high transition-colors active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined text-base">sms</span>
+            Invite by Phone
+          </button>
+          <button
+            onClick={() => { setShowInvite((v) => !v); setShowImport(false); setShowPhoneInvite(false); }}
             className="signature-gradient text-on-primary px-5 py-2.5 rounded-xl font-label text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:opacity-90 transition-all active:scale-[0.98]"
           >
             <span className="material-symbols-outlined text-base">person_add</span>
@@ -1130,8 +1279,25 @@ const Members: React.FC = () => {
                 placeholder="rider@example.com"
                 required
                 autoFocus
+                pattern="[^@\s]+@[^@\s]+\.[^@\s]+"
+                title="Please enter a full email address, including the domain (e.g. rider@example.com)."
                 className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
               />
+            </div>
+            <div>
+              <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+                Mobile number <span className="text-on-surface-variant/40">(optional)</span>
+              </label>
+              <input
+                type="tel"
+                value={invitePhone}
+                onChange={(e) => setInvitePhone(e.target.value)}
+                placeholder="+1 416 555 0100"
+                className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+              />
+              <p className="font-label text-[10px] text-on-surface-variant/50 mt-1.5">
+                They'll confirm this (and add anything missing) when they accept.
+              </p>
             </div>
             <div>
               <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
@@ -1179,6 +1345,101 @@ const Members: React.FC = () => {
         </form>
       )}
 
+      {/* Invite by Phone panel (G31) */}
+      {showPhoneInvite && (
+        <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/20 space-y-4">
+          <div>
+            <p className="font-headline text-sm font-bold text-on-background">Invite a rider by phone</p>
+            <p className="font-label text-[11px] text-on-surface-variant/70 mt-1 leading-relaxed">
+              Only a phone number is required. We'll create a one-time link (valid 7 days) — copy it and send it by
+              SMS or WhatsApp. The rider adds their email and details to finish joining.
+            </p>
+          </div>
+
+          {!phoneInviteLink ? (
+            <form onSubmit={handlePhoneInviteSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+                    Mobile number <span className="text-primary">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={phoneInvite.phone}
+                    onChange={(e) => setPhoneInvite((s) => ({ ...s, phone: e.target.value }))}
+                    placeholder="+1 416 555 0100"
+                    required
+                    autoFocus
+                    className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant block mb-2">
+                    Name (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={phoneInvite.name}
+                    onChange={(e) => setPhoneInvite((s) => ({ ...s, name: e.target.value }))}
+                    placeholder="First Last"
+                    className="w-full bg-surface-container-highest text-on-background font-body text-sm px-4 py-3 rounded-lg border border-outline-variant/30 focus:outline-none focus:border-primary/60 placeholder:text-on-surface-variant/40"
+                  />
+                </div>
+              </div>
+              <p className="font-label text-[10px] text-on-surface-variant/50 italic">
+                Emergency contact is added by the rider when they complete their profile.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePhoneInvite}
+                  className="px-5 py-2.5 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isMintingInvite || !phoneInvite.phone.trim()}
+                  className="signature-gradient text-on-primary px-5 py-2.5 rounded-lg font-label text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  {isMintingInvite ? 'Creating…' : 'Create invite link'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="bg-surface-container-highest rounded-lg p-4 border border-outline-variant/20">
+                <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/60 mb-2">One-time link (expires in 7 days)</p>
+                <p className="font-body text-xs text-on-surface break-all">{phoneInviteLink}</p>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <BroadcastLinkButton
+                  url={phoneInviteLink}
+                  message={inviteMessage(phoneInviteLink)}
+                  label="Copy invite message"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setPhoneInvite({ phone: '', name: '' }); setPhoneInviteLink(null); }}
+                    className="px-4 py-2 rounded-lg border border-outline-variant/30 font-label text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                  >
+                    Invite another
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closePhoneInvite}
+                    className="px-4 py-2 rounded-lg font-label text-xs text-on-surface-variant hover:text-on-background transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Import CSV panel */}
       {showImport && (
         <div className="bg-surface-container-low rounded-xl p-6 border border-outline-variant/20 space-y-4">
@@ -1216,7 +1477,7 @@ const Members: React.FC = () => {
             const validRows = importParse.rows.filter((r) => !r.error);
             const byEmail = new Map(importDryRun?.reports.map((r) => [r.email, r]) ?? []);
 
-            let toValidate = 0, toPending = 0, alreadyMember = 0, crossClub = 0;
+            let toValidate = 0, toPending = 0, alreadyMember = 0, crossClub = 0, duplicates = 0;
             const dbFlagged: { line: number; email: string; reason: string }[] = [];
             for (const r of validRows) {
               const rep = importDryRun ? byEmail.get(r.member.email) : undefined;
@@ -1226,6 +1487,8 @@ const Members: React.FC = () => {
                 case 'created-initiated': toPending++; break;
                 case 'skipped-already-member':
                   alreadyMember++; dbFlagged.push({ line: r.line, email: r.member.email, reason: 'Already a member' }); break;
+                case 'skipped-duplicate':
+                  duplicates++; dbFlagged.push({ line: r.line, email: r.member.email, reason: rep?.reason || 'Duplicate' }); break;
                 case 'failed':
                   crossClub++; dbFlagged.push({ line: r.line, email: r.member.email, reason: rep?.reason || 'Rejected' }); break;
                 default: r.willAffiliate ? toValidate++ : toPending++;
@@ -1241,6 +1504,7 @@ const Members: React.FC = () => {
                   <span><strong className="text-on-background">{toValidate}</strong> → Validated</span>
                   <span><strong className="text-on-background">{toPending}</strong> → Pending (no name/phone)</span>
                   {alreadyMember > 0 && <span><strong className="text-on-background">{alreadyMember}</strong> already members</span>}
+                  {duplicates > 0 && <span className="text-error"><strong>{duplicates}</strong> duplicate phone/email</span>}
                   {crossClub > 0 && <span className="text-error"><strong>{crossClub}</strong> from another club</span>}
                   {clientFlagged.length > 0 && <span className="text-error"><strong>{clientFlagged.length}</strong> invalid</span>}
                 </div>
@@ -1299,7 +1563,7 @@ const Members: React.FC = () => {
             {label}
             {key === 'all' && !isLoading && (
               <span className="ml-2 font-label text-[10px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full">
-                {rows.length + rsvpd.length}
+                {rows.length + rsvpd.length + pendingShells.length}
               </span>
             )}
             {key === 'pending' && pending.length > 0 && (
@@ -1310,6 +1574,11 @@ const Members: React.FC = () => {
             {key === 'rsvpd' && !isLoadingRsvpd && rsvpd.length > 0 && (
               <span className="ml-2 font-label text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                 {rsvpd.length}
+              </span>
+            )}
+            {key === 'pending_phone' && !isLoadingPending && pendingShells.length > 0 && (
+              <span className="ml-2 font-label text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                {pendingShells.length}
               </span>
             )}
             {key === 'suspended' && suspended.length > 0 && (
@@ -1348,7 +1617,9 @@ const Members: React.FC = () => {
               ? '— No pending applications —'
               : activeTab === 'rsvpd'
                 ? '— No guest RSVPs —'
-                : '— No members to display —'}
+                : activeTab === 'pending_phone'
+                  ? '— No phone invites awaiting completion —'
+                  : '— No members to display —'}
           </p>
         )}
 
@@ -1356,32 +1627,39 @@ const Members: React.FC = () => {
         {!isLoading && visibleRows.map((m) => {
           const sc     = statusConfig(m.status);
           const isSelf = m.account_id === currentUserId;
+          const isPendingPhone = m.status === 'pending_phone';
           return (
             <div
               key={m.account_id}
               className="grid grid-cols-12 gap-4 px-8 py-6 items-center hover:bg-surface-container-highest transition-colors"
             >
               <div className="col-span-4 flex items-center gap-4">
-                <Avatar name={m.accounts?.name ?? m.accounts?.email ?? null} avatarUrl={m.accounts?.avatar_url ?? null} />
+                <Avatar name={m.accounts?.name ?? m.accounts?.phone ?? m.accounts?.email ?? null} avatarUrl={m.accounts?.avatar_url ?? null} />
                 <div>
                   <h5 className="font-headline font-bold text-sm text-on-background">
-                    {m.accounts?.name ?? m.accounts?.email ?? '—'}
+                    {m.accounts?.name ?? (isPendingPhone ? m.accounts?.phone : m.accounts?.email) ?? '—'}
                   </h5>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest truncate">
-                      {m.accounts?.email}
+                  {isPendingPhone ? (
+                    <span className="font-label text-[10px] text-on-surface-variant/50 uppercase tracking-widest italic">
+                      No email yet
                     </span>
-                    {m.accounts?.email && (
-                      <button
-                        onClick={() => copyEmail(m.accounts?.email)}
-                        aria-label={`Copy ${m.accounts.email}`}
-                        title="Copy email"
-                        className="p-0.5 rounded text-on-surface-variant/50 hover:text-on-background hover:bg-surface-container-high transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[14px] leading-none">content_copy</span>
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest truncate">
+                        {m.accounts?.email}
+                      </span>
+                      {m.accounts?.email && (
+                        <button
+                          onClick={() => copyEmail(m.accounts?.email)}
+                          aria-label={`Copy ${m.accounts.email}`}
+                          title="Copy email"
+                          className="p-0.5 rounded text-on-surface-variant/50 hover:text-on-background hover:bg-surface-container-high transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[14px] leading-none">content_copy</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="col-span-3">
@@ -1409,6 +1687,15 @@ const Members: React.FC = () => {
                     {sc.label}
                   </span>
                 </div>
+                {dataGapFlags(m).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {dataGapFlags(m).map((f) => (
+                      <span key={f.label} className={`font-label text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full ${f.cls}`}>
+                        {f.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="col-span-1 flex justify-end items-center gap-2">
                 {m.status === 'initiated' && (
@@ -1428,7 +1715,40 @@ const Members: React.FC = () => {
                     Complete Account
                   </button>
                 )}
-                {m.status !== 'rsvpd' && (
+                {(m.status === 'affiliated' || m.status === 'initiated') && m.accounts?.email && !m.accounts?.phone && (
+                  <button
+                    onClick={() => sendLoginLink(m.accounts.email)}
+                    disabled={isSendingLogin}
+                    title="Email a sign-in link so they can add their phone"
+                    className="px-4 py-2 rounded-md border border-outline-variant/40 font-label text-xs font-medium text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    Request phone
+                  </button>
+                )}
+                {isPendingPhone && (
+                  <div className="flex flex-col items-end gap-1">
+                    <BroadcastLinkButton
+                      resolveText={async () => {
+                        try {
+                          const url = await mintLink({ pending_member_id: m.account_id });
+                          // re-mint rotated the token + expiry — refresh the row's expiry display
+                          queryClient.invalidateQueries({ queryKey: ['members', 'pending_phone', currentTenantId] });
+                          return inviteMessage(url);
+                        } catch (err) {
+                          addToast((err as Error).message, 'error');
+                          return null;
+                        }
+                      }}
+                      label="Copy link"
+                    />
+                    {m.pendingExpiresAt && (
+                      <span className="font-label text-[9px] text-on-surface-variant/50 uppercase tracking-wider">
+                        Expires {new Date(m.pendingExpiresAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {m.status !== 'rsvpd' && !isPendingPhone && (
                   <ActionMenu
                     member={m}
                     isSelf={isSelf}
