@@ -119,15 +119,19 @@ export async function provisionMember(
     return { email, outcome: 'skipped_existing', message: 'Already a member of this club.' }
   }
 
-  // ── 1b. Phone dedup — a phone is unique to a rider (hard-prevent) ───────
-  // Block if the (normalized) phone already belongs to a DIFFERENT account.
+  // ── 1b. Phone dedup — one phone per rider WITHIN a club (hard-prevent) ──
+  // Tenant-scoped on purpose: the same phone with a different email across clubs
+  // is legitimate (dedicated-email-per-club, the multi-membership workaround), so
+  // only block when the number already belongs to a member of THIS tenant. This
+  // also means the conflicting name is always same-club — no cross-tenant leak.
   if (input.phone) {
     const { data: canon } = await adminClient.rpc('normalize_phone', { raw: input.phone })
     if (canon) {
       const { data: owners } = await adminClient
         .from('accounts')
-        .select('email, name')
+        .select('email, name, account_tenants!inner(tenant_id)')
         .eq('phone', canon)
+        .eq('account_tenants.tenant_id', tenantId)
         .neq('email', email)
         .limit(1)
       if (owners && owners.length > 0) {

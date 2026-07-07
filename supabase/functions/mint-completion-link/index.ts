@@ -113,12 +113,15 @@ serve(async (req) => {
       const v_phone = norm(phone)
       if (!v_phone) throw new Error('phone is required')
 
-      // Phone dedup — a phone is unique to a rider. Block if the (normalized)
-      // number already belongs to an account or a still-pending shell.
+      // Phone dedup — one phone per rider WITHIN this club. Tenant-scoped: the
+      // same phone under a different email in another club is legitimate (dedicated
+      // email per club), so only block when the number already belongs to a member
+      // of THIS tenant, or to a still-pending shell in this tenant.
       const { data: canon } = await adminClient.rpc('normalize_phone', { raw: v_phone })
       if (canon) {
         const { data: acct } = await adminClient
-          .from('accounts').select('name, email').eq('phone', canon).limit(1)
+          .from('accounts').select('name, email, account_tenants!inner(tenant_id)')
+          .eq('phone', canon).eq('account_tenants.tenant_id', tenantId).limit(1)
         if (acct && acct.length > 0) {
           const o = acct[0] as { name: string | null; email: string }
           throw new Error(`That number already belongs to ${o.name || o.email}.`)
