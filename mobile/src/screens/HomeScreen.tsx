@@ -23,6 +23,7 @@ import {
   setTrackingPingEnabled,
 } from '../lib/trackingPing';
 import { sendDiagnosticLog } from '../lib/diagnostics';
+import { versionLabel } from '../lib/version';
 import AdHocCreator from '../components/AdHocCreator';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
@@ -183,6 +184,12 @@ const HomeScreen: React.FC = () => {
         Privacy Policy
       </Text>
 
+      {/* Which JS bundle is running — OTA vs baked, at a glance (no sink query needed).
+          selectable so the commit can be copied. Closed-test aid; strip for production. */}
+      <Text style={styles.version} selectable accessibilityLabel="App version">
+        {versionLabel()}
+      </Text>
+
       <Text style={styles.sectionTitle}>Live rides</Text>
       <FlatList
         data={rides}
@@ -246,6 +253,13 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     alignSelf: 'flex-start',
     marginTop: 4,
+    marginBottom: 8,
+  },
+  version: {
+    color: '#5A5A5E',
+    fontSize: 10,
+    letterSpacing: 0.4,
+    fontVariant: ['tabular-nums'],
     marginBottom: 20,
   },
   signOut: {
