@@ -339,8 +339,12 @@ function ActionMenu({ member, isSelf, onSuspend, onUnsuspend, onArchive, onReact
   if (member.status === 'initiated' && !isSelf) {
     items.push(item('Archive', 'archive', onArchive, true));
   }
-  items.push(item('Edit Details', 'edit', onEditContact));
-  items.push(item('Change Email', 'mail', onChangeEmail));
+  // Always available so an admin can fill in / update any member's contact
+  // details. Reads "Complete account" when something's missing, else "Edit Details".
+  const missingDetails = !member.accounts?.name?.trim() || !member.accounts?.phone?.trim();
+  items.push(item(missingDetails ? 'Complete account' : 'Edit Details', missingDetails ? 'badge' : 'edit', onEditContact));
+  // A guest RSVP has no account yet — email lives on the RSVP, so there's nothing to change here.
+  if (member.status !== 'rsvpd') items.push(item('Change Email', 'mail', onChangeEmail));
 
   return (
     <div ref={ref} className="relative">
@@ -1707,14 +1711,6 @@ const Members: React.FC = () => {
                     Affiliate
                   </button>
                 )}
-                {m.status === 'rsvpd' && (
-                  <button
-                    onClick={() => setEditContactTarget(m)}
-                    className="px-4 py-2 rounded-md border border-outline-variant/40 font-label text-xs font-medium text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all active:scale-95"
-                  >
-                    Complete Account
-                  </button>
-                )}
                 {(m.status === 'affiliated' || m.status === 'initiated' || m.status === 'rsvpd') && m.accounts?.email && !m.accounts?.phone && (
                   <button
                     onClick={() => sendLoginLink(m.accounts!.email)}
@@ -1750,7 +1746,7 @@ const Members: React.FC = () => {
                     )}
                   </div>
                 )}
-                {m.status !== 'rsvpd' && !isPendingPhone && (
+                {!isPendingPhone && (
                   <ActionMenu
                     member={m}
                     isSelf={isSelf}
