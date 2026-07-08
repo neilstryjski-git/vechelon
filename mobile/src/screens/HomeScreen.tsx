@@ -256,8 +256,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   version: {
-    color: '#5A5A5E',
-    fontSize: 10,
+    color: '#9A9A9E',
+    fontSize: 14,
+    fontWeight: '600',
     letterSpacing: 0.4,
     fontVariant: ['tabular-nums'],
     marginBottom: 20,
