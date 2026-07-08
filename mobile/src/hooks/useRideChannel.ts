@@ -23,6 +23,10 @@ export function rail3RideTopic(rideId: string): string {
 // per client; a fresh open also reads ride.status as a fallback).
 export const RIDE_ENDED_EVENT = 'ride_ended';
 
+// D73/W266: debounce foreground channel rebuilds so an iOS active/inactive flap or a rapid
+// lock/unlock coalesces into ONE rebuild instead of thrashing the realtime socket.
+const FOREGROUND_REBUILD_DEBOUNCE_MS = 1200;
+
 // Subscribes to a ride's live Broadcast channel, tenant-authorized at the realtime
 // layer (W170 / Sprint-0 gap G-1). The channel is PRIVATE, so Supabase Realtime checks
 // the realtime.messages RLS policies — which only let a rider whose tenant matches the
@@ -55,6 +59,7 @@ export function useRideChannel(rideId: string | null): {
     let ch: RealtimeChannel | null = null;
     let attempt = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let foregroundTimer: ReturnType<typeof setTimeout> | null = null;
     let lastStatus: RideChannelStatus = null;
 
     // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which
@@ -115,18 +120,28 @@ export function useRideChannel(rideId: string | null): {
       }, delay);
     };
 
-    // Pull the channel back the instant the app returns to foreground, so a captain
-    // GLANCING at the phone sees live positions within ~1s rather than waiting on the
-    // next backoff tick. Gated on lastStatus so a HEALTHY channel is never torn down
-    // (which would needlessly blink the fleet).
+    // Foreground recovery (D73 root cause, field-confirmed 2026-07-08): while backgrounded the
+    // JS thread is SUSPENDED, so the realtime websocket can die SILENTLY — no subscribe()
+    // callback ever fires, so `lastStatus` stays frozen at 'SUBSCRIBED' and any socket-liveness
+    // flag (readyState) may be stale on resume. The old guard trusted `lastStatus !==
+    // 'SUBSCRIBED'` and therefore SKIPPED the reconnect after a real pocket, leaving the channel
+    // DEAD for the rest of the ride: no live markers, no Support Beacon received, even once
+    // foregrounded. So on EVERY return to foreground we UNCONDITIONALLY rebuild — a dead channel
+    // is a safety failure; a ~1s re-subscribe blink is not (and W262's last-known refetch fires
+    // on the SAME 'active' event, so stopped riders repaint immediately and moving riders on
+    // their next ping). Trailing-debounced so a flap/rapid-unlock costs one rebuild, not a thrash.
     const appSub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && !cancelled && lastStatus !== 'SUBSCRIBED') {
+      if (next !== 'active' || cancelled) return;
+      if (foregroundTimer) clearTimeout(foregroundTimer);
+      foregroundTimer = setTimeout(() => {
+        foregroundTimer = null;
+        if (cancelled) return;
         if (retryTimer) {
           clearTimeout(retryTimer);
           retryTimer = null;
         }
         void connect();
-      }
+      }, FOREGROUND_REBUILD_DEBOUNCE_MS);
     });
 
     void connect();
@@ -135,6 +150,7 @@ export function useRideChannel(rideId: string | null): {
       cancelled = true;
       appSub.remove();
       if (retryTimer) clearTimeout(retryTimer);
+      if (foregroundTimer) clearTimeout(foregroundTimer);
       if (ch) supabase.removeChannel(ch);
       setChannel(null);
       setStatus(null);

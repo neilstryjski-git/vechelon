@@ -112,6 +112,40 @@ const STATE_TICK_MS = 15000;
 // W234: how often the captain upserts its route to rail3_breadcrumb (throttled — not per
 // fix, to keep writes cheap; receivers fetch on open/resume and extend live in between).
 const BREADCRUMB_UPSERT_INTERVAL_MS = 60000;
+// W266: how often EVERY device overwrites its last-known position while actively riding. The
+// SDK stop transition also writes it, but on real rides stopTimeout rarely fires, so without
+// this periodic write the fallback is stale at ride-start. One OVERWRITTEN row per rider (the
+// last place we knew you were) — not a coordinate trail, so within the Pillar II §2 last-known
+// exception; live pings still win on receivers, this only matters once transmission stops.
+const LAST_KNOWN_WRITE_INTERVAL_MS = 60000;
+
+// Persist MY last-known position to ride_participants — the fleet's FALLBACK when live pings
+// stop (a rider goes quiet on stop / screen-lock / dead-zone). Shared by the periodic throttle
+// (onLocation) and the SDK stop transition (onMotionChange). SCOPE TO MY ROW EXPLICITLY:
+// participant_update_policy also lets a captain update anyone, so an unscoped update from a
+// captain would clobber the whole fleet's last position. RLS already permits
+// account_id = auth.uid() — pure client write, no migration (W261/W266).
+async function persistLastKnown(
+  rideId: string,
+  lat: number,
+  lng: number,
+  ts: number,
+  trigger: 'stop' | 'throttle',
+): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const uid = data.session?.user?.id;
+  if (!uid) return;
+  const { error } = await supabase
+    .from('ride_participants')
+    .update({ last_lat: lat, last_long: lng, last_ping: new Date(ts).toISOString() })
+    .eq('ride_id', rideId)
+    .eq('account_id', uid);
+  void logMeasurement({
+    rideId,
+    kind: 'last_position_write',
+    payload: { ok: !error, trigger, ...(error ? { err: error.message } : {}) },
+  });
+}
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
@@ -301,6 +335,9 @@ export function useFleetPositions(
     // broadcast is back to a single point; the table carries history, not the broadcast.
     let myPath: LatLng[] = [];
     let lastUpsertMs = 0;
+    // W266: separate throttle for the every-device last-known write (distinct from the
+    // captain-only breadcrumb upsert above).
+    let lastLastKnownMs = 0;
     void startBgGeo((fix) => {
       const coords = { lat: fix.lat, lng: fix.lng };
       setMyCoords(coords);
@@ -312,6 +349,15 @@ export function useFleetPositions(
       // tip. No trail in the payload; the route lives in the table.
       void restBroadcast(rideId, { riderId: myRiderId, state, lat: coords.lat, lng: coords.lng, ts: fix.ts });
       void logMeasurement({ rideId, kind: 'gps_ping', payload: { src: 'tsbg', state } });
+
+      // W266: refresh MY last-known on a throttle so the fleet has a FRESH fallback the instant
+      // I stop transmitting — every device, independent of the SDK's rarely-firing stopTimeout.
+      // Overwrites one row; live pings still win on receivers while I'm broadcasting.
+      const lknNow = Date.now();
+      if (lknNow - lastLastKnownMs >= LAST_KNOWN_WRITE_INTERVAL_MS) {
+        lastLastKnownMs = lknNow;
+        void persistLastKnown(rideId, coords.lat, coords.lng, fix.ts, 'throttle');
+      }
 
       // Accumulate the decimated route on EVERY device (cheap, bounded) so the captain's
       // route is captured from the very first fix — even before useRideRoster resolves the
@@ -357,25 +403,10 @@ export function useFleetPositions(
       if (!coords) return;
       const ts = motionFix?.ts ?? Date.now();
       void restBroadcast(rideId, { riderId: myRiderId, state: 'stopped', lat: coords.lat, lng: coords.lng, ts });
-      // Persist to MY participant row. SCOPE TO MY ROW EXPLICITLY: participant_update_policy
-      // also lets a captain update anyone, so an unscoped update from a captain would clobber
-      // the whole fleet's last position. RLS already permits account_id = auth.uid() — pure
-      // client write, no migration (W261).
-      void (async () => {
-        const { data } = await supabase.auth.getSession();
-        const uid = data.session?.user?.id;
-        if (!uid) return;
-        const { error } = await supabase
-          .from('ride_participants')
-          .update({ last_lat: coords.lat, last_long: coords.lng, last_ping: new Date(ts).toISOString() })
-          .eq('ride_id', rideId)
-          .eq('account_id', uid);
-        void logMeasurement({
-          rideId,
-          kind: 'last_position_write',
-          payload: { ok: !error, ...(error ? { err: error.message } : {}) },
-        });
-      })();
+      // Persist last-known via the shared helper (scopes to my row; see persistLastKnown). Reset
+      // the throttle so onLocation's periodic write doesn't immediately re-fire after this one.
+      lastLastKnownMs = Date.now();
+      void persistLastKnown(rideId, coords.lat, coords.lng, ts, 'stop');
     });
     return () => {
       void stopBgGeo();
