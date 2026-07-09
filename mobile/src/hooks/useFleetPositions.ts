@@ -13,6 +13,8 @@ import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 import { logResumeSignal } from '../lib/lifecycle';
+import { useResume, noteChannelActivity, notePeerCount } from './useResume';
+import type { ResumeSource } from '../lib/resumeDetector';
 import {
   SenderStateTracker,
   deriveRenderState,
@@ -238,6 +240,8 @@ export function useFleetPositions(
   // useRideRoster applies. Fetched on open and on every return-to-foreground: a MEANINGFUL
   // event, never per-ping (Pillar II §2).
   const [lastKnown, setLastKnown] = useState<Record<string, { lat: number; lng: number; ts: number }>>({});
+  // Bridges the ride-scoped fetch closure to the stable resume subscriber below.
+  const resumeFetchRef = useRef<((source: ResumeSource) => void) | null>(null);
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
@@ -246,14 +250,16 @@ export function useFleetPositions(
     // the dormant handler. Per-effect-run state (resets on rideId change → a new ride fetches
     // fresh); the first call always runs since lastFetchMs starts at 0.
     let lastFetchMs = 0;
-    // `resume` marks the call as a recovery attempt. W268 logs the signal INSIDE the debounce
-    // gate, after it passes: a resume_signal must mean the refetch actually ran, otherwise a
-    // debounced no-op would look identical to a real recovery in the sink.
-    const fetchLastKnown = async (resume = false) => {
+    // `resumeSource` marks the call as a recovery attempt and carries WHICH emitter detected it.
+    // The signal is logged INSIDE the debounce gate, after it passes: a resume_signal must mean the
+    // refetch actually ran, otherwise a debounced no-op looks identical to a real recovery. It must
+    // also carry the true source — a hardcoded 'appstate' here would make a clock-gap rescue look
+    // like AppState fired, which is precisely the question W268/W269 exist to answer.
+    const fetchLastKnown = async (resumeSource?: ResumeSource) => {
       const now = Date.now();
       if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
       lastFetchMs = now;
-      if (resume) logResumeSignal(rideId, 'appstate', 'fleet');
+      if (resumeSource) logResumeSignal(rideId, resumeSource, 'fleet');
       const { data, error } = await supabase
         .from('ride_participants')
         .select('account_id, last_lat, last_long, last_ping')
@@ -267,15 +273,30 @@ export function useFleetPositions(
       setLastKnown(next);
     };
     void fetchLastKnown();
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next !== 'active') return;
-      void fetchLastKnown(true);
-    });
+    resumeFetchRef.current = (source: ResumeSource) => {
+      void fetchLastKnown(source);
+    };
     return () => {
       cancelled = true;
-      sub.remove();
+      resumeFetchRef.current = null;
     };
   }, [rideId]);
+
+  // W269: last-known refetch now rides the shared resume signal (clock-gap + AppState + staleness),
+  // so it can no longer be skipped by an 'active' event that never arrives. The ref keeps the
+  // subscriber stable across ride changes. Logging lives in fetchLastKnown, behind the debounce —
+  // logging here instead would emit a resume_signal for a refetch that never ran.
+  const onResume = useCallback((source: ResumeSource) => {
+    resumeFetchRef.current?.(source);
+  }, []);
+  useResume(rideId, onResume);
+
+  // The staleness sweep only fires when there is someone else to hear from — riding alone, a quiet
+  // channel is correct, and rebuilding it would be pure cost. Excludes self.
+  useEffect(() => {
+    const peers = Object.keys(roster).filter((id) => id !== myRiderId).length;
+    notePeerCount(peers);
+  }, [roster, myRiderId]);
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {
@@ -283,6 +304,9 @@ export function useFleetPositions(
     setPings({});
 
     channel.on('broadcast', { event: POSITION_EVENT }, ({ payload }) => {
+      // W269: liveness evidence for the staleness sweep. Recorded BEFORE validation — a malformed
+      // payload still proves the socket is carrying traffic, which is all the sweep asks.
+      noteChannelActivity();
       const p = payload as PositionPayload;
       if (!p?.riderId || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
       const receivedAtMs = Date.now();

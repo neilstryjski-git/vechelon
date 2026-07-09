@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { POSITION_EVENT, type RideRoster } from './useFleetPositions';
@@ -8,6 +7,8 @@ import { logMeasurement } from '../lib/measure';
 import { LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import { logResumeSignal } from '../lib/lifecycle';
+import { useResume } from './useResume';
+import type { ResumeSource } from '../lib/resumeDetector';
 
 // Ride-leader breadcrumb (W212 → W234). Draws the CAPTAIN's route so members can follow it.
 //
@@ -79,19 +80,22 @@ export function useBreadcrumb(
     }
   }, []);
 
-  // Fetch on mount / ride change, and again whenever the app returns to the foreground
-  // (the lock-independent catch-up: one read restores the whole route after any absence).
+  // Fetch on mount / ride change, and again on every resume (the lock-independent catch-up: one
+  // read restores the whole route after any absence).
   useEffect(() => {
     void fetchRoute();
   }, [rideId, fetchRoute]);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s !== 'active') return;
-      logResumeSignal(rideIdRef.current, 'appstate', 'breadcrumb');
+  // W269: the resume signal — not AppState — drives the catch-up fetch. This is the path that
+  // left rogers with an empty trail all through the 2026-07-09 morning ride: it mounted when the
+  // breadcrumb was seconds old, pocketed, and never refetched because 'active' never arrived.
+  const onResume = useCallback(
+    (source: ResumeSource) => {
+      logResumeSignal(rideIdRef.current, source, 'breadcrumb');
       void fetchRoute();
-    });
-    return () => sub.remove();
-  }, [fetchRoute]);
+    },
+    [fetchRoute],
+  );
+  useResume(rideId, onResume);
 
   // Live forward-extension: append the leader's broadcast single-points so the trail tip
   // tracks the marker in real time between the ~60s table upserts. Bound once per channel;

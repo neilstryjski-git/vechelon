@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
-import { logAppLifecycle, logResumeSignal } from '../lib/lifecycle';
+import { logResumeSignal } from '../lib/lifecycle';
+import { useResume } from './useResume';
+import type { ResumeSource } from '../lib/resumeDetector';
 
 // Supabase realtime subscribe lifecycle states.
 export type RideChannelStatus =
@@ -24,10 +25,6 @@ export function rail3RideTopic(rideId: string): string {
 // per client; a fresh open also reads ride.status as a fallback).
 export const RIDE_ENDED_EVENT = 'ride_ended';
 
-// D73/W266: debounce foreground channel rebuilds so an iOS active/inactive flap or a rapid
-// lock/unlock coalesces into ONE rebuild instead of thrashing the realtime socket.
-const FOREGROUND_REBUILD_DEBOUNCE_MS = 1200;
-
 // Subscribes to a ride's live Broadcast channel, tenant-authorized at the realtime
 // layer (W170 / Sprint-0 gap G-1). The channel is PRIVATE, so Supabase Realtime checks
 // the realtime.messages RLS policies — which only let a rider whose tenant matches the
@@ -47,6 +44,19 @@ export function useRideChannel(rideId: string | null): {
 } {
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [status, setStatus] = useState<RideChannelStatus>(null);
+  // Set by the effect below; the resume subscriber (bound once) calls through it so it never
+  // re-binds on ride change and never captures a stale `connect`.
+  const rebuildRef = useRef<(() => void) | null>(null);
+  const rideIdRef = useRef<string | null>(rideId);
+  rideIdRef.current = rideId;
+
+  // W269: one resume signal, three consumers. Coalescing lives in the driver, so an unlock that
+  // trips BOTH 'appstate' and 'clockgap' still costs exactly one rebuild.
+  const onResume = useCallback((source: ResumeSource) => {
+    logResumeSignal(rideIdRef.current, source, 'channel');
+    rebuildRef.current?.();
+  }, []);
+  useResume(rideId, onResume);
 
   useEffect(() => {
     if (!rideId) {
@@ -60,7 +70,6 @@ export function useRideChannel(rideId: string | null): {
     let ch: RealtimeChannel | null = null;
     let attempt = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let foregroundTimer: ReturnType<typeof setTimeout> | null = null;
     let lastStatus: RideChannelStatus = null;
 
     // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which
@@ -121,7 +130,7 @@ export function useRideChannel(rideId: string | null): {
       }, delay);
     };
 
-    // Foreground recovery (D73 root cause, field-confirmed 2026-07-08): while backgrounded the
+    // Recovery (D73 root cause, field-confirmed 2026-07-08): while backgrounded the
     // JS thread is SUSPENDED, so the realtime websocket can die SILENTLY — no subscribe()
     // callback ever fires, so `lastStatus` stays frozen at 'SUBSCRIBED' and any socket-liveness
     // flag (readyState) may be stale on resume. The old guard trusted `lastStatus !==
@@ -129,33 +138,24 @@ export function useRideChannel(rideId: string | null): {
     // DEAD for the rest of the ride: no live markers, no Support Beacon received, even once
     // foregrounded. So on EVERY return to foreground we UNCONDITIONALLY rebuild — a dead channel
     // is a safety failure; a ~1s re-subscribe blink is not (and W262's last-known refetch fires
-    // on the SAME 'active' event, so stopped riders repaint immediately and moving riders on
-    // their next ping). Trailing-debounced so a flap/rapid-unlock costs one rebuild, not a thrash.
-    const appSub = AppState.addEventListener('change', (next) => {
-      // W268: log EVERY transition, before any guard — the open question is whether 'active'
-      // arrives at all on unlock, and a guarded logger could never answer it.
-      logAppLifecycle(rideId, next);
-      if (next !== 'active' || cancelled) return;
-      if (foregroundTimer) clearTimeout(foregroundTimer);
-      foregroundTimer = setTimeout(() => {
-        foregroundTimer = null;
-        if (cancelled) return;
-        if (retryTimer) {
-          clearTimeout(retryTimer);
-          retryTimer = null;
-        }
-        logResumeSignal(rideId, 'appstate', 'channel');
-        void connect();
-      }, FOREGROUND_REBUILD_DEBOUNCE_MS);
-    });
+    // on the SAME signal, so stopped riders repaint immediately and moving riders on their next
+    // ping). W269: the trigger is no longer AppState — it's the resume signal (clock-gap detector
+    // + AppState + staleness sweep), trailing-coalesced in the driver so a flap costs one rebuild.
+    rebuildRef.current = () => {
+      if (cancelled) return;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      void connect();
+    };
 
     void connect();
 
     return () => {
       cancelled = true;
-      appSub.remove();
+      rebuildRef.current = null;
       if (retryTimer) clearTimeout(retryTimer);
-      if (foregroundTimer) clearTimeout(foregroundTimer);
       if (ch) supabase.removeChannel(ch);
       setChannel(null);
       setStatus(null);

@@ -15,9 +15,12 @@ import { logMeasurement } from './measure';
 // A pocket→unlock with app_lifecycle rows but no 'active' row confirms the hypothesis; an 'active'
 // row with no resume_signal moves the fault into the consumers instead.
 
-// Which recovery emitter fired. 'appstate' is today's only source; W269 adds 'clockgap' (a JS
-// timer that did not run ⇒ the thread was suspended) and 'stale' (channel silent past threshold).
-export type ResumeSource = 'appstate' | 'clockgap' | 'stale';
+// Which recovery emitter fired: 'appstate' (the fast path, when the OS bothers to tell us),
+// 'clockgap' (a JS timer that did not run ⇒ the thread was suspended), or 'stale' (channel silent
+// past threshold while awake). Declared in resumeDetector.ts, which stays free of React Native and
+// supabase imports so `node --test` can load it.
+export type { ResumeSource } from './resumeDetector';
+import type { ResumeSource } from './resumeDetector';
 
 // Which recovery path reacted. Three consumers hang off the same trigger and fail together and
 // silently, so the sink has to distinguish them.
