@@ -12,6 +12,7 @@ import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
+import { logResumeSignal } from '../lib/lifecycle';
 import {
   SenderStateTracker,
   deriveRenderState,
@@ -245,10 +246,14 @@ export function useFleetPositions(
     // the dormant handler. Per-effect-run state (resets on rideId change → a new ride fetches
     // fresh); the first call always runs since lastFetchMs starts at 0.
     let lastFetchMs = 0;
-    const fetchLastKnown = async () => {
+    // `resume` marks the call as a recovery attempt. W268 logs the signal INSIDE the debounce
+    // gate, after it passes: a resume_signal must mean the refetch actually ran, otherwise a
+    // debounced no-op would look identical to a real recovery in the sink.
+    const fetchLastKnown = async (resume = false) => {
       const now = Date.now();
       if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
       lastFetchMs = now;
+      if (resume) logResumeSignal(rideId, 'appstate', 'fleet');
       const { data, error } = await supabase
         .from('ride_participants')
         .select('account_id, last_lat, last_long, last_ping')
@@ -263,7 +268,8 @@ export function useFleetPositions(
     };
     void fetchLastKnown();
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') void fetchLastKnown();
+      if (next !== 'active') return;
+      void fetchLastKnown(true);
     });
     return () => {
       cancelled = true;

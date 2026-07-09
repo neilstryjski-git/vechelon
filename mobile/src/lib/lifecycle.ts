@@ -1,0 +1,55 @@
+import { logMeasurement } from './measure';
+
+// W268 — first-class AppState instrumentation.
+//
+// Nothing in the app recorded real AppState transitions: the 'app_state_change' sink kind is a
+// misnomer that carries RENDER events (fleet_compose, breadcrumb_leader, ride_map_open, handoff).
+// So when the 2026-07-09 morning ride (8619ba10, SM-G781W) came out of a 33-min pocket with no
+// captain marker and no breadcrumb, we could only INFER that AppState→'active' never fired, by
+// noticing that fleet_compose never cleared (the side effect of connect()). That is a side effect,
+// not evidence. These two kinds make the trigger directly observable:
+//
+//   app_lifecycle  — every AppState transition, whether or not anything reacted to it
+//   resume_signal  — each recovery that actually ran, and which consumer ran it
+//
+// A pocket→unlock with app_lifecycle rows but no 'active' row confirms the hypothesis; an 'active'
+// row with no resume_signal moves the fault into the consumers instead.
+
+// Which recovery emitter fired. 'appstate' is today's only source; W269 adds 'clockgap' (a JS
+// timer that did not run ⇒ the thread was suspended) and 'stale' (channel silent past threshold).
+export type ResumeSource = 'appstate' | 'clockgap' | 'stale';
+
+// Which recovery path reacted. Three consumers hang off the same trigger and fail together and
+// silently, so the sink has to distinguish them.
+export type ResumeConsumer = 'channel' | 'breadcrumb' | 'fleet';
+
+// Module-scoped: one app run, one AppState machine. Seeded lazily by the first transition, so
+// `from` is null exactly once per run rather than pretending to know the pre-mount state.
+let lastState: string | null = null;
+let lastTransitionMs = Date.now();
+
+export function logAppLifecycle(rideId: string | null, next: string): void {
+  const now = Date.now();
+  const from = lastState;
+  const msSinceLast = now - lastTransitionMs;
+  lastState = next;
+  lastTransitionMs = now;
+  if (!rideId) return; // logMeasurement refuses ride-less events; still advance the machine above
+  // Repeated same-state emissions are NOT filtered — React Native fires duplicates, and a
+  // duplicate 'active' is itself signal about how the platform reports an unlock.
+  void logMeasurement({
+    rideId,
+    kind: 'app_lifecycle',
+    value: msSinceLast,
+    payload: { from, to: next, ms_since_last: msSinceLast },
+  });
+}
+
+export function logResumeSignal(
+  rideId: string | null,
+  source: ResumeSource,
+  consumer: ResumeConsumer,
+): void {
+  if (!rideId) return;
+  void logMeasurement({ rideId, kind: 'resume_signal', payload: { source, consumer } });
+}

@@ -61,7 +61,13 @@ export type MeasureKind =
   | 'ux_explainer_shown'
   | 'ux_battery_prompt_shown'
   | 'battery_saver_state'
-  | 'app_state_change';
+  // NB: 'app_state_change' is a misnomer kept for compatibility — it carries RENDER events
+  // (fleet_compose, breadcrumb_leader, ride_map_open, handoff), NOT AppState transitions.
+  // tools/rail3_sidecar_correlate.py and every prior-ride sink query depend on the name.
+  | 'app_state_change'
+  // W268 — the real lifecycle signal: every AppState transition, and every recovery that ran.
+  | 'app_lifecycle'
+  | 'resume_signal';
 
 // One id per app run, so multiple testers (and multiple launches) stay separable within a
 // ride. In-memory is intentional — a new run is a new session.

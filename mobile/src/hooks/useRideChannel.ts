@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
+import { logAppLifecycle, logResumeSignal } from '../lib/lifecycle';
 
 // Supabase realtime subscribe lifecycle states.
 export type RideChannelStatus =
@@ -131,6 +132,9 @@ export function useRideChannel(rideId: string | null): {
     // on the SAME 'active' event, so stopped riders repaint immediately and moving riders on
     // their next ping). Trailing-debounced so a flap/rapid-unlock costs one rebuild, not a thrash.
     const appSub = AppState.addEventListener('change', (next) => {
+      // W268: log EVERY transition, before any guard — the open question is whether 'active'
+      // arrives at all on unlock, and a guarded logger could never answer it.
+      logAppLifecycle(rideId, next);
       if (next !== 'active' || cancelled) return;
       if (foregroundTimer) clearTimeout(foregroundTimer);
       foregroundTimer = setTimeout(() => {
@@ -140,6 +144,7 @@ export function useRideChannel(rideId: string | null): {
           clearTimeout(retryTimer);
           retryTimer = null;
         }
+        logResumeSignal(rideId, 'appstate', 'channel');
         void connect();
       }, FOREGROUND_REBUILD_DEBOUNCE_MS);
     });

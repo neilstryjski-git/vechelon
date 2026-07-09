@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
+import { logResumeSignal } from '../lib/lifecycle';
 
 // Ride-leader breadcrumb (W212 → W234). Draws the CAPTAIN's route so members can follow it.
 //
@@ -85,7 +86,9 @@ export function useBreadcrumb(
   }, [rideId, fetchRoute]);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') void fetchRoute();
+      if (s !== 'active') return;
+      logResumeSignal(rideIdRef.current, 'appstate', 'breadcrumb');
+      void fetchRoute();
     });
     return () => sub.remove();
   }, [fetchRoute]);
