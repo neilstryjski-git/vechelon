@@ -473,26 +473,49 @@ export function useFleetPositions(
     };
   }, [backgroundReady, channel, status, rideId, myRiderId]);
 
-  // Staging diagnostic: log who is RECEIVED (pings) vs known to the ROSTER vs
-  // surviving into the FLEET (received AND in roster), whenever those sets
-  // change — so we can tell REMOTELY whether a rider is dropped at the roster
-  // join (a roster miss) or makes it into the fleet (then any no-show is a pure
-  // render issue). Fires only on set changes, so it's not per-ping spam.
+  // Staging diagnostic: log who is RECEIVED (pings) vs restored from LAST-KNOWN vs known to the
+  // ROSTER vs surviving into the FLEET — so we can tell REMOTELY whether a rider is dropped at the
+  // roster join (a roster miss) or makes it into the fleet (then any no-show is a pure render
+  // issue). Fires only on set changes, so it's not per-ping spam.
+  //
+  // W270: this used to compute `fleet` as pings∩roster and key only on [pingKeys, rosterKeys] —
+  // blind to last-known. A rider rendered purely from ride_participants.last_* never appeared, and
+  // a lastKnown change emitted nothing at all. That blindness produced two wrong conclusions: on
+  // the 2026-07-09 morning ride `fleet=[]` was read as "the last-known render never fired", and the
+  // 2026-07-10 bench disproved it — rogers logged `fleet=[] pings=[]` at unlock while Neil watched
+  // the captain's marker render from a 4-minute-old last-known row. `fleet=[]` was exactly what a
+  // WORKING last-known render looked like here. The log now mirrors what actually reaches the map.
   const pingKeys = Object.keys(pings).sort().join(',');
   const rosterKeys = Object.keys(roster).sort().join(',');
+  const lastKnownKeys = Object.keys(lastKnown).sort().join(',');
   useEffect(() => {
     if (!rideId) return;
     const pIds = pingKeys ? pingKeys.split(',') : [];
     const rIds = rosterKeys ? rosterKeys.split(',') : [];
-    const fIds = pIds.filter((id) => roster[id]);
+    const lkIds = lastKnownKeys ? lastKnownKeys.split(',') : [];
+    // Mirror the render's join below: (pings ∪ lastKnown) ∩ roster, live winning when fresher.
+    const fIds = [...new Set([...pIds, ...lkIds])].filter((id) => roster[id]).sort();
+    // Same precedence as the render join below. READER BEWARE: `source` is accurate at emit time,
+    // but this effect fires on SET changes only — a flip driven purely by a `ts` change (a stop
+    // rewrites an existing lastKnown row fresher than a still-present stale ping) re-renders
+    // without re-emitting, so a rider's last-logged source can lag the map. Trust `source` at the
+    // moment of its row, not as a running state.
+    const source: Record<string, 'live' | 'lastKnown'> = {};
+    for (const id of fIds) {
+      const live = pings[id];
+      const lk = lastKnown[id];
+      source[id] = live && (!lk || live.ts >= lk.ts) ? 'live' : 'lastKnown';
+    }
     void logMeasurement({
       rideId,
       kind: 'app_state_change',
-      payload: { event: 'fleet_compose', pings: pIds, roster: rIds, fleet: fIds },
+      // ids and source only — never coordinates (Pillar II §2).
+      payload: { event: 'fleet_compose', pings: pIds, roster: rIds, lastKnown: lkIds, fleet: fIds, source },
     });
-    // roster intentionally omitted from deps — keyed via rosterKeys string.
+    // pings/roster/lastKnown intentionally omitted from deps — keyed via the sorted key strings, so
+    // this fires on SET changes only, not on every ping that moves a rider a few metres.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pingKeys, rosterKeys, rideId]);
+  }, [pingKeys, rosterKeys, lastKnownKeys, rideId]);
 
   // Join LIVE pings + persisted last-known (W262) to the server-gated roster. Unknown
   // riderIds are dropped — for a Rider, "unknown" is exactly the set RLS hid (other riders),
