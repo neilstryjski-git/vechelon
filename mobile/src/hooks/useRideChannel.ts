@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
-import { logResumeSignal } from '../lib/lifecycle';
+import { logChannelStatus, logResumeSignal } from '../lib/lifecycle';
 import { useResume } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 
@@ -72,6 +72,27 @@ export function useRideChannel(rideId: string | null): {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let lastStatus: RideChannelStatus = null;
 
+    // W271 — observe the subscribe OUTCOME. Purely additive: nothing below reads `statusLogs` or
+    // `lastLoggedStatus`, and no control flow depends on this. A CHANNEL_ERROR backoff loop retries
+    // repeatedly, so cap the emissions and drop consecutive duplicates — but NEVER suppress
+    // 'SUBSCRIBED', which is the outcome the whole investigation turns on.
+    let statusLogs = 0;
+    let lastLoggedStatus: string | null = null;
+    const CHANNEL_STATUS_LOG_CAP = 12;
+    const logStatus = (s: string, err?: Error) => {
+      // SUBSCRIBED is the outcome the whole investigation turns on — never suppressed, never
+      // deduped. A repeated failure status past the cap is noise: the backoff loop retries every
+      // few seconds and the first dozen already tell the story. Effect-scoped, so a new ride
+      // starts with a fresh budget.
+      const isSubscribed = s === 'SUBSCRIBED';
+      if (!isSubscribed && statusLogs >= CHANNEL_STATUS_LOG_CAP && s === lastLoggedStatus) return;
+      if (!isSubscribed && statusLogs >= CHANNEL_STATUS_LOG_CAP * 2) return;
+      statusLogs += 1;
+      lastLoggedStatus = s;
+      // err.message only — never the token, the session, or a raw payload.
+      logChannelStatus(rideId, s, attempt, err?.message);
+    };
+
     // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which
     // needs the signed-in user's JWT ON THE REALTIME SOCKET so get_my_tenant_id()
     // resolves. We set it EXPLICITLY from the CURRENT session before every (re)subscribe
@@ -104,6 +125,15 @@ export function useRideChannel(rideId: string | null): {
         if (cancelled || ch !== thisCh) return; // drop callbacks from a superseded channel
         lastStatus = s as RideChannelStatus;
         setStatus(lastStatus);
+        // W271: additive — logged BEFORE `attempt` resets, so it records how many reconnect
+        // attempts this status took. Nothing below depends on it. Wrapped because scheduleReconnect()
+        // is downstream: instrumentation must never be able to kill the reconnect it exists to
+        // observe, no matter what a future edit does to logStatus.
+        try {
+          logStatus(s, err);
+        } catch {
+          /* diagnostics are never load-bearing */
+        }
         if (s === 'SUBSCRIBED') {
           attempt = 0; // recovered — reset backoff
         } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED') {

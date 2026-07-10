@@ -48,11 +48,50 @@ export function logAppLifecycle(rideId: string | null, next: string): void {
   });
 }
 
+// W271 — logMeasurement is fire-and-forget with NO retry, so a pocketed phone on marginal cellular
+// drops writes silently. A missing row has therefore never been proof that the code did not run —
+// a trap this investigation fell into twice. A monotonic seq makes a dropped write visible as a GAP
+// rather than as silence. Per-consumer, because the three recover independently.
+const resumeSeq: Record<ResumeConsumer, number> = { channel: 0, breadcrumb: 0, fleet: 0 };
+
 export function logResumeSignal(
   rideId: string | null,
   source: ResumeSource,
   consumer: ResumeConsumer,
 ): void {
+  // Advance the sequence even when we cannot log: a ride-less recovery still happened, and the
+  // next logged seq should reveal it as a gap rather than pretend it never occurred.
+  const seq = ++resumeSeq[consumer];
   if (!rideId) return;
-  void logMeasurement({ rideId, kind: 'resume_signal', payload: { source, consumer } });
+  void logMeasurement({ rideId, kind: 'resume_signal', payload: { source, consumer, seq } });
+}
+
+// Every subscribe() status transition, with its error. The subscribe result was previously kept
+// only in component state — so a resume that ran connect() and got CHANNEL_ERROR back looked
+// exactly like a resume that succeeded. `attempt` is the reconnect-backoff attempt count.
+// NEVER pass a token, a session, or a raw broadcast payload — status and error.message only.
+export function logChannelStatus(
+  rideId: string | null,
+  status: string,
+  attempt: number,
+  errorMessage?: string,
+): void {
+  if (!rideId) return;
+  void logMeasurement({
+    rideId,
+    kind: 'channel_status',
+    payload: { status, attempt, ...(errorMessage ? { error: errorMessage } : {}) },
+  });
+}
+
+// Result of a catch-up query. Without this, "returned zero rows" and "was never issued" are
+// indistinguishable in the sink — which is precisely the ambiguity that left the 2026-07-09
+// morning breadcrumb unexplained.
+export function logFetchResult(
+  rideId: string | null,
+  target: 'breadcrumb' | 'lastKnown',
+  detail: Record<string, unknown>,
+): void {
+  if (!rideId) return;
+  void logMeasurement({ rideId, kind: 'fetch_result', payload: { target, ...detail } });
 }

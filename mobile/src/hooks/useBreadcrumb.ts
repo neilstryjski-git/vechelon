@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
-import { logResumeSignal } from '../lib/lifecycle';
+import { logFetchResult, logResumeSignal } from '../lib/lifecycle';
 import { useResume } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 
@@ -72,8 +72,17 @@ export function useBreadcrumb(
       .select('path')
       .eq('ride_id', rid)
       .maybeSingle();
+    // W271: a query that returned no row and a query that was never issued used to look identical
+    // in the sink — which is why the 2026-07-09 morning breadcrumb had no recorded cause.
+    const path = (data?.path as LatLng[] | null) ?? [];
+    logFetchResult(rid, 'breadcrumb', {
+      found: !!data,
+      pathLen: path.length,
+      haveLen: trailRef.current.length,
+      adopted: !error && !!data && path.length >= trailRef.current.length,
+      ...(error ? { err: error.message } : {}),
+    });
     if (error || !data) return;
-    const path = (data.path as LatLng[] | null) ?? [];
     if (path.length >= trailRef.current.length) {
       trailRef.current = path;
       setTrail(path);
@@ -85,9 +94,11 @@ export function useBreadcrumb(
   useEffect(() => {
     void fetchRoute();
   }, [rideId, fetchRoute]);
-  // W269: the resume signal — not AppState — drives the catch-up fetch. This is the path that
-  // left rogers with an empty trail all through the 2026-07-09 morning ride: it mounted when the
-  // breadcrumb was seconds old, pocketed, and never refetched because 'active' never arrived.
+  // W269: the resume signal — not AppState alone — drives the catch-up fetch, so a resume that the
+  // OS never reports still refetches. This is the path that left rogers with an empty trail through
+  // the 2026-07-09 morning ride: it mounted when the breadcrumb was seconds old, pocketed, and
+  // never refetched. (The 2026-07-10 bench showed 'active' DOES fire on both handsets at a desk, so
+  // why it didn't refetch in the field is still open — W271 logs the fetch result to find out.)
   const onResume = useCallback(
     (source: ResumeSource) => {
       logResumeSignal(rideIdRef.current, source, 'breadcrumb');

@@ -67,7 +67,12 @@ export type MeasureKind =
   | 'app_state_change'
   // W268 — the real lifecycle signal: every AppState transition, and every recovery that ran.
   | 'app_lifecycle'
-  | 'resume_signal';
+  | 'resume_signal'
+  // W271 — recovery OUTCOMES. Whether a recovery was triggered is not whether it worked: the
+  // channel's subscribe() result and the catch-up queries' results were both invisible, so
+  // "recovery fired but no markers appeared" had no recorded cause.
+  | 'channel_status'
+  | 'fetch_result';
 
 // One id per app run, so multiple testers (and multiple launches) stay separable within a
 // ride. In-memory is intentional — a new run is a new session.

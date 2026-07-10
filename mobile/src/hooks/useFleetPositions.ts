@@ -12,7 +12,7 @@ import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
-import { logResumeSignal } from '../lib/lifecycle';
+import { logFetchResult, logResumeSignal } from '../lib/lifecycle';
 import { useResume, noteChannelActivity, notePeerCount } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 import {
@@ -264,6 +264,19 @@ export function useFleetPositions(
         .from('ride_participants')
         .select('account_id, last_lat, last_long, last_ping')
         .eq('ride_id', rideId);
+      // W271: distinguish "the query ran and found nothing" from "the query never ran". `usable`
+      // is the count that survives the null-coordinate filter below — the number that can actually
+      // render a marker. No coordinates logged (Pillar II §2), only counts.
+      const usable = (data ?? []).filter(
+        (r) => r.account_id != null && r.last_lat != null && r.last_long != null && r.last_ping,
+      ).length;
+      logFetchResult(rideId, 'lastKnown', {
+        rows: data?.length ?? 0,
+        usable,
+        cancelled,
+        ...(resumeSource ? { source: resumeSource } : {}),
+        ...(error ? { err: error.message } : {}),
+      });
       if (cancelled || error || !data) return;
       const next: Record<string, { lat: number; lng: number; ts: number }> = {};
       for (const row of data) {
