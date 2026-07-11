@@ -7,6 +7,9 @@ import { supabase } from '../lib/supabase';
 import type { RideChannelStatus } from './useRideChannel';
 import { buildCancelPatch, latencyDeltaMs } from '../lib/beaconLogic';
 import type { LatLng } from '../lib/geo';
+import { logResumeSignal } from '../lib/lifecycle';
+import { useResume } from './useResume';
+import type { ResumeSource } from '../lib/resumeDetector';
 
 // Broadcast event name for beacon state changes on the rail3:ride:<id> channel.
 export const BEACON_EVENT = 'beacon';
@@ -60,14 +63,26 @@ export function useBeacons(
   const [error, setError] = useState<string | null>(null);
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
+  // Read inside the resume subscriber (bound once) without re-binding on ride change.
+  const rideIdRef = useRef<string | null>(rideId);
+  rideIdRef.current = rideId;
 
-  // Seed from the audit table at mount (a meaningful event — late joiners and
-  // reconnects must see beacons triggered before they subscribed). Live
-  // updates then arrive via Broadcast only.
+  // Seed active beacons from the audit table (a meaningful event — late joiners and reconnects
+  // must see beacons triggered before they subscribed). Live updates otherwise arrive via
+  // Broadcast only, which is ephemeral: a beacon that fired while this phone was pocketed is
+  // missed as a broadcast and lives only in beacon_alerts. So this runs on mount AND on every
+  // resume (D75) — the field failure was an SOS active during a pocket that never surfaced on
+  // unlock because the seed only ran once. Only NULL-cancel rows are adopted, so a beacon
+  // cancelled before the seed reads is never resurrected.
+  //
+  // The seed closure lives inside the [rideId] effect with a `cancelled` guard (so an in-flight
+  // read can't setBeacons after unmount/ride-change), and a ref bridges it to the stable resume
+  // subscriber — the same discipline useFleetPositions uses for its last-known refetch.
+  const seedRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
-    (async () => {
+    const seed = async () => {
       const { data, error: seedErr } = await supabase
         .from('beacon_alerts')
         .select('id, rider_id, triggered_at')
@@ -78,22 +93,38 @@ export function useBeacons(
         console.warn('[Rail3] beacon seed read failed', seedErr);
         return;
       }
-      const seed: Record<string, ActiveBeacon> = {};
+      const active: Record<string, ActiveBeacon> = {};
       for (const row of data) {
-        seed[row.rider_id] = {
+        active[row.rider_id] = {
           beaconId: row.id,
           riderId: row.rider_id,
           triggeredAt: Date.parse(row.triggered_at),
         };
       }
-      // Merge UNDER live state: a broadcast that arrived during this fetch
-      // (trigger broadcasts before inserting) must not be clobbered.
-      setBeacons((prev) => ({ ...seed, ...prev }));
-    })();
+      // Merge UNDER live state: a live TRIGGER that landed during this fetch (already in `prev`)
+      // must win over the seed — {...seed, ...prev}, live on top. A live CANCEL that raced an
+      // in-flight seed is not protected by this merge (absent-in-prev + present-in-seed re-adds
+      // it), but that self-heals on the next resume-seed; pre-existing, not introduced here.
+      setBeacons((prev) => ({ ...active, ...prev }));
+    };
+    void seed();
+    seedRef.current = () => {
+      void seed();
+    };
     return () => {
       cancelled = true;
+      seedRef.current = null;
     };
   }, [rideId]);
+
+  // D75: re-seed on resume, the same recovery wiring the fleet/breadcrumb/channel consumers use
+  // (W269). Without this, an SOS that a Captain/SAG missed while pocketed stayed invisible when
+  // they glanced back — the safety path's worst failure.
+  const onResume = useCallback((source: ResumeSource) => {
+    logResumeSignal(rideIdRef.current, source, 'beacon');
+    seedRef.current?.();
+  }, []);
+  useResume(rideId, onResume);
 
   // Receive beacon broadcasts: maintain state, log D-55 latency, and fire the
   // R3-24 medium haptic on the RIDER'S device when someone else (Captain/SAG)

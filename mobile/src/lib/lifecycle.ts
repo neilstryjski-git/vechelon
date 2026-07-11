@@ -22,9 +22,9 @@ import { logMeasurement } from './measure';
 export type { ResumeSource } from './resumeDetector';
 import type { ResumeSource } from './resumeDetector';
 
-// Which recovery path reacted. Three consumers hang off the same trigger and fail together and
+// Which recovery path reacted. Four consumers hang off the same trigger and fail together and
 // silently, so the sink has to distinguish them.
-export type ResumeConsumer = 'channel' | 'breadcrumb' | 'fleet';
+export type ResumeConsumer = 'channel' | 'breadcrumb' | 'fleet' | 'beacon';
 
 // Module-scoped: one app run, one AppState machine. Seeded lazily by the first transition, so
 // `from` is null exactly once per run rather than pretending to know the pre-mount state.
@@ -51,8 +51,8 @@ export function logAppLifecycle(rideId: string | null, next: string): void {
 // W271 — logMeasurement is fire-and-forget with NO retry, so a pocketed phone on marginal cellular
 // drops writes silently. A missing row has therefore never been proof that the code did not run —
 // a trap this investigation fell into twice. A monotonic seq makes a dropped write visible as a GAP
-// rather than as silence. Per-consumer, because the three recover independently.
-const resumeSeq: Record<ResumeConsumer, number> = { channel: 0, breadcrumb: 0, fleet: 0 };
+// rather than as silence. Per-consumer, because the four recover independently.
+const resumeSeq: Record<ResumeConsumer, number> = { channel: 0, breadcrumb: 0, fleet: 0, beacon: 0 };
 
 export function logResumeSignal(
   rideId: string | null,

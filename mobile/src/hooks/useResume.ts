@@ -10,7 +10,7 @@ import {
   type ResumeSource,
 } from '../lib/resumeDetector';
 
-// W269 — ONE resume signal, three consumers.
+// W269 — ONE resume signal, four consumers (channel, breadcrumb, fleet, and D75 beacon).
 //
 // useRideChannel.connect, useBreadcrumb.fetchRoute and useFleetPositions' last-known refetch each
 // used to bind AppState→'active' themselves. They therefore failed TOGETHER and SILENTLY whenever
