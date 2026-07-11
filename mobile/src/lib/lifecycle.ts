@@ -1,3 +1,5 @@
+import * as Battery from 'expo-battery';
+
 import { logMeasurement } from './measure';
 
 // W268 — first-class AppState instrumentation.
@@ -31,6 +33,56 @@ export type ResumeConsumer = 'channel' | 'breadcrumb' | 'fleet' | 'beacon';
 let lastState: string | null = null;
 let lastTransitionMs = Date.now();
 
+type PowerState = {
+  battery_level?: number;
+  low_power_mode?: boolean;
+  ignoring_battery_opt?: boolean;
+};
+
+// Upper bound on the whole power-state read. The lifecycle row must NEVER be lost to a wedged native
+// call (W271, below: a missing row must not be mistaken for "the code didn't run" — the trap this
+// investigation fell into twice). On timeout the row still writes, just without the power fields.
+const POWER_READ_TIMEOUT_MS = 1500;
+
+// W272 — attach power / battery-optimization state to every lifecycle transition. D76 showed the OS
+// suppressing the app's OUTBOUND NETWORK while the JS thread AND the location foreground-service both
+// kept running; the sink could not see WHY because we logged no power state. These are LOCAL native
+// queries (no network), run in PARALLEL and bounded by POWER_READ_TIMEOUT_MS so this enrichment can
+// never delay-away or drop the lifecycle row it rides on. Each source is isolated (allSettled + the
+// RNBG lazy-require deferred into its own async so a sync throw degrades to an omitted field, not a
+// rejection), and the whole function is wrapped so it NEVER rejects into logAppLifecycle's caller.
+// `ignoring_battery_opt` is the key field: false = "Optimized" (Android may throttle background
+// execution — the precondition for D76); true = "Unrestricted" (exempt).
+async function readPowerState(): Promise<PowerState> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const gather = Promise.allSettled([
+      Battery.getBatteryLevelAsync(),
+      Battery.isLowPowerModeEnabledAsync(),
+      (async () => {
+        // Lazy require — mirrors bgGeo.ts/diagnostics.ts: never touch the native module at bundle-eval.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const BG = require('react-native-background-geolocation').default;
+        return (await BG.deviceSettings.isIgnoringBatteryOptimizations()) as boolean;
+      })(),
+    ]).then(([level, low, ignoring]) => {
+      const out: PowerState = {};
+      if (level.status === 'fulfilled') out.battery_level = level.value as number;
+      if (low.status === 'fulfilled') out.low_power_mode = low.value as boolean;
+      if (ignoring.status === 'fulfilled') out.ignoring_battery_opt = ignoring.value as boolean;
+      return out;
+    });
+    const timeout = new Promise<PowerState>((resolve) => {
+      timer = setTimeout(() => resolve({}), POWER_READ_TIMEOUT_MS);
+    });
+    return await Promise.race([gather, timeout]);
+  } catch {
+    return {}; // any residual setup/sync failure — degrade to omitted fields, never reject
+  } finally {
+    if (timer) clearTimeout(timer); // don't leave the timeout dangling when the reads win the race
+  }
+}
+
 export function logAppLifecycle(rideId: string | null, next: string): void {
   const now = Date.now();
   const from = lastState;
@@ -40,12 +92,18 @@ export function logAppLifecycle(rideId: string | null, next: string): void {
   if (!rideId) return; // logMeasurement refuses ride-less events; still advance the machine above
   // Repeated same-state emissions are NOT filtered — React Native fires duplicates, and a
   // duplicate 'active' is itself signal about how the platform reports an unlock.
-  void logMeasurement({
-    rideId,
-    kind: 'app_lifecycle',
-    value: msSinceLast,
-    payload: { from, to: next, ms_since_last: msSinceLast },
-  });
+  //
+  // W272: capture from/msSinceLast SYNCHRONOUSLY above (the state machine must not depend on the
+  // async reads), then enrich with power state and log once the fast local reads resolve.
+  void (async () => {
+    const power = await readPowerState();
+    void logMeasurement({
+      rideId,
+      kind: 'app_lifecycle',
+      value: msSinceLast,
+      payload: { from, to: next, ms_since_last: msSinceLast, ...power },
+    });
+  })();
 }
 
 // W271 — logMeasurement is fire-and-forget with NO retry, so a pocketed phone on marginal cellular
