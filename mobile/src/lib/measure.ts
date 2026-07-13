@@ -72,24 +72,51 @@ export type MeasureKind =
   // channel's subscribe() result and the catch-up queries' results were both invisible, so
   // "recovery fired but no markers appeared" had no recorded cause.
   | 'channel_status'
-  | 'fetch_result';
+  | 'fetch_result'
+  // D77 — the identity invariant tripped: a broadcast or DB write was attempted under an id
+  // that is NOT the current session's user. Should never appear; if it does, the fleet is
+  // being fed fabricated (but validly signed) data and this row is the only way to see it.
+  | 'identity_mismatch';
 
-// One id per app run, so multiple testers (and multiple launches) stay separable within a
-// ride. In-memory is intentional — a new run is a new session.
-const SESSION_ID =
+// One id per SIGNED-IN RUN, so multiple testers (and multiple launches) stay separable within
+// a ride. In-memory is intentional — a new run is a new session; D77 adds: so is a new USER.
+const newSessionId = (): string =>
   Math.random().toString(36).slice(2) + Date.now().toString(36);
+let sessionId = newSessionId();
 
-// Monotonic per-run counter so a missing event is detectable as a GAP, not silent absence.
+// Monotonic per-session counter so a missing event is detectable as a GAP, not silent absence.
 let seq = 0;
 
 let cachedUserId: string | null | undefined; // undefined = not yet looked up
-const tenantCache: Record<string, string> = {}; // rideId -> tenant_id (uuid)
+let tenantCache: Record<string, string> = {}; // rideId -> tenant_id (uuid)
 
 async function getUserId(): Promise<string | null> {
   if (cachedUserId !== undefined) return cachedUserId;
   const { data } = await supabase.auth.getUser();
   cachedUserId = data.user?.id ?? null;
   return cachedUserId;
+}
+
+// D77 — these caches are MODULE-level, so they outlive the React tree: remounting the app
+// cannot clear them. cachedUserId in particular survived a full sign-out, and every
+// analytics_events row written afterwards was filed under the PREVIOUS user — silently, because
+// the INSERT policy checks event_type/tenant_id but NOT user_id = auth.uid(). That is why the
+// sink reports the LATCHED identity rather than the live login, which misled the 2026-07-12
+// field analysis. AuthContext calls this on every auth event.
+//
+// `userChanged` distinguishes a genuine swap from a routine TOKEN_REFRESHED (~hourly, mid-ride):
+//   - always: drop cachedUserId. Cheap to re-derive, and it can never go stale.
+//   - only on a real user change: start a NEW analytics session (a new person is a new session
+//     for analysis, and seq restarts with it) and drop tenantCache, whose contents are only as
+//     valid as the RLS view the previous user had.
+// Regenerating sessionId on a token refresh would be the analytics twin of remounting the ride
+// tree on a token refresh — the exact mistake D77's fix exists to avoid.
+export function resetMeasureIdentity(userChanged: boolean): void {
+  cachedUserId = undefined;
+  if (!userChanged) return;
+  tenantCache = {};
+  sessionId = newSessionId();
+  seq = 0;
 }
 
 // tenant_id MUST be the ride's real uuid (in the user's account_tenants) or RLS rejects the
@@ -143,7 +170,7 @@ export async function logMeasurement(args: LogMeasurementArgs): Promise<void> {
         m: 'rail3', // REQUIRED marker — separates from real query_timeout rows
         schema_v: SCHEMA_VERSION,
         ride_id: args.rideId,
-        session_id: SESSION_ID,
+        session_id: sessionId,
         seq: seq++,
         kind: args.kind,
         value: args.value ?? null,

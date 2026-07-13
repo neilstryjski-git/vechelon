@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import * as Crypto from 'expo-crypto';
 
 import { supabase } from '../lib/supabase';
+import { isCurrentIdentity } from '../lib/identity';
 import type { RideChannelStatus } from './useRideChannel';
 import { buildCancelPatch, latencyDeltaMs } from '../lib/beaconLogic';
 import type { LatLng } from '../lib/geo';
@@ -204,6 +205,12 @@ export function useBeacons(
       triggered_at: new Date(sentAt).toISOString(),
     };
     const insertPromise = (async () => {
+      // D77 — identity invariant. Checked HERE, inside the already-concurrent audit write, so
+      // it adds ZERO latency to the alert itself: an SOS must never be blocked, delayed, or
+      // suppressed by a consistency check. Unlike a position ping we still SEND on a mismatch
+      // and merely RECORD it — a suppressed beacon is a safety failure, a mis-attributed one is
+      // only a data failure. Fire-and-forget: we log the fact, we do not gate on it.
+      void isCurrentIdentity(myRiderId, rideId, 'beacon');
       let { error: insErr } = await supabase.from('beacon_alerts').insert(row);
       if (insErr) {
         ({ error: insErr } = await supabase.from('beacon_alerts').insert(row)); // one retry

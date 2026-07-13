@@ -1,6 +1,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
+import { isCurrentIdentity } from './identity';
 import { rail3RideTopic } from '../hooks/useRideChannel';
 
 // Mirror of useFleetPositions.POSITION_EVENT — inlined to avoid a circular import.
@@ -21,6 +22,16 @@ export async function restBroadcast(rideId: string, payload: Record<string, unkn
   const { data: s } = await supabase.auth.getSession();
   const token = s.session?.access_token;
   if (!token) return false;
+  // D77 — the identity invariant, enforced at the ONE point where the CLAIMED rider and the
+  // token that will actually sign the request meet. These could disagree: the payload carried a
+  // snapshot taken at map-mount while this token comes from the live session, so after an
+  // account swap the app broadcast as A over B's credentials — data the server cannot reject,
+  // because the signature is genuinely B's. REFUSE rather than send: a wrong-identity position
+  // corrupts every receiver's fleet, and dropping one ping costs nothing (the next fix is
+  // seconds away). Reuse the session we already hold — no second read on the hot ping path.
+  const claimed = typeof payload.riderId === 'string' ? payload.riderId : null;
+  const ok = await isCurrentIdentity(claimed, rideId, 'broadcast', s.session?.user?.id ?? null);
+  if (!ok) return false;
   try {
     await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
       method: 'POST',

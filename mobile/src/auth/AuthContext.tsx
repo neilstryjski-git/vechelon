@@ -9,6 +9,8 @@ import React, {
 import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
+import { resetMeasureIdentity } from '../lib/measure';
+import { isIdentityChange } from '../lib/identityDelta';
 import { TENANT_SLUG } from '../lib/env';
 
 // Auto-join the build's tenant on sign-in (W191 — staging PoC onboarding).
@@ -63,6 +65,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [initializing, setInitializing] = useState(true);
   // Run the tenant auto-join once per signed-in user (idempotent server-side anyway).
   const ensuredForUserRef = useRef<string | null>(null);
+  // D77 — the last user id we saw, so an auth event can be classified as a genuine identity
+  // CHANGE (sign-out, or a swap to a different account) versus a routine token refresh.
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Whenever a session is established (fresh sign-in or cold-start restore), ensure the
   // user is a member of the build's tenant so they show up in the (tenant-scoped) fleet.
@@ -79,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // Restore a persisted session on cold start (AsyncStorage-backed).
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
+      lastUserIdRef.current = data.session?.user?.id ?? null;
       setSession(data.session);
       setInitializing(false);
     });
@@ -88,6 +94,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      // D77 — detect an IDENTITY CHANGE, and drive off the user-id DELTA rather than `_event`.
+      // The id is the fact; the event name is only a hint: SIGNED_IN fires both for a genuinely
+      // new user and for a same-user re-auth, and TOKEN_REFRESHED (~hourly, and mid-ride) must
+      // never read as a swap. Comparing ids is therefore strictly safer than trusting the name.
+      const nextUserId = nextSession?.user?.id ?? null;
+      const userChanged = isIdentityChange(lastUserIdRef.current, nextUserId);
+      lastUserIdRef.current = nextUserId;
+
+      // Module-level caches outlive the React tree, so the RootNavigator remount below cannot
+      // clear them — they must be reset explicitly, and BEFORE setSession, so nothing that
+      // reacts to the new session can still read the old user's id.
+      resetMeasureIdentity(userChanged);
+
       setSession(nextSession);
       // Keep the REALTIME socket's JWT current on every auth event that carries a
       // session (SIGNED_IN, TOKEN_REFRESHED). Without this the socket keeps whatever

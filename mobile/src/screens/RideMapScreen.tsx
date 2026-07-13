@@ -7,6 +7,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../auth/AuthContext';
 import { selfRsvpWithIdentity } from '../lib/rideJoin';
 import {
   promptOemExclusionOnFirstJoin,
@@ -63,7 +64,15 @@ const RideMapScreen: React.FC = () => {
   // `loading` is intentionally not consumed: W244 render-first means we never gate
   // the screen on it — the map shell mounts immediately and ride fields hydrate async.
   const { ride, error } = useRideDetails(rideId);
-  const [myRiderId, setMyRiderId] = useState<string | null>(null);
+  // D77 — identity comes from the LIVE session, never a snapshot. This was a one-shot
+  // supabase.auth.getUser() in a useEffect with deps [], pinned into state: it captured
+  // whoever was signed in when the map mounted and never looked again. myRiderId is threaded
+  // into every broadcast, DB write, role gate and beacon below, so a stale value made the app
+  // ACT AS the previous user — while three sibling call sites read the session live, producing
+  // a split identity (broadcast as A, written as B under B's token). RootNavigator remounts
+  // this subtree on a user change, so this stays correct for the whole life of the screen.
+  const { session } = useAuth();
+  const myRiderId = session?.user?.id ?? null;
   const { roster, refetchRoster } = useRideRoster(rideId);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
   const { channel, status } = useRideChannel(rideId);
@@ -107,10 +116,6 @@ const RideMapScreen: React.FC = () => {
     () => breadcrumbTrail.map((c) => ({ latitude: c.lat, longitude: c.lng })),
     [breadcrumbTrail],
   );
-
-  useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setMyRiderId(data.user?.id ?? null));
-  }, []);
 
   // One build-stamped row per ride-open, so we can determine which build a device
   // is running EVEN when it never receives a ping (every measurement now carries
