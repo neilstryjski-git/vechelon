@@ -48,12 +48,22 @@ export async function isCurrentIdentity(
   where: 'broadcast' | 'beacon',
   sessionUserId?: string | null,
 ): Promise<boolean> {
-  const uid = sessionUserId !== undefined ? sessionUserId : await currentUserId();
-  if (uid && claimed && uid === claimed) return true;
-  void logMeasurement({
-    rideId,
-    kind: 'identity_mismatch',
-    payload: { where, claimed, session: uid },
-  });
-  return false;
+  try {
+    const uid = sessionUserId !== undefined ? sessionUserId : await currentUserId();
+    if (uid && claimed && uid === claimed) return true;
+    void logMeasurement({
+      rideId,
+      kind: 'identity_mismatch',
+      payload: { where, claimed, session: uid },
+    });
+    return false;
+  } catch {
+    // FAIL OPEN, deliberately. This is a BACKSTOP against a regression, not a security control
+    // — the real boundary is server-side RLS, which cannot be talked out of anything by a client.
+    // So a hiccup INSIDE the guard must never be able to do what the guard exists to prevent
+    // harm from: silence a rider. Throwing here would strand a live rider off the fleet map (and
+    // never resolve, because restBroadcast refuses on false). A missed mismatch costs one unlogged
+    // diagnostic row; a false refusal costs a rider their position on a live ride.
+    return true;
+  }
 }

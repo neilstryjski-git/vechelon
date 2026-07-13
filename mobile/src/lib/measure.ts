@@ -90,10 +90,19 @@ let seq = 0;
 let cachedUserId: string | null | undefined; // undefined = not yet looked up
 let tenantCache: Record<string, string> = {}; // rideId -> tenant_id (uuid)
 
+// getSession(), NOT getUser(). getUser() is a NETWORK call (GET /auth/v1/user), and the line
+// below caches whatever it yields — including `null` on a transient failure. `null !== undefined`,
+// so the cache never retries and logMeasurement then short-circuits on `!userId`: ONE failed
+// request would take the ENTIRE sink dark (gps_ping, channel_status, fetch_result, beacon_latency
+// — and identity_mismatch, the very backstop D77 rests on) until the next auth event, up to an
+// hour away. Pre-D77 that could only bite once, at app start, typically online at the trailhead;
+// resetting the cache per auth event (below) would have re-armed it hourly, MID-RIDE, on exactly
+// the marginal cellular this app is built for. getSession() reads the local persisted session:
+// no network, no failure mode. It is also what identity.ts uses, so the two agree by construction.
 async function getUserId(): Promise<string | null> {
   if (cachedUserId !== undefined) return cachedUserId;
-  const { data } = await supabase.auth.getUser();
-  cachedUserId = data.user?.id ?? null;
+  const { data } = await supabase.auth.getSession();
+  cachedUserId = data.session?.user?.id ?? null;
   return cachedUserId;
 }
 

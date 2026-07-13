@@ -3,7 +3,6 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useAuth } from '../auth/AuthContext';
-import { identityKey } from '../lib/identityDelta';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import RideMapScreen from '../screens/RideMapScreen';
@@ -32,22 +31,15 @@ const RootNavigator: React.FC = () => {
     );
   }
 
+  // D77 — `session ?` below is only a TRUTHINESS gate: an A→B account swap with no intervening
+  // null (createSessionFromUrl's setSession, on an inbound magic link) does not change which
+  // branch renders, so nothing here unmounts and the ride tree keeps running as the previous
+  // user. The remount that fixes this is deliberately ONE level UP, on the NavigationContainer
+  // in App.tsx (see AuthedNavigation): keying the navigator alone rebuilds the component tree
+  // but NOT the navigation STATE, which the container rehydrates — so the new user would land
+  // back on the previous user's ride. A single identity boundary, keyed on the user id.
   return (
     <Stack.Navigator
-      // D77 — IDENTITY REMOUNT. `session ?` below is a mere TRUTHINESS gate: an A→B account
-      // swap with no intervening null never unmounted anything, so the whole ride tree stayed
-      // mounted and kept running as A. Keying on the USER makes React tear the authed subtree
-      // down and rebuild it whenever the signed-in account changes — and since every ride hook
-      // derives identity at MOUNT (role, roster, channel, breadcrumb leader, canCreate, and the
-      // bgGeo send closure), one remount re-derives all of them against the new user. That is
-      // what actually closes the latch; patching any single call site would have left it alive
-      // in the others.
-      //
-      // Key on the USER, NOT on `session` — the session object churns on every hourly
-      // TOKEN_REFRESHED, and remounting a live ride tree mid-ride would tear down the
-      // foreground service and the channel for no reason. identityKey is the shared rule
-      // (identityDelta.ts) that AuthContext's cache reset also uses, so the two cannot drift.
-      key={identityKey(session?.user?.id ?? null)}
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0E0E10' } }}
     >
       {session ? (
