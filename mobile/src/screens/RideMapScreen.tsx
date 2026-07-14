@@ -402,9 +402,21 @@ const RideMapScreen: React.FC = () => {
         // D56: a manual pan disengages dot-follow (programmatic animateToRegion does NOT
         // fire onPanDrag, so following only stops on a real user gesture).
         onPanDrag={() => setFollowing(false)}
-        // Own blue dot in ALL states — the OS location dot, not a marker
-        // (Feature 4: even a Dark rider sees their own true position).
-        showsUserLocation
+        // Own blue dot — the OS location dot, not a marker (Feature 4: even a Dark rider sees
+        // their own true position).
+        //
+        // SUPPRESSED DURING YOUR OWN SOS. The blue dot is drawn by the Google Maps SDK and its
+        // colour is NOT ours to change — react-native-maps exposes no way to restyle it. So with
+        // an active own-beacon the rider saw TWO dots for one person: the blue OS dot AND the red
+        // pulsing beacon marker below, side by side, at the single worst moment to be ambiguous
+        // about where you are. Hiding the OS dot leaves the red pulsing marker as the sole self
+        // indicator — which is the intent: one dot, and it is red.
+        //
+        // The `myCoords` half of the guard is load-bearing: only hand the job over when there is
+        // actually a red marker to hand it to. The beacon can fire before the first GPS fix lands
+        // (useBeacons inserts lat/long as null in that case), and without this the rider would be
+        // left with NO self dot at all during an SOS — strictly worse than two.
+        showsUserLocation={!(myBeacon && myCoords)}
         showsMyLocationButton={false}
         toolbarEnabled={false}
         // R3-11: clusters expand on tap — gated to Captain/SAG per §4.1.
