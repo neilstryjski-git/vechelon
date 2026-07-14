@@ -92,7 +92,34 @@ export interface AdHocRideRow {
   start_label: string;
   qr_code: string;
   created_by: string;
+  // D80 — the account that STARTED this ride, recorded at the moment it starts. This is the
+  // breadcrumb leader. It equals created_by here because starting an Ad Hoc ride and authoring
+  // it are the same act by the same account; they are NOT the same concept, and a scheduled
+  // ride started by someone other than its author will set these differently. Writing it
+  // explicitly is the point: the leader is a recorded FACT, never re-derived from roster roles.
+  started_by: string;
   actual_start: string;
+}
+
+// D80 — THE LEADER RULE, in one place: the ride captain whose route the breadcrumb draws is the
+// account that STARTED the ride. Pure so it is testable and so both the reader (useBreadcrumb)
+// and the writer (useFleetPositions breadcrumb upsert) resolve the leader through the SAME
+// function — a reader/writer disagreement means either nobody writes the trail or two
+// "captains" clobber the same ride_id row.
+//
+// created_by is the FALLBACK, not a synonym. It means "who authored the ride"; for every ride
+// that exists today it happens to equal the starter (the ad-hoc creator both authors and starts
+// it), which is why the D80 backfill is exact. It will diverge the moment a scheduled ride is
+// started by someone other than its author — at which point started_by is already correct and
+// this fallback simply stops being reached.
+//
+// Returns null when neither is present, and callers MUST fail closed on null (write nothing,
+// draw nothing) rather than guess a leader — guessing a leader is the entire defect.
+export function rideLeaderId(row: {
+  started_by?: string | null;
+  created_by?: string | null;
+}): string | null {
+  return row.started_by ?? row.created_by ?? null;
 }
 
 export function adHocRideRow(args: {
@@ -114,6 +141,7 @@ export function adHocRideRow(args: {
     start_label: 'Ad Hoc start',
     qr_code: args.qrDataUrl,
     created_by: args.createdBy,
+    started_by: args.createdBy,
     actual_start: args.at.toISOString(),
   };
 }

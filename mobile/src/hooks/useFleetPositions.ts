@@ -170,6 +170,11 @@ export function useFleetPositions(
   rideId: string | null,
   myRiderId: string | null,
   roster: RideRoster,
+  // D80 — the ride LEADER (rides.started_by, via useRideDetails): the account that STARTED the
+  // ride. Gates the rail3_breadcrumb upsert below. This MUST be the same fact useBreadcrumb
+  // reads: if the writer and the reader disagree about who the leader is, either nobody writes
+  // the trail or two "captains" clobber the same ride_id row.
+  leaderId: string | null,
   // Per-tenant thresholds (tenants.rail3_*_threshold_minutes via useRideDetails).
   thresholds: StateThresholds = DEFAULT_THRESHOLDS,
   // The ride channel is created ONCE by the screen (useRideChannel) and shared
@@ -203,11 +208,15 @@ export function useFleetPositions(
   rideIdRef.current = rideId;
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
-  // W234: read MY current role in the send handler (to decide whether to upsert the
-  // captain's route to rail3_breadcrumb) WITHOUT making roster an effect dep — that would
-  // re-bind the FGS send effect on every roster refresh and churn the foreground service.
-  const rosterRef = useRef(roster);
-  rosterRef.current = roster;
+  // D80: read the LEADER in the send handler (to decide whether to upsert the leader's route to
+  // rail3_breadcrumb) WITHOUT making it an effect dep — a dep here would re-bind the FGS send
+  // effect and churn the foreground service. This used to be a rosterRef holding the whole
+  // roster, read as `rosterRef.current[myRiderId]?.role === 'captain'`; that club-level role
+  // check is exactly what let a phantom captain (and, in principle, EVERY club captain on the
+  // roster) pass the write gate and clobber the same ride_id row. One ride, one leader, one
+  // writer.
+  const leaderIdRef = useRef(leaderId);
+  leaderIdRef.current = leaderId;
 
   // W244 perceived-start: seed myCoords from the OS last-known fix the instant the
   // map opens, so the camera frames the rider and the Centre/Fit controls enable
@@ -407,13 +416,18 @@ export function useFleetPositions(
         void persistLastKnown(rideId, coords.lat, coords.lng, fix.ts, 'throttle');
       }
 
-      // Accumulate the decimated route on EVERY device (cheap, bounded) so the captain's
-      // route is captured from the very first fix — even before useRideRoster resolves the
-      // role. Only the CAPTAIN upserts it to rail3_breadcrumb (throttled). REST/Supabase
-      // writes escape the screen-lock freeze, so the route records even while pocketed; we set
-      // updated_at on every upsert so the 4h purge tracks LAST activity, not first insert.
+      // Accumulate the decimated route on EVERY device (cheap, bounded) so the leader's route is
+      // captured from the very first fix — even before useRideDetails resolves the ride row.
+      // Only the LEADER upserts it to rail3_breadcrumb (throttled). REST/Supabase writes escape
+      // the screen-lock freeze, so the route records even while pocketed; we set updated_at on
+      // every upsert so the 4h purge tracks LAST activity, not first insert.
+      //
+      // D80: gate on identity ("am I the account that started this ride?"), not on club role.
+      // Fails CLOSED — while leaderId is still null (ride row in flight) nobody writes, which is
+      // correct: a write from a non-leader is worse than a slightly late first write, and the
+      // path is accumulated regardless so nothing is lost by waiting.
       myPath = appendTrailPoint(myPath, coords);
-      if (rosterRef.current[myRiderId]?.role === 'captain') {
+      if (leaderIdRef.current && myRiderId === leaderIdRef.current) {
         const now = Date.now();
         if (now - lastUpsertMs >= BREADCRUMB_UPSERT_INTERVAL_MS) {
           lastUpsertMs = now;

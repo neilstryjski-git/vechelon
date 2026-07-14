@@ -82,6 +82,7 @@ const RideMapScreen: React.FC = () => {
     rideId,
     myRiderId,
     roster,
+    ride?.leaderId ?? null,
     ride?.thresholds,
     channel,
     status,
@@ -103,10 +104,18 @@ const RideMapScreen: React.FC = () => {
     getMyCoords,
   );
 
-  // W212 — ride-leader breadcrumb: the first captain's accumulated trail, sourced
-  // from the shared 'pos' broadcast (no new channel). Toggle (default ON) gates the
-  // RENDER only; the hook keeps accumulating so toggling back on shows the full line.
-  const { trail: breadcrumbTrail } = useBreadcrumb(rideId, channel, roster);
+  // W212 — ride-leader breadcrumb: the LEADER's accumulated trail, sourced from the shared 'pos'
+  // broadcast (no new channel). Toggle (default ON) gates the RENDER only; the hook keeps
+  // accumulating so toggling back on shows the full line.
+  //
+  // D80: the leader is the account that STARTED the ride (ride.leaderId ← rides.started_by), read
+  // from the ride row — NOT the first captain-roled row in the roster, which elected a phantom.
+  const { trail: breadcrumbTrail } = useBreadcrumb(
+    rideId,
+    channel,
+    ride?.leaderId ?? null,
+    ride?.leaderSource ?? 'ride.created_by_fallback',
+  );
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
   // Map the trail to Polyline coords ONCE per trail change, not on every render.
   // RideMapScreen re-renders on each fleet ping (~5s); without this memo the up-to-
