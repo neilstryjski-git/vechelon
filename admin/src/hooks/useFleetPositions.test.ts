@@ -34,7 +34,7 @@ describe('isValidPositionPayload', () => {
 
 describe('deriveFleet', () => {
   it('joins pings to the roster (identity comes from the roster, not the payload)', () => {
-    const fleet = deriveFleet({ cap: ping('cap'), r1: ping('r1') }, roster);
+    const fleet = deriveFleet({ cap: ping('cap'), r1: ping('r1') }, {}, roster);
     const byId = Object.fromEntries(fleet.map((f) => [f.riderId, f]));
     expect(fleet).toHaveLength(2);
     expect(byId.cap.displayName).toBe('Cap');
@@ -44,8 +44,42 @@ describe('deriveFleet', () => {
   });
 
   it('drops a ping from a rider not in the roster', () => {
-    const fleet = deriveFleet({ ghost: ping('ghost'), r1: ping('r1') }, roster);
+    const fleet = deriveFleet({ ghost: ping('ghost'), r1: ping('r1') }, {}, roster);
     expect(fleet.map((f) => f.riderId)).toEqual(['r1']);
+  });
+
+  it('renders a last-known-only rider as stopped at their stored position', () => {
+    const fleet = deriveFleet({}, { r1: { lat: 1, lng: 2, ts: 500 } }, roster);
+    expect(fleet).toHaveLength(1);
+    expect(fleet[0].riderId).toBe('r1');
+    expect(fleet[0].state).toBe('stopped');
+    expect(fleet[0].position).toEqual({ lat: 1, lng: 2 });
+    expect(fleet[0].lastPingAt).toBe(500);
+  });
+
+  it('drops a last-known whose rider the roster cannot identify (RLS-hidden)', () => {
+    const fleet = deriveFleet({}, { ghost: { lat: 1, lng: 2, ts: 500 } }, roster);
+    expect(fleet).toHaveLength(0);
+  });
+
+  it('live ping supersedes last-known when at least as fresh', () => {
+    const fleet = deriveFleet({ r1: ping('r1', 1000) }, { r1: { lat: 1, lng: 2, ts: 999 } }, roster);
+    expect(fleet[0].position).toEqual({ lat: 43.6, lng: -79.4 }); // live coords
+    expect(fleet[0].state).toBe('active');
+    expect(fleet[0].lastPingAt).toBe(1000);
+  });
+
+  it('live wins on an exact ts tie (>= contract)', () => {
+    const fleet = deriveFleet({ r1: ping('r1', 1000) }, { r1: { lat: 1, lng: 2, ts: 1000 } }, roster);
+    expect(fleet[0].position).toEqual({ lat: 43.6, lng: -79.4 }); // live coords
+    expect(fleet[0].state).toBe('active');
+  });
+
+  it('keeps last-known when it is fresher than a stale live ping', () => {
+    const fleet = deriveFleet({ r1: ping('r1', 800) }, { r1: { lat: 1, lng: 2, ts: 1200 } }, roster);
+    expect(fleet[0].position).toEqual({ lat: 1, lng: 2 }); // last-known coords
+    expect(fleet[0].state).toBe('stopped');
+    expect(fleet[0].lastPingAt).toBe(1200);
   });
 });
 

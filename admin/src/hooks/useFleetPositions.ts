@@ -16,6 +16,12 @@ export const FLEET_STALE_AFTER_MS = 15000;
 
 const ROSTER_REFETCH_DEBOUNCE_MS = 10000;
 
+// Cadence for refreshing persisted last-known positions from ride_participants.
+// A meaningful-event read (Pillar II §2), NOT per-ping — the realtime channel is
+// the live path; this only seeds the first-open view and backfills parked/quiet
+// riders (W273 / mirrors mobile W262).
+const LAST_KNOWN_REFRESH_MS = 20000;
+
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
 // RLS-gated roster (useRideRoster) — W170's channel authz is tenant-level, so
@@ -69,26 +75,62 @@ export function isStalePing(
 // renderable fleet. Unknown riderIds (not in the roster the server let us read)
 // are dropped — for a Rider viewer, "unknown" is exactly the set RLS hid, so the
 // §4.1 visibility boundary holds even before the client-side role filter runs.
-// Pure function — exported for unit testing.
+// A persisted last-known position (ride_participants.last_*), keyed by account_id.
+// `ts` is epoch ms parsed from last_ping — the SAME device clock the live ping `ts`
+// carries, so the two are directly comparable for precedence.
+export interface LastKnownEntry {
+  lat: number;
+  lng: number;
+  ts: number;
+}
+export type LastKnownMap = Record<string, LastKnownEntry>;
+
+// Joins live pings AND persisted last-known positions to the RLS-gated roster,
+// producing the renderable fleet. LIVE-SUPERSEDES precedence: a live ping wins the
+// instant it is at least as fresh as the stored last-known, so a rider never
+// freezes at a rest stop once they roll again. A rider with only a last-known
+// renders as 'stopped'; RaceControl greys markers by ping AGE (isStalePing), so a
+// long-quiet rider shows grey while a just-parked one may briefly still read live
+// until the staleness threshold elapses. A rider with neither a ping nor a
+// last-known does not render. Unknown riderIds (RLS hid them) are dropped — the §4.1
+// boundary holds before the client-side role filter runs. Pure — exported for testing.
 export function deriveFleet(
   pings: Record<string, PositionPayload>,
+  lastKnown: LastKnownMap,
   roster: RideRoster,
 ): FleetParticipant[] {
   const fleet: FleetParticipant[] = [];
-  for (const [riderId, p] of Object.entries(pings)) {
+  const riderIds = new Set<string>([...Object.keys(pings), ...Object.keys(lastKnown)]);
+  for (const riderId of riderIds) {
     const entry = roster[riderId];
     if (!entry) continue;
-    fleet.push({
+    const live = pings[riderId];
+    const lk = lastKnown[riderId];
+    const useLive = live != null && (lk == null || live.ts >= lk.ts);
+    const base = {
       riderId,
       displayName: entry.displayName,
       role: entry.role,
       phone: entry.phone,
       email: entry.email,
       accountStatus: entry.participantStatus,
-      state: p.state ?? 'active',
-      position: { lat: p.lat, lng: p.lng },
-      lastPingAt: p.ts,
-    });
+    };
+    if (useLive) {
+      fleet.push({
+        ...base,
+        state: live.state ?? 'active',
+        position: { lat: live.lat, lng: live.lng },
+        lastPingAt: live.ts,
+      });
+    } else {
+      // lk is defined here: riderId came from the union and useLive is false.
+      fleet.push({
+        ...base,
+        state: 'stopped',
+        position: { lat: lk.lat, lng: lk.lng },
+        lastPingAt: lk.ts,
+      });
+    }
   }
   return fleet;
 }
@@ -177,6 +219,7 @@ export function useFleetPositions(
 } {
   const { channel, status } = useRideChannel(rideId);
   const [pings, setPings] = useState<Record<string, PositionPayload>>({});
+  const [lastKnown, setLastKnown] = useState<LastKnownMap>({});
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {
@@ -191,7 +234,45 @@ export function useFleetPositions(
     // subscribed); postgres_changes may not — none are used here.
   }, [channel]);
 
-  const fleet = useMemo(() => deriveFleet(pings, roster), [pings, roster]);
+  // Seed + refresh persisted last-known positions so the operator sees where
+  // riders are on OPEN — and while a rider is parked/quiet and no longer
+  // broadcasting — instead of an empty map until the next live ping (W273).
+  // Read at a meaningful cadence only, never per-ping (Pillar II §2). Live pings
+  // supersede in deriveFleet, so a moving rider always renders live.
+  useEffect(() => {
+    if (!rideId) {
+      setLastKnown({});
+      return;
+    }
+    let cancelled = false;
+    const fetchLastKnown = async () => {
+      const { data, error } = await supabase
+        .from('ride_participants')
+        .select('account_id, last_lat, last_long, last_ping')
+        .eq('ride_id', rideId);
+      if (cancelled || error || !data) return;
+      const next: LastKnownMap = {};
+      for (const row of data) {
+        if (!row.account_id) continue; // guest rows without an account
+        if (row.last_lat == null || row.last_long == null || !row.last_ping) continue;
+        const ts = Date.parse(row.last_ping as string);
+        if (Number.isNaN(ts)) continue;
+        next[row.account_id] = { lat: row.last_lat, lng: row.last_long, ts };
+      }
+      setLastKnown(next);
+    };
+    void fetchLastKnown();
+    const t = setInterval(fetchLastKnown, LAST_KNOWN_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [rideId]);
+
+  const fleet = useMemo(
+    () => deriveFleet(pings, lastKnown, roster),
+    [pings, lastKnown, roster],
+  );
 
   // Mid-ride joiner detection runs post-commit, never during render: a ping
   // from a rider the roster can't identify asks for a (debounced) roster
