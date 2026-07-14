@@ -19,20 +19,28 @@ const POSITION_EVENT = 'pos';
 // ping, and by sendDormantPing below. (The old expo-location FGS TaskManager path that
 // also used this was removed in W203 once Transistorsoft became the sole engine.)
 export async function restBroadcast(rideId: string, payload: Record<string, unknown>): Promise<boolean> {
-  const { data: s } = await supabase.auth.getSession();
-  const token = s.session?.access_token;
-  if (!token) return false;
-  // D77 — the identity invariant, enforced at the ONE point where the CLAIMED rider and the
-  // token that will actually sign the request meet. These could disagree: the payload carried a
-  // snapshot taken at map-mount while this token comes from the live session, so after an
-  // account swap the app broadcast as A over B's credentials — data the server cannot reject,
-  // because the signature is genuinely B's. REFUSE rather than send: a wrong-identity position
-  // corrupts every receiver's fleet, and dropping one ping costs nothing (the next fix is
-  // seconds away). Reuse the session we already hold — no second read on the hot ping path.
-  const claimed = typeof payload.riderId === 'string' ? payload.riderId : null;
-  const ok = await isCurrentIdentity(claimed, rideId, 'broadcast', s.session?.user?.id ?? null);
-  if (!ok) return false;
+  // The try wraps getSession() TOO, not just the fetch. It used to cover only the fetch, so the
+  // contract above ("false if there was no token or it threw") was a lie: getSession() can REJECT
+  // — auth-js takes the processLock configured in supabase.ts and throws on a lock-acquire
+  // timeout, and it rethrows non-AuthErrors from a token refresh. That rejection propagated
+  // straight out of restBroadcast into the Transistorsoft location handler, which calls this
+  // fire-and-forget (`void restBroadcast(...)`) — an unhandled rejection, and a rider silently
+  // stranded off the fleet map with nothing logged. Now every failure mode returns false: one
+  // dropped ping, the next fix is seconds away.
   try {
+    const { data: s } = await supabase.auth.getSession();
+    const token = s.session?.access_token;
+    if (!token) return false;
+    // D77 — the identity invariant, enforced at the ONE point where the CLAIMED rider and the
+    // token that will actually sign the request meet. These could disagree: the payload carried a
+    // snapshot taken at map-mount while this token comes from the live session, so after an
+    // account swap the app broadcast as A over B's credentials — data the server cannot reject,
+    // because the signature is genuinely B's. REFUSE rather than send: a wrong-identity position
+    // corrupts every receiver's fleet, and dropping one ping costs nothing. Reuse the session we
+    // already hold — no second read on the hot ping path.
+    const claimed = typeof payload.riderId === 'string' ? payload.riderId : null;
+    const ok = await isCurrentIdentity(claimed, rideId, 'broadcast', s.session?.user?.id ?? null);
+    if (!ok) return false;
     await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
       method: 'POST',
       headers: {

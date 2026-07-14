@@ -58,12 +58,18 @@ export async function isCurrentIdentity(
     });
     return false;
   } catch {
-    // FAIL OPEN, deliberately. This is a BACKSTOP against a regression, not a security control
-    // — the real boundary is server-side RLS, which cannot be talked out of anything by a client.
-    // So a hiccup INSIDE the guard must never be able to do what the guard exists to prevent
-    // harm from: silence a rider. Throwing here would strand a live rider off the fleet map (and
-    // never resolve, because restBroadcast refuses on false). A missed mismatch costs one unlogged
-    // diagnostic row; a false refusal costs a rider their position on a live ride.
+    // Reachable from ONE caller, and be precise about which: restBroadcast passes sessionUserId,
+    // so its try body is a synchronous compare plus a void-ed logMeasurement (itself try/catch'd)
+    // and cannot throw — the catch is dead on the path that REFUSES. It is live only at the
+    // beacon site, which calls this fire-and-forget and ignores the result. So what this actually
+    // buys is narrow and worth stating honestly: it stops a rejecting getSession() (auth-js can
+    // throw on a processLock timeout, or rethrow a non-AuthError) from becoming an unhandled
+    // promise rejection on the SOS path. It does not, and cannot, rescue a rider's broadcast.
+    //
+    // Fail OPEN regardless, because the posture must survive a future caller that DOES await it:
+    // this is a backstop against a regression, not a security control — the real boundary is
+    // server-side RLS, which no client can talk its way past. A missed mismatch costs one
+    // diagnostic row; a guard that refuses because it broke would cost a rider their position.
     return true;
   }
 }

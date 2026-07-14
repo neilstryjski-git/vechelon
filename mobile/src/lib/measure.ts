@@ -90,20 +90,36 @@ let seq = 0;
 let cachedUserId: string | null | undefined; // undefined = not yet looked up
 let tenantCache: Record<string, string> = {}; // rideId -> tenant_id (uuid)
 
-// getSession(), NOT getUser(). getUser() is a NETWORK call (GET /auth/v1/user), and the line
-// below caches whatever it yields — including `null` on a transient failure. `null !== undefined`,
-// so the cache never retries and logMeasurement then short-circuits on `!userId`: ONE failed
-// request would take the ENTIRE sink dark (gps_ping, channel_status, fetch_result, beacon_latency
-// — and identity_mismatch, the very backstop D77 rests on) until the next auth event, up to an
-// hour away. Pre-D77 that could only bite once, at app start, typically online at the trailhead;
-// resetting the cache per auth event (below) would have re-armed it hourly, MID-RIDE, on exactly
-// the marginal cellular this app is built for. getSession() reads the local persisted session:
-// no network, no failure mode. It is also what identity.ts uses, so the two agree by construction.
+// NEVER CACHE A NEGATIVE. This is the whole point — not the choice of auth call.
+//
+// The old line was `cachedUserId = data.user?.id ?? null` over getUser(). Because
+// `null !== undefined`, a single failed lookup cached null FOREVER (until the next auth event),
+// and logMeasurement short-circuits on `!userId` — so one bad moment took the ENTIRE sink dark:
+// gps_ping, channel_status, fetch_result, beacon_latency, and identity_mismatch, the very
+// backstop D77 rests on. Resetting the cache per auth event would have RE-ARMED that hourly,
+// mid-ride, on exactly the marginal cellular this app exists for.
+//
+// Two changes, and BOTH are needed:
+//   1. getSession() instead of getUser(). getUser() is unconditionally a network GET
+//      /auth/v1/user. Be precise about what getSession() is, though — it is NOT simply "local":
+//      inside auth-js's 90s expiry margin it refreshes over the network, it takes the
+//      processLock configured in supabase.ts, and it can throw. It is merely local in the
+//      common case, which makes a failed lookup rare rather than impossible.
+//   2. Only cache a POSITIVE result. Rarity is not correctness — a refresh that fails while the
+//      access token has genuinely expired still returns {session: null}, and on a RETRYABLE
+//      (offline) failure auth-js emits no SIGNED_OUT, because the session is preserved on disk.
+//      So a null can still be produced while a perfectly good session sits in AsyncStorage.
+//      Declining to cache it costs nothing: sign-out is already handled by resetMeasureIdentity,
+//      and the next call simply re-reads.
+//
+// A throw here is safe: logMeasurement wraps its whole body in try/catch, so it drops ONE
+// measurement and leaves cachedUserId `undefined` — unresolved, not poisoned.
 async function getUserId(): Promise<string | null> {
   if (cachedUserId !== undefined) return cachedUserId;
   const { data } = await supabase.auth.getSession();
-  cachedUserId = data.session?.user?.id ?? null;
-  return cachedUserId;
+  const id = data.session?.user?.id ?? null;
+  if (id) cachedUserId = id;
+  return id;
 }
 
 // D77 — these caches are MODULE-level, so they outlive the React tree: remounting the app
