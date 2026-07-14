@@ -25,19 +25,28 @@ interface FleetMapProps {
 const BREADCRUMB_COLOR = '#4F46E5';
 const BREADCRUMB_WEIGHT = 5;
 
-const ICON_BASE = 'https://maps.google.com/mapfiles/ms/icons/';
 const TORONTO = { lat: 43.6532, lng: -79.3832 };
 
-// Stale → grey (last-known, no longer live). Command roles (Captain/SAG) → blue
-// to stand out from riders → yellow. Mirrors InteractiveMap's hosted-icon scheme.
-function fleetIcon(role: RideRole, stale: boolean): google.maps.Icon {
-  let color: string;
-  if (stale) color = 'grey';
-  else if (role === 'captain' || role === 'support') color = 'blue';
-  else color = 'yellow';
+// Marker glyphs are inline vector Symbols, NOT hosted PNGs: Google's mapfiles set
+// has no grey-dot.png (it 404s), so the previous scheme rendered every stale /
+// last-known marker INVISIBLE — which is exactly the set W273 puts on the map
+// (last-known riders are always stale). A Symbol circle renders every state
+// reliably and needs no network fetch. Stale → grey; command (Captain/SAG) →
+// blue; rider → amber.
+function fleetColor(role: RideRole, stale: boolean): string {
+  if (stale) return '#9CA3AF';
+  if (role === 'captain' || role === 'support') return '#2563EB';
+  return '#F59E0B';
+}
+
+function fleetIcon(role: RideRole, stale: boolean): google.maps.Symbol {
   return {
-    url: `${ICON_BASE}${color}-dot.png`,
-    scaledSize: new google.maps.Size(32, 32),
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: fleetColor(role, stale),
+    fillOpacity: 1,
+    strokeColor: '#ffffff',
+    strokeWeight: 2,
+    scale: 8,
   };
 }
 
@@ -120,14 +129,14 @@ const FleetMap: React.FC<FleetMapProps> = ({ markers, onMarkerClick, breadcrumb,
         marker.setPosition(m.position);
         marker.setIcon(fleetIcon(m.role, m.stale));
         marker.setTitle(m.label);
-        marker.setOpacity(m.stale ? 0.55 : 1);
+        marker.setOpacity(m.stale ? 0.85 : 1);
       } else {
         marker = new google.maps.Marker({
           position: m.position,
           map,
           title: m.label,
           icon: fleetIcon(m.role, m.stale),
-          opacity: m.stale ? 0.55 : 1,
+          opacity: m.stale ? 0.85 : 1,
         });
         marker.addListener('click', () => {
           onMarkerClickRef.current?.(m.id);
