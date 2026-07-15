@@ -52,6 +52,13 @@ export interface StaleInput {
   peerCount: number;
   // Wall clock of the last 'stale' emission, for the cooldown.
   lastStaleEmitMs: number;
+  // D85 — is the realtime channel currently SUBSCRIBED (healthy)? A subscribed channel that is
+  // merely quiet is NOT a fault: after a ride ends nobody broadcasts, so silence is the correct
+  // steady state, and the pre-D85 sweep rebuilt the healthy channel every 5 minutes FOREVER
+  // (the post-ride battery-drain metronome). A channel that truly died surfaces as CHANNEL_ERROR/
+  // CLOSED — i.e. NOT subscribed — so the 2026-07-05 dead-socket case (D72) is still caught here.
+  // Absent/false ⇒ don't suppress (connecting/errored channels may still need a sweep).
+  channelSubscribed?: boolean;
   silenceMs?: number;
   cooldownMs?: number;
 }
@@ -61,9 +68,11 @@ export function isChannelStale({
   lastActivityMs,
   peerCount,
   lastStaleEmitMs,
+  channelSubscribed,
   silenceMs = CHANNEL_SILENCE_MS,
   cooldownMs = STALE_COOLDOWN_MS,
 }: StaleInput): boolean {
+  if (channelSubscribed) return false; // healthy-but-quiet is not a fault (D85)
   if (peerCount <= 0) return false;
   if (nowMs - lastActivityMs < silenceMs) return false;
   return nowMs - lastStaleEmitMs >= cooldownMs;

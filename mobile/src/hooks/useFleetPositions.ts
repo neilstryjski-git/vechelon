@@ -13,7 +13,7 @@ import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 import { logFetchResult, logResumeSignal } from '../lib/lifecycle';
-import { useResume, noteChannelActivity, notePeerCount } from './useResume';
+import { useResume, noteChannelActivity, notePeerCount, noteChannelStatus } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 import {
   SenderStateTracker,
@@ -324,6 +324,13 @@ export function useFleetPositions(
     const peers = Object.keys(roster).filter((id) => id !== myRiderId).length;
     notePeerCount(peers);
   }, [roster, myRiderId]);
+
+  // D85 — feed channel health to the staleness sweep so it never rebuilds a SUBSCRIBED-but-quiet
+  // channel (the post-ride 5-min metronome). A dead channel reads as CHANNEL_ERROR/CLOSED and is
+  // still swept.
+  useEffect(() => {
+    noteChannelStatus(status);
+  }, [status]);
 
   // Receive: fold every position broadcast into the ping map, keyed by rider.
   useEffect(() => {

@@ -54,6 +54,20 @@ test('silence past the threshold with peers on the roster is stale', () => {
   assert.equal(isChannelStale(staleBase), true);
 });
 
+test('a SUBSCRIBED (healthy) channel is never swept, however long it is quiet (D85)', () => {
+  // Post-ride: nobody broadcasts, channel is fine — the pre-D85 sweep rebuilt it every 5 min forever.
+  assert.equal(isChannelStale({ ...staleBase, channelSubscribed: true }), false);
+  // even long past the cooldown, a healthy channel stays unswept
+  assert.equal(
+    isChannelStale({ ...staleBase, channelSubscribed: true, lastStaleEmitMs: staleBase.nowMs - STALE_COOLDOWN_MS }),
+    false,
+  );
+});
+
+test('a dead (not-subscribed) channel is still swept — the D72 case survives the D85 gate', () => {
+  assert.equal(isChannelStale({ ...staleBase, channelSubscribed: false }), true);
+});
+
 test('riding alone is never stale — silence is correct, a rebuild is pure cost', () => {
   assert.equal(isChannelStale({ ...staleBase, peerCount: 0 }), false);
 });

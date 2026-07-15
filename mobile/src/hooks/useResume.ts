@@ -33,6 +33,7 @@ let lastTickMs = Date.now();
 let lastActivityMs = Date.now();
 let lastStaleEmitMs = 0;
 let peerCount = 0;
+let channelSubscribed = false;
 let rideId: string | null = null;
 
 // Called by useFleetPositions on every inbound broadcast — the liveness evidence the staleness
@@ -46,6 +47,13 @@ export function notePeerCount(count: number): void {
   peerCount = count;
 }
 
+// D85 — the current realtime channel status. A SUBSCRIBED channel that is quiet is healthy (nobody
+// is broadcasting — e.g. the ride is over), so the staleness sweep must NOT rebuild it; a channel
+// that died reads as CHANNEL_ERROR/CLOSED and is still swept. Kills the post-ride 5-min metronome.
+export function noteChannelStatus(status: string | null): void {
+  channelSubscribed = status === 'SUBSCRIBED';
+}
+
 function emit(source: ResumeSource): void {
   // Snapshot: a listener may unsubscribe during iteration (unmount inside a recovery).
   for (const listener of [...listeners]) listener(source);
@@ -57,7 +65,7 @@ function tick(): void {
   if (isClockGap(now, lastTickMs)) coalescer.offer('clockgap', now);
   lastTickMs = now;
 
-  if (isChannelStale({ nowMs: now, lastActivityMs, peerCount, lastStaleEmitMs })) {
+  if (isChannelStale({ nowMs: now, lastActivityMs, peerCount, lastStaleEmitMs, channelSubscribed })) {
     lastStaleEmitMs = now;
     coalescer.offer('stale', now);
   }
@@ -91,6 +99,7 @@ function stop(): void {
   // ride opens, and a stale peerCount would let the sweep fire before the roster effect re-runs.
   coalescer.reset();
   peerCount = 0;
+  channelSubscribed = false;
   lastStaleEmitMs = 0;
 }
 
