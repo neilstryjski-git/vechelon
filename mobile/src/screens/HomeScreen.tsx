@@ -23,6 +23,7 @@ import {
   setTrackingPingEnabled,
 } from '../lib/trackingPing';
 import { sendDiagnosticLog } from '../lib/diagnostics';
+import { checkAndApplyUpdate } from '../lib/otaUpdate';
 import { versionLabel } from '../lib/version';
 import AdHocCreator from '../components/AdHocCreator';
 import type { RootStackParamList } from './../navigation/RootNavigator';
@@ -79,6 +80,23 @@ const HomeScreen: React.FC = () => {
     } else {
       Alert.alert('Could not prepare log', result.error || 'No log available, or no mail account is set up on this device.');
     }
+  }, []);
+
+  // Force-pull the latest OTA on demand — the reliable manual path when the automatic,
+  // cold-start-gated check is flaky. On 'updated' the app reloads (this callback won't return).
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const onCheckUpdate = useCallback(async () => {
+    setCheckingUpdate(true);
+    const result = await checkAndApplyUpdate();
+    setCheckingUpdate(false);
+    if (result.status === 'current') {
+      Alert.alert('Up to date', "You're on the latest build for this channel.");
+    } else if (result.status === 'unavailable') {
+      Alert.alert('Updates unavailable', 'This build has updates disabled (a dev build).');
+    } else if (result.status === 'error') {
+      Alert.alert('Update check failed', result.message);
+    }
+    // 'updated' → reloadAsync already restarted the app into the new bundle.
   }, []);
 
   useEffect(() => {
@@ -173,6 +191,20 @@ const HomeScreen: React.FC = () => {
       >
         <Text style={[styles.diagButtonText, { color: theme.primaryColor }]}>
           Send diagnostic log
+        </Text>
+      </TouchableOpacity>
+
+      {/* Manual OTA force-pull — the reliable path when the automatic (cold-start-gated) check is
+          flaky. Fetches + reloads into the latest JS in one tap. Closed-test aid. */}
+      <TouchableOpacity
+        style={[styles.diagButton, { borderColor: theme.primaryColor }]}
+        onPress={onCheckUpdate}
+        disabled={checkingUpdate}
+        accessibilityRole="button"
+        accessibilityLabel="Check for update"
+      >
+        <Text style={[styles.diagButtonText, { color: theme.primaryColor }]}>
+          {checkingUpdate ? 'Checking…' : 'Check for update'}
         </Text>
       </TouchableOpacity>
 
