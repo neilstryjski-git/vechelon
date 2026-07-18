@@ -158,6 +158,25 @@ export async function startBgGeo(
   // rather than forcing the moving state. Tracking begins as soon as the rider actually moves.
 }
 
+// D86: re-engage tracking after a condition that can leave the SDK's native motion-activity
+// detection dormant — notably ready()/start() running while Android Battery Saver was ON
+// (Saver throttles the motion-activity API the engine relies on, W261). One forced 'moving'
+// transition kicks the engine out of the dormant/stationary state; native detection resumes
+// governing afterwards — we deliberately do NOT latch moving (that would regress W261's
+// un-force). No-op if tracking was never configured, so it is safe to call anytime.
+//
+// EMPIRICAL: that changePace(true) fully revives a Saver-throttled engine is confirmed by the
+// batched D86 field session; the call is additive and strictly better than the current dead state.
+export async function nudgeBgGeo(): Promise<void> {
+  if (!configured) return; // engine never initialised (or expo-only build) — nothing to nudge
+  const BG = getBgGeo();
+  try {
+    await BG.changePace(true);
+  } catch (e) {
+    console.warn('[Rail3][bgGeo] nudge (changePace) failed', e);
+  }
+}
+
 export async function stopBgGeo(): Promise<void> {
   currentHandler = null;
   currentMotionHandler = null;

@@ -73,6 +73,10 @@ export type MeasureKind =
   // "recovery fired but no markers appeared" had no recorded cause.
   | 'channel_status'
   | 'fetch_result'
+  // D86 — the battery-saver recovery nudge fired: Saver was turned OFF mid-ride, so the engine
+  // was forced to re-engage the motion detection that Saver-at-start left dormant. Lets the
+  // field session confirm the fix engaged and correlate it with pings resuming.
+  | 'bg_nudge'
   // D77 — the identity invariant tripped: a broadcast or DB write was attempted under an id
   // that is NOT the current session's user. Should never appear; if it does, the fleet is
   // being fed fabricated (but validly signed) data and this row is the only way to see it.

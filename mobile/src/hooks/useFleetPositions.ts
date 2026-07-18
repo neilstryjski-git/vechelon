@@ -7,7 +7,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
-import { startBgGeo, stopBgGeo } from '../lib/bgGeo';
+import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
+import { watchBatterySaverCleared } from '../lib/batteryGuards';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
@@ -477,7 +478,17 @@ export function useFleetPositions(
       lastLastKnownMs = Date.now();
       void persistLastKnown(rideId, coords.lat, coords.lng, ts, 'stop');
     });
+    // D86: if the rider turns Battery Saver OFF mid-ride, re-engage the engine. Saver at start
+    // throttles motion detection and startBgGeo is idempotent, so complying with the advisory
+    // otherwise does nothing — the field case where the captain sent 2 pings all ride and was
+    // invisible to the fleet. Nudge on the ON->OFF edge and log it so the field session can
+    // confirm the fix fired and correlate with pings resuming.
+    const saverClearedUnsub = watchBatterySaverCleared(() => {
+      void nudgeBgGeo();
+      void logMeasurement({ rideId, kind: 'bg_nudge', payload: { reason: 'battery_saver_cleared' } });
+    });
     return () => {
+      saverClearedUnsub();
       void stopBgGeo();
     };
   }, [backgroundReady, rideId, myRiderId, thresholds]);

@@ -1,5 +1,33 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-07-18 — D86 Battery Saver at engine start leaves motion detection dead all ride (Lane B)
+
+- ROOT CAUSE (proven in code; field-confirmed 2026-07-16 morning ride 06abdab3): the W177/D63
+  Battery-Saver advisory fires AFTER `startBgGeo` — `useFleetPositions()` at RideMapScreen.tsx:81
+  registers its engine effect before the join effect at :210-212 that calls
+  `promptIfBatterySaverOn('join')`. So the Transistorsoft engine boots UNDER Saver, which throttles
+  the native motion-activity API it relies on (W261). And `startBgGeo` is idempotent (`configured`
+  flag), so complying with the advisory (Neil turned Saver off ~6s later) re-inits NOTHING. Result:
+  captain emitted 2 `gps_ping` in 2h19m, `isMoving` never went true, invisible to the fleet — while
+  his own OS-seeded self-view looked fine. Same handset logged 232 pings that evening (Saver off).
+- FIX targets root cause #2 (compliance re-inits nothing), which makes #1 (ordering) moot: re-engage
+  the engine when Saver is turned OFF mid-ride.
+  - `bgGeo.ts`: new `nudgeBgGeo()` — one-shot `BG.changePace(true)` to kick the engine out of its
+    dormant state; NOT a latched force (would regress W261's un-force). No-op if `!configured`;
+    try/catch, never throws.
+  - `batteryGuards.ts`: new `watchBatterySaverCleared(onCleared)` — fires on a true Saver ON→OFF edge
+    via expo-battery `addLowPowerModeListener` (catches the in-foreground toggle, THE field case) with
+    an AppState `'active'` backstop for a backgrounded toggle. Android-only; returns an unsubscribe.
+  - `useFleetPositions.ts`: subscribe in the `startBgGeo` effect; on cleared → `nudgeBgGeo()` + log a
+    `'bg_nudge'` measurement so the field session can confirm the fix fired and correlate with pings.
+  - `measure.ts`: added `'bg_nudge'` to `MeasureKind`.
+- EMPIRICAL ASSUMPTION: that `changePace(true)` fully revives a Saver-throttled engine — additive and
+  strictly better than the dead state; validated by the batched D86 field session (which doubles as
+  the cheap Saver-ON walk test). Status: CODED, not built/validated.
+- tsc clean (only pre-existing deepLinkAuth.ts errors). APIs confirmed: expo-battery
+  `addLowPowerModeListener`; `BG.changePace` typechecks. Branch `d86-battery-saver-engine-start` off
+  field tip `d85-ride-lifecycle` (7ccaa3a). Rides one batched EAS build + field session with D83.
+
 ## 2026-07-06 — W261 un-force tracking + last-position-on-stop (G32)
 
 - CONTEXT: under the "for the trial" forced-streaming scaffold (`disableStopDetection:true` +
