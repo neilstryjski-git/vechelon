@@ -1,5 +1,20 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-07-18 — D83 Ad Hoc creation swallowed a failed captain self-RSVP (Lane B)
+
+- ROOT CAUSE: `AdHocCreator.tsx` inserted the ride row FIRST, then self-RSVP'd the creator as
+  `role='captain'` fire-and-forget — `if (partErr) console.warn(...)` and navigated on regardless. A
+  failed self-RSVP left the ride ACTIVE with its own captain missing from `ride_participants`, which
+  breaks the breadcrumb write RLS (`is_rail3_ride_captain`), the leader election, and §4.1 visibility.
+- FIX (client-only): retry the self-RSVP up to 3× with short backoff; treat a duplicate (`23505` /
+  "duplicate|unique") as success since the captain row is already present; on persistent failure
+  DELETE the just-created ride (roll back the orphan) and throw so the existing catch surfaces the
+  error and stays on the creator — never navigate into a captain-less ride. Atomic create+RSVP would
+  need a server RPC (Lane A / bigger change); this client fix removes the silent-swallow and the
+  orphan-active-ride without new schema.
+- tsc clean (deepLinkAuth.ts only). Branch `d86-battery-saver-engine-start` (stacked with D86); rides
+  the same batched EAS build + field session.
+
 ## 2026-07-18 — D86 Battery Saver at engine start leaves motion detection dead all ride (Lane B)
 
 - ROOT CAUSE (proven in code; field-confirmed 2026-07-16 morning ride 06abdab3): the W177/D63

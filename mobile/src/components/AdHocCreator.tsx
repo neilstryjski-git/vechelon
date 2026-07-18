@@ -186,12 +186,33 @@ const AdHocCreator: React.FC = () => {
       // Self-RSVP as captain (participant_insert_policy branch 1) so the map
       // roster knows who runs this ride. W195: hydrate display_name/email from
       // accounts so Race Control shows the captain's real name, not 'Rider'.
-      const { error: partErr } = await selfRsvpWithIdentity({
-        rideId,
-        accountId: userId,
-        role: 'captain',
-      });
-      if (partErr) console.warn('[Rail3] captain self-RSVP failed', partErr);
+      // D83: the captain MUST be on the roster — the ride's breadcrumb write RLS
+      // (is_rail3_ride_captain), the leader election, and §4.1 visibility all require the captain's
+      // participant row. A swallowed self-RSVP failure left the ride ACTIVE with its own captain
+      // missing. Retry transient failures; treat a duplicate as success (the row is already there);
+      // on persistent failure roll back the orphan ride and surface the error rather than entering
+      // a broken, captain-less ride.
+      let partErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const { error } = await selfRsvpWithIdentity({ rideId, accountId: userId, role: 'captain' });
+        if (!error) {
+          partErr = null;
+          break;
+        }
+        partErr = error;
+        const code = (error as { code?: string })?.code ?? '';
+        const msg = (error as { message?: string })?.message ?? '';
+        if (code === '23505' || /duplicate|already exists|unique/i.test(msg)) {
+          partErr = null; // the captain row is already present — treat as success
+          break;
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+      if (partErr) {
+        // Roll back the orphan ride so we never leave behind (or enter) a captain-less active ride.
+        await supabase.from('rides').delete().eq('id', rideId);
+        throw new Error('Could not add you as captain — ride not started. Please try again.');
+      }
 
       setPhase('idle');
       setQrJob(null);
