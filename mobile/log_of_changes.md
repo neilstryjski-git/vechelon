@@ -609,3 +609,22 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   never transient unmounts. Instrumented: app_state_change {event:'departed_sent'|'departed_recv'}.
 - tsc clean on all touched files (only pre-existing deepLinkAuth.ts errors). JS-only → OTA-safe.
   CODED, not yet on-device-validated.
+
+## D90 — force engine engagement at ride join (changePace(true) after start) (2026-07-19)
+- ROOT CAUSE (TS Philosophy of Operation, confirmed by on-device native log): start() leaves the
+  engine STATIONARY with location-services OFF; it only enters the moving/tracking state when the
+  Motion-Activity API detects movement OR the device exits a ~200m stationary geofence. If the phone
+  is locked during that warm-up (field: ride f51f7add, S23, locked ~4s after start → OS suspended the
+  app before Activity-Recognition fired → engine never left stationary → ZERO fixes for the whole
+  21-min ride, masked by the OS blue dot; ride 2 mins later worked because kept foreground briefly).
+  TS explicitly recommends changePace(true) for 'start an activity' apps ('like a Jogging App') —
+  joining a ride IS that moment. W261 removed changePace(true) ('let motion detection decide', for
+  battery) — which diverges from TS guidance for this app class and is the direct cause.
+- bgGeo.ts: after BG.start(), call BG.changePace(true) (wrapped, never throws). ONE-SHOT kick, NOT
+  the W261 forced-streaming scaffold — no disableStopDetection, so stopTimeout still returns the
+  engine to stationary (services off) when genuinely parked → deterministic engagement at the start
+  that matters + battery preserved when stopped. Replaces the old 'W261: no changePace' comment.
+- Prongs 2 (resume re-assert — ride 1's mid-ride unlock did NOT revive the engine; resume restores
+  the channel/receive but not the tracking engine/send) and 3 (self-health signal, since the OS dot
+  masks a dead engine) tracked in D90 as follow-ups (tie to D89/W277). This commit = prong 1 only.
+- tsc clean (only pre-existing deepLinkAuth.ts). Ref: Transistorsoft Philosophy of Operation (wiki).

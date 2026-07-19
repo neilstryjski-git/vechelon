@@ -244,8 +244,25 @@ export async function startBgGeo(
     configured = true;
   }
   await BG.start();
-  // W261: no changePace(true) — we let the SDK's motion detection decide moving vs stationary
-  // rather than forcing the moving state. Tracking begins as soon as the rider actually moves.
+  // D90 — FORCE the moving state at ride join. Per Transistorsoft's Philosophy of Operation,
+  // start() leaves the engine STATIONARY with location-services OFF; it only begins tracking once
+  // its Motion-Activity API detects movement OR the device exits a ~200m stationary geofence. TS
+  // explicitly recommends calling changePace(true) for "start an activity" apps ("like a Jogging
+  // App"). Joining a ride IS that moment — we KNOW the rider is about to be active. Without this,
+  // if the phone is locked during the brief stationary warm-up (field-observed 2026-07-19, ride
+  // f51f7add: locked ~4s after start → OS suspended the app before Activity-Recognition fired →
+  // engine never left stationary → ZERO fixes for the whole ride, masked by the OS blue dot),
+  // the ride can run completely dark.
+  //
+  // This is a ONE-SHOT kick, NOT the W261 forced-streaming scaffold: we do NOT set
+  // disableStopDetection, so the SDK's stopTimeout still returns the engine to stationary
+  // (services off) once the rider is genuinely stopped — deterministic engagement at the start
+  // that matters, with the battery savings preserved when parked. Never throw into start().
+  try {
+    await BG.changePace(true);
+  } catch (e) {
+    console.warn('[Rail3][bgGeo] changePace(true) on start failed', e);
+  }
 }
 
 // D86: re-engage tracking after a condition that can leave the SDK's native motion-activity
