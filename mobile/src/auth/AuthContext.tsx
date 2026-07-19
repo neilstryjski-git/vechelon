@@ -12,8 +12,12 @@ import { supabase } from '../lib/supabase';
 import { resetMeasureIdentity } from '../lib/measure';
 import { isIdentityChange } from '../lib/identityDelta';
 import { TENANT_SLUG } from '../lib/env';
-import { broadcastDeparture } from '../lib/backgroundLocation';
 import { getActiveRide, clearActiveRide } from '../lib/activeRide';
+// NOTE: backgroundLocation is imported LAZILY inside signOut, NOT at module top level.
+// AuthProvider mounts at app launch (App.tsx), so a static import here would pull
+// backgroundLocation + its useRideChannel/identity/useResume subtree into the LAUNCH import
+// sequence — which is not launch-safe and rolled back the D87 OTA on boot (ee6a927: 0 devices
+// ever ran it). That subtree only ever loaded on the ride screen before; keep it that way.
 
 // Auto-join the build's tenant on sign-in (W191 — staging PoC onboarding).
 //
@@ -143,6 +147,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const active = getActiveRide();
         if (active) {
           try {
+            // Lazy require — see the note by the imports. Loading backgroundLocation's subtree
+            // here (runtime, post-launch) instead of at module load keeps it out of the app
+            // launch sequence, where it is not safe to eval. Matches bgGeo.ts's lazy-require.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { broadcastDeparture } = require('../lib/backgroundLocation');
             await broadcastDeparture(active.rideId, active.riderId);
           } catch {
             // best-effort — a missed departure just leaves the pre-existing greying phantom
