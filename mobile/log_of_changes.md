@@ -1,5 +1,32 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-07-19 — D91 Engine torn down ~1s after ride start (the REAL root cause; supersedes D86–D90)
+
+- THE FINDING (native TSLocationManager log, captain phone, Cinnamon ride): the engine started
+  cleanly (requestLocationUpdates OK, Location-services ON, 3 fixes at 17:46:08.840), then the APP
+  disabled it at 17:46:09.100 (`enabledchange` → Location-services OFF); it stayed `enabled:false`
+  the whole ride. Battery Saver was a RED HERRING — the engine was switched OFF ~18 min BEFORE Saver
+  was turned off, and the native engine never even saw the Saver-off (it had unsubscribed from
+  powersave in the same teardown). Every `changePace(true)` nudge (D86/D88/D89/D90) was a no-op on
+  the disabled engine — zero native trace — which is why the whole cluster failed in the field.
+- ROOT CAUSE: the engine start/stop effect (`useFleetPositions`) had `thresholds` in its deps.
+  `thresholds` = `ride?.thresholds` (RideMapScreen), an UNMEMOIZED fresh object built in
+  `useRideDetails` when the ride DB read resolves (~1s after start). That reference change re-ran the
+  effect: cleanup `void stopBgGeo()` + body `void startBgGeo()`, both UNAWAITED native-bridge calls,
+  unordered. Battery Saver biased the captain's native scheduling so the `stop()` landed after the
+  `start()` → `enabled:false`, no restart. Rider (Saver off) drained FIFO → survived. Confirmed
+  end-to-end: native log + code trace (RideMapScreen.tsx:87 → useRideDetails.ts:119 → deps :548).
+- FIX: decouple the engine lifecycle from threshold DATA. `thresholds` + the `SenderStateTracker`
+  now live in refs; the engine effect deps are `[backgroundReady, rideId, myRiderId]` ONLY, so a
+  tenant-thresholds update can never tear down the FGS. A separate effect rebuilds the tracker on
+  `[thresholds]` (preserving the old "fresh tracker per thresholds" behavior) WITHOUT restarting it.
+- SUPERSEDES the D86–D90 `changePace` cluster: they treated a non-existent "Saver throttles the
+  engine" problem. Once D91 is validated, the nudges (and their resume-churn battery cost) should be
+  re-evaluated/removed — a disabled engine can't be nudged, a healthy one doesn't need it. Left in
+  place for now (idempotent no-ops on a healthy engine).
+- STATUS: coded, tsc clean (deepLinkAuth only). NOT yet validated — needs a build + the same
+  Saver-on walk; pass criterion = the captain produces CONTINUOUS gps_ping through the ride.
+
 ## 2026-07-18 — D83 Ad Hoc creation swallowed a failed captain self-RSVP (Lane B)
 
 - ROOT CAUSE: `AdHocCreator.tsx` inserted the ride row FIRST, then self-RSVP'd the creator as

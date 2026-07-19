@@ -213,6 +213,15 @@ export function useFleetPositions(
   rideIdRef.current = rideId;
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
+  // D91: thresholds feed the STATE MACHINE, never the engine lifecycle. Held in refs so a tenant-
+  // thresholds update (which lands ~1s after ride start via useRideDetails, as a fresh object)
+  // can NEVER re-run the engine effect and tear down the FGS. That teardown — the effect cleanup's
+  // stopBgGeo() racing its own unawaited restart on the native bridge, Battery Saver biasing the
+  // loser to `enabled:false` — killed captain tracking for a whole ride (2026-07-19 walk, proven
+  // in the native TSLocationManager log: started 17:46:08.840, disabled 17:46:09.100, never back).
+  const thresholdsRef = useRef(thresholds);
+  thresholdsRef.current = thresholds;
+  const trackerRef = useRef<SenderStateTracker | null>(null);
   // D80: read the LEADER in the send handler (to decide whether to upsert the leader's route to
   // rail3_breadcrumb) WITHOUT making it an effect dep — a dep here would re-bind the FGS send
   // effect and churn the foreground service. This used to be a rosterRef holding the whole
@@ -443,8 +452,9 @@ export function useFleetPositions(
     // for it even after this screen unmounts (sign-out happens from Home). Not cleared on
     // cleanup — it must survive Home → Sign Out; overwritten when the next ride starts.
     setActiveRide({ rideId, riderId: myRiderId });
-    // Sender half of the W174 state machine — fresh per (ride, thresholds).
-    const tracker = new SenderStateTracker(thresholds);
+    // Sender half of the W174 state machine — fresh per ride. Thresholds come from trackerRef
+    // (rebuilt by the effect below when tenant thresholds land) so they never gate this engine.
+    trackerRef.current = new SenderStateTracker(thresholdsRef.current);
     let last: LatLng | null = null;
     // W234 — captain breadcrumb ROUTE TABLE: the captain accumulates its OWN decimated
     // route (full, capped) and UPSERTS it to rail3_breadcrumb on a ~60s throttle, so any
@@ -460,7 +470,7 @@ export function useFleetPositions(
       setMyCoords(coords);
       const dist = last ? haversineDistanceM(last, coords) : Infinity;
       last = coords;
-      const state = tracker.sample({ distanceFromLastM: dist, atMs: fix.ts });
+      const state = trackerRef.current!.sample({ distanceFromLastM: dist, atMs: fix.ts });
 
       // Single-point broadcast — live position for the fleet marker and the live breadcrumb
       // tip. No trail in the payload; the route lives in the table.
@@ -545,7 +555,16 @@ export function useFleetPositions(
     return () => {
       void stopBgGeo();
     };
-  }, [backgroundReady, rideId, myRiderId, thresholds]);
+    // D91: thresholds REMOVED from deps — the engine starts/stops on ride identity + permission
+    // ONLY, never on tenant-threshold data. This is the fix for the +1s engine teardown.
+  }, [backgroundReady, rideId, myRiderId]);
+
+  // D91: rebuild the sender state tracker when tenant thresholds change, WITHOUT restarting the
+  // engine — preserves the old "fresh tracker per thresholds" behavior now that thresholds no
+  // longer gate the engine effect above. No-op until that effect has created the tracker.
+  useEffect(() => {
+    if (trackerRef.current) trackerRef.current = new SenderStateTracker(thresholds);
+  }, [thresholds]);
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,
