@@ -477,6 +477,14 @@ export function useFleetPositions(
       // the throttle so onLocation's periodic write doesn't immediately re-fire after this one.
       lastLastKnownMs = Date.now();
       void persistLastKnown(rideId, coords.lat, coords.lng, ts, 'stop');
+    }, (hb) => {
+      // D88 MIDDLE GROUND — engine self-check outcome. Instrument every heartbeat so we can
+      // confirm ON-DEVICE that (a) the heartbeat fires at all while backgrounded/stationary
+      // (the open question on aggressive OEMs) and (b) whether it re-engaged tracking. A
+      // `reengaged: true` row is the fix working: the SDK's motion detector missed the start
+      // of movement and our self-check caught it. Zero heartbeat_check rows during a
+      // backgrounded stop = the OS killed the FGS → captain-side detection territory.
+      void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'heartbeat_check', ...hb } });
     });
     // D86: if the rider turns Battery Saver OFF mid-ride, re-engage the engine. Saver at start
     // throttles motion detection and startBgGeo is idempotent, so complying with the advisory

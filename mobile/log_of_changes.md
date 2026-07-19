@@ -555,3 +555,27 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   important (start-pin fallback) + 3 minor all addressed. tsc clean on all touched files.
 - JS-only / OTA-safe (lands via EAS Update once W243 OTA is un-parked). Lane B = W245 (GPS pre-warm
   + parallelize reads), gated on on-device lock-survival re-test.
+
+## D88 (middle ground, layer 1) — heartbeat engine self-check / re-engage (2026-07-18)
+- ROOT CAUSE (field, staging ride 3efe17fc): the SDK's native motion-detection can silently fail to
+  wake tracking. Galaxy S20 FE (SM-G781W) walked ~12 min backgrounded → ZERO fixes, while the SAME
+  person's S23 (SM-S911W) streamed ~20 on the identical walk; every permission + battery setting
+  correct/identical on both. Native TS log: TerminateEvent + zero onLocation/motionchange/activitychange.
+- bgGeo.ts: added the heartbeat self-check — `heartbeatInterval: 60` (Android floor; NO preventSuspend
+  — Android fires onHeartbeat during stationary off the FGS without it, and preventSuspend would keep
+  the device fully awake = heavy battery). New `BG.onHeartbeat`: while STATIONARY (engineMoving false),
+  actively `getCurrentPosition({samples:1,timeout:30,persist:false})`, compare to last fix; if drift
+  ≥ HEARTBEAT_MOVE_THRESHOLD_M (40m, ~=distanceFilter so standstill jitter can't false-trigger) →
+  `changePace(true)` to flip isMoving on + route the triggering fix through the normal handler so the
+  rider reappears live immediately. Track lastFixPos + engineMoving from onLocation/onMotionChange.
+  New optional 3rd startBgGeo arg (onHeartbeatCheck) + HeartbeatCheckInfo type; cleared in stopBgGeo.
+  Scenario built exactly: given isMoving off → heartbeat detects GPS movement → flip isMoving on.
+- useFleetPositions.ts: pass the 3rd callback → logMeasurement app_state_change {event:'heartbeat_check',
+  engineMoving, sampled, movedM, reengaged} so we can confirm ON-DEVICE that the heartbeat fires while
+  backgrounded (open question on aggressive OEMs) and whether it re-engaged. reengaged:true = fix working.
+- BOUNDARY (documented in code): only runs if the heartbeat fires (FGS alive). If the OS kills the FGS
+  outright (the S20 FE's actual failure), no in-process check fires → captain-side silence detection
+  (D88 layer 2, not built here) is the backstop.
+- tsc clean on bgGeo.ts / useFleetPositions.ts / geo.ts (only pre-existing deepLinkAuth.ts errors remain).
+- NOT YET BUILT/VALIDATED: needs an EAS build + on-device backgrounded-walk re-test on the S20 FE
+  (watch sink for heartbeat_check rows + reengaged:true). Branch: d88-heartbeat-selfcheck (off d86).

@@ -1,6 +1,7 @@
 import type BackgroundGeolocationType from 'react-native-background-geolocation';
 import type { Location } from 'react-native-background-geolocation';
 
+import { haversineDistanceM } from './geo';
 import { loadTrackingPingFlag, playTrackingPing } from './trackingPing';
 
 // RC4 engine — Transistorsoft Background Geolocation (sole engine since W203).
@@ -38,14 +39,37 @@ export interface BgFix {
   ts: number; // device clock at receipt (we time on client_ts, never server ingest)
 }
 
+// D88 middle-ground diagnostic: the outcome of one heartbeat self-check, surfaced to the
+// caller purely for the sink (so we can confirm ON-DEVICE that the heartbeat fires and
+// whether it re-engaged). Not part of the location transport.
+export interface HeartbeatCheckInfo {
+  engineMoving: boolean; // was the engine already moving? (then onLocation owns it; we skip)
+  sampled: boolean; // did we actually take a getCurrentPosition sample this beat?
+  movedM: number | null; // metres from the last fix (null if no sample / no prior fix)
+  reengaged: boolean; // did we force isMoving back on this beat?
+}
+
+// D88: how far the phone must have drifted from the last fix, measured on a heartbeat while
+// STATIONARY, before we force the engine back to moving. ~= distanceFilter so GPS jitter at a
+// standstill (typically 10–30 m) can't false-trigger a re-engage.
+const HEARTBEAT_MOVE_THRESHOLD_M = 40;
+
 // onLocation / onMotionChange are registered ONCE (the first time tracking starts), then
 // persist for the process — so we route them through swappable refs rather than
 // re-subscribing per ride (re-subscribing would stack listeners: the duplicate-handler bug
 // we saw on the FGS path).
 let currentHandler: ((fix: BgFix) => void) | null = null;
 let currentMotionHandler: ((isMoving: boolean, fix: BgFix | null) => void) | null = null;
+let currentHeartbeatHandler: ((info: HeartbeatCheckInfo) => void) | null = null;
 let configured = false;
 let listenerBound = false;
+
+// D88 middle-ground state. Both are updated from the onLocation / onMotionChange handlers so
+// the heartbeat self-check can answer "am I already moving?" and "how far from my last fix?"
+// without a round-trip to the caller. Module-level (like the handler refs) so they persist
+// across rides for the life of the process.
+let lastFixPos: { lat: number; lng: number } | null = null;
+let engineMoving = false;
 
 // Start high-accuracy tracking for a ride. Idempotent: ready() configures once.
 //
@@ -63,9 +87,11 @@ let listenerBound = false;
 export async function startBgGeo(
   handler: (fix: BgFix) => void,
   onMotionChange?: (isMoving: boolean, fix: BgFix | null) => void,
+  onHeartbeatCheck?: (info: HeartbeatCheckInfo) => void,
 ): Promise<void> {
   currentHandler = handler;
   currentMotionHandler = onMotionChange ?? null;
+  currentHeartbeatHandler = onHeartbeatCheck ?? null;
   const BG = getBgGeo();
   // W231: hydrate the audible-ping toggle once so the onLocation hot path reads a
   // cached flag (never storage). Off by default; see trackingPing.ts.
@@ -73,6 +99,10 @@ export async function startBgGeo(
   if (!listenerBound) {
     BG.onLocation(
       (location: Location) => {
+        // D88: track the live fix + moving state so the heartbeat self-check can compare
+        // against them without a caller round-trip.
+        lastFixPos = { lat: location.coords.latitude, lng: location.coords.longitude };
+        engineMoving = location.is_moving;
         currentHandler?.({
           lat: location.coords.latitude,
           lng: location.coords.longitude,
@@ -92,12 +122,67 @@ export async function startBgGeo(
     // position we persist as last-known (falls back to the caller's last coords if absent).
     BG.onMotionChange((event) => {
       const loc = event.location;
+      // D88: mirror the moving state + last fix for the heartbeat self-check.
+      engineMoving = event.isMoving;
+      if (loc) lastFixPos = { lat: loc.coords.latitude, lng: loc.coords.longitude };
       currentMotionHandler?.(
         event.isMoving,
         loc
           ? { lat: loc.coords.latitude, lng: loc.coords.longitude, isMoving: event.isMoving, ts: Date.now() }
           : null,
       );
+    });
+    // D88 MIDDLE GROUND — engine liveness / re-engage self-check.
+    //
+    // The SDK's native motion detection can silently fail to notice a rider has started
+    // moving: field-observed 2026-07-18 on a Galaxy S20 FE (12-min walk, ZERO fixes) while
+    // the SAME person's S23 streamed ~20 fixes on the identical walk — every permission and
+    // battery setting correct on both. So rather than TRUST the motion sensor to wake us, on
+    // every heartbeat while STATIONARY we actively sample a fresh position and, if we've moved
+    // past the threshold, force the engine back to moving. onLocation then resumes the live
+    // stream. The scenario, exactly:
+    //   given isMoving is off → when the heartbeat detects GPS movement → flip isMoving on.
+    //
+    // Cadence: Android fires onHeartbeat during the stationary state at heartbeatInterval
+    // (min 60s) OFF the FGS — no preventSuspend needed (that is an iOS requirement and, on
+    // Android, would keep the device fully awake = heavy battery). Battery cost here is one
+    // brief getCurrentPosition per beat while stopped — far below continuous GPS.
+    //
+    // BOUNDARY: this only runs if the heartbeat fires, i.e. the FGS is alive. If the OS killed
+    // the FGS outright (the S20 FE's actual failure — TerminateEvent + zero native events),
+    // the heartbeat won't fire either; that class is covered by the captain-side silence
+    // detection (D88 layer 2), NOT here.
+    BG.onHeartbeat(() => {
+      // A moving engine already streams via onLocation — nothing to re-engage.
+      if (engineMoving) {
+        currentHeartbeatHandler?.({ engineMoving: true, sampled: false, movedM: null, reengaged: false });
+        return;
+      }
+      void (async () => {
+        let movedM: number | null = null;
+        let reengaged = false;
+        try {
+          // HeartbeatEvent.location is last-known/stale by contract — actively sample a fresh
+          // fix. persist:false so this probe doesn't itself fire onLocation (we route it
+          // ourselves below only when it actually means "moving").
+          const loc = await BG.getCurrentPosition({ samples: 1, timeout: 30, persist: false });
+          const cur = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          movedM = lastFixPos ? haversineDistanceM(lastFixPos, cur) : Infinity;
+          if (movedM >= HEARTBEAT_MOVE_THRESHOLD_M) {
+            // The whole point: flip isMoving on so the SDK resumes the continuous stream.
+            await BG.changePace(true);
+            engineMoving = true;
+            lastFixPos = cur;
+            reengaged = true;
+            // Route the triggering fix through the normal handler so the rider reappears live
+            // IMMEDIATELY, not only on the next onLocation.
+            currentHandler?.({ lat: cur.lat, lng: cur.lng, isMoving: true, ts: Date.now() });
+          }
+        } catch (e) {
+          console.warn('[Rail3][bgGeo] heartbeat self-check failed', e);
+        }
+        currentHeartbeatHandler?.({ engineMoving: false, sampled: true, movedM, reengaged });
+      })();
     });
     listenerBound = true;
   }
@@ -122,6 +207,11 @@ export async function startBgGeo(
       locationUpdateInterval: 5000,
       fastestLocationUpdateInterval: 5000,
       disableElasticity: true, // pure fixed-distance filter — predictable to tune; elasticity would COARSEN at speed
+      // D88: drive the onHeartbeat self-check. 60s is Android's floor (impossible to go
+      // faster). No preventSuspend — on Android the heartbeat fires during the stationary
+      // state off the FGS without it, and preventSuspend would keep the device fully awake
+      // (heavy battery) for no gain here. See the onHeartbeat handler above.
+      heartbeatInterval: 60,
       stopOnTerminate: false,
       startOnBoot: false,
       foregroundService: true,
@@ -180,6 +270,7 @@ export async function nudgeBgGeo(): Promise<void> {
 export async function stopBgGeo(): Promise<void> {
   currentHandler = null;
   currentMotionHandler = null;
+  currentHeartbeatHandler = null;
   if (!BackgroundGeolocation) return; // never started (e.g. expo-only build) — nothing to stop
   try {
     await BackgroundGeolocation.stop();
