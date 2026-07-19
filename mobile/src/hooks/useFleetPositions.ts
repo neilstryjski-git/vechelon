@@ -8,7 +8,6 @@ import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
-import { watchBatterySaverCleared } from '../lib/batteryGuards';
 import { setActiveRide } from '../lib/activeRide';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
@@ -321,6 +320,21 @@ export function useFleetPositions(
   // logging here instead would emit a resume_signal for a refetch that never ran.
   const onResume = useCallback((source: ResumeSource) => {
     resumeFetchRef.current?.(source);
+    // D89 + D90 (prong 2) — UNIFIED engine re-assert. On every resume, nudge the tracking engine
+    // back to moving. This ONE idempotent action subsumes three previously-separate concerns:
+    //   • D90 warm-up strand — a ride can start dark if the phone is locked before the engine
+    //     leaves stationary (ride f51f7add: 21 min, zero fixes; the mid-ride unlock did NOT revive
+    //     it because resume restored the channel but never re-asserted the engine). Now it does.
+    //   • D89 / D86 Saver-off — Battery Saver toggled off while backgrounded is caught here on the
+    //     next unlock, replacing D86's watchBatterySaverCleared (a foreground-only listener that
+    //     missed the backgrounded toggle — field-confirmed to never fire).
+    //   • OEM background-suspend — a foreground return re-engages a suspended engine.
+    // No need to detect WHY: changePace(true) is a no-op on a healthy/moving engine and a no-op if
+    // the engine was never configured, so an unconditional resume-nudge is safe. stopTimeout still
+    // returns a genuinely-parked engine to stationary, so battery is preserved.
+    void nudgeBgGeo();
+    const rid = rideIdRef.current;
+    if (rid) void logMeasurement({ rideId: rid, kind: 'bg_nudge', payload: { reason: 'resume', source } });
   }, []);
   useResume(rideId, onResume);
 
@@ -524,17 +538,11 @@ export function useFleetPositions(
       // backgrounded stop = the OS killed the FGS → captain-side detection territory.
       void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'heartbeat_check', ...hb } });
     });
-    // D86: if the rider turns Battery Saver OFF mid-ride, re-engage the engine. Saver at start
-    // throttles motion detection and startBgGeo is idempotent, so complying with the advisory
-    // otherwise does nothing — the field case where the captain sent 2 pings all ride and was
-    // invisible to the fleet. Nudge on the ON->OFF edge and log it so the field session can
-    // confirm the fix fired and correlate with pings resuming.
-    const saverClearedUnsub = watchBatterySaverCleared(() => {
-      void nudgeBgGeo();
-      void logMeasurement({ rideId, kind: 'bg_nudge', payload: { reason: 'battery_saver_cleared' } });
-    });
+    // D89: D86's watchBatterySaverCleared (a foreground-only Saver ON->OFF listener) is REMOVED —
+    // it missed the backgrounded toggle (field-confirmed to never fire) and is superseded by the
+    // unified resume-nudge in onResume above, which re-asserts the engine on every unlock
+    // regardless of cause (Saver, OEM-suspend, warm-up strand).
     return () => {
-      saverClearedUnsub();
       void stopBgGeo();
     };
   }, [backgroundReady, rideId, myRiderId, thresholds]);

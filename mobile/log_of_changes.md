@@ -628,3 +628,22 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   the channel/receive but not the tracking engine/send) and 3 (self-health signal, since the OS dot
   masks a dead engine) tracked in D90 as follow-ups (tie to D89/W277). This commit = prong 1 only.
 - tsc clean (only pre-existing deepLinkAuth.ts). Ref: Transistorsoft Philosophy of Operation (wiki).
+
+## D89 + D90 (prong 2) — unified resume-driven engine re-assert (2026-07-19)
+- Done PROPERLY as ONE mechanism (first brick of W277), not two detectors. useFleetPositions.onResume
+  now calls nudgeBgGeo() (changePace(true)) on EVERY resume. Idempotent — no-op on a healthy/moving
+  engine and no-op if the engine was never configured — so an unconditional resume-nudge safely
+  covers ALL causes without detecting WHY:
+    • D90 warm-up strand / OS-suspend — a ride that started dark (engine stuck stationary; ride
+      f51f7add: 21 min, zero fixes; mid-ride unlock didn't revive it because resume restored the
+      channel but never re-asserted the engine). Now the unlock re-engages it.
+    • D89 / D86 Saver-off — Battery Saver toggled off while backgrounded is caught on the next
+      unlock. REPLACES D86's watchBatterySaverCleared (foreground-only listener that missed the
+      backgrounded toggle; field-confirmed never fired — ride 82a08280, zero bg_nudge).
+    • OEM background-suspend — foreground return re-engages a suspended engine.
+- REMOVED watchBatterySaverCleared from batteryGuards.ts + its wiring/import in useFleetPositions
+  (dead code; superseded). Kept nudgeBgGeo (now the shared re-assert action).
+- Instrumented: logMeasurement bg_nudge {reason:'resume', source} on each resume re-assert.
+- stopTimeout still returns a genuinely-parked engine to stationary → battery preserved.
+- Combines with D90 prong 1 (changePace(true) at start): engage deterministically at join, AND
+  re-assert on every resume. Prong 3 (self-health signal) remains a follow-up. tsc clean.

@@ -84,34 +84,12 @@ export function watchBatterySaverOnScreenLock(): () => void {
   return () => sub.remove();
 }
 
-// D86: fire `onCleared` when Battery Saver transitions ON -> OFF, so the ride flow can re-engage
-// a tracking engine that Saver left dormant at start. THE field case (2026-07-16 morning ride):
-// Saver was on when the engine ready()/start()ed — throttling the motion-activity API the SDK
-// relies on (W261) — the rider complied with the advisory ~6s later, but startBgGeo is idempotent
-// so nothing re-initialised the engine, and the captain broadcast 2 pings all ride, invisible to
-// the fleet. Primary signal is expo-battery's low-power listener (fires while foregrounded, which
-// is exactly when the rider toggles the setting); an AppState 'active' re-check backstops a toggle
-// made while backgrounded. Only a true ON->OFF edge fires onCleared. Returns an unsubscribe.
-// Android-only; safe no-op elsewhere.
-export function watchBatterySaverCleared(onCleared: () => void): () => void {
-  if (!isAndroid) return () => {};
-  let wasOn = false;
-  void isBatterySaverOn().then((on) => {
-    wasOn = on;
-  });
-  const settle = (nowOn: boolean) => {
-    if (wasOn && !nowOn) onCleared();
-    wasOn = nowOn;
-  };
-  const lowPowerSub = Battery.addLowPowerModeListener(({ lowPowerMode }) => settle(lowPowerMode));
-  const appStateSub = AppState.addEventListener('change', (s) => {
-    if (s === 'active') void isBatterySaverOn().then(settle);
-  });
-  return () => {
-    lowPowerSub.remove();
-    appStateSub.remove();
-  };
-}
+// D89: watchBatterySaverCleared (D86's Saver ON->OFF edge listener) was REMOVED here. Its
+// primary signal — expo-battery's low-power listener — fires only while foregrounded, so it
+// MISSED the common case (Saver toggled off while the phone is locked/backgrounded), which was
+// field-confirmed to never fire (ride 82a08280: Saver ON->OFF, zero bg_nudge). It is superseded
+// by the unified resume-nudge in useFleetPositions.onResume, which re-asserts the engine on every
+// unlock regardless of cause (Saver, OEM-suspend, or a warm-up strand). See D90 / W277.
 
 // --- Per-app OEM battery optimisation (first join) --------------------------------
 
