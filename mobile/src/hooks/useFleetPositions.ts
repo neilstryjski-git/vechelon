@@ -9,6 +9,7 @@ import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
 import { watchBatterySaverCleared } from '../lib/batteryGuards';
+import { setActiveRide } from '../lib/activeRide';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
@@ -25,6 +26,10 @@ import {
 
 // Broadcast event name for position pings on the rail3:ride:<id> channel.
 export const POSITION_EVENT = 'pos';
+// D87: a rider signalling they've deliberately LEFT (sign-out / leave-ride). Receivers drop the
+// rider's marker on this event, distinct from the passive greying of a rider who just went quiet.
+// Mirrored (inlined) in backgroundLocation.ts to avoid a circular import — keep in sync.
+export const DEPARTED_EVENT = 'depart';
 
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
@@ -367,6 +372,35 @@ export function useFleetPositions(
         });
       }
     });
+    // D87: a rider signalled a DELIBERATE departure (sign-out / leave-ride) — drop their marker
+    // now, from BOTH the live ping map and the persisted last-known fallback, so they don't
+    // linger as a greying phantom. A later live ping (e.g. the same account still active on a
+    // second device — the collision case) simply re-adds them, so this only removes a truly
+    // gone rider. Passive signal-loss is unaffected: no `depart` event fires, so those still grey.
+    channel.on('broadcast', { event: DEPARTED_EVENT }, ({ payload }) => {
+      const riderId = (payload as { riderId?: string })?.riderId;
+      if (!riderId) return;
+      setPings((prev) => {
+        if (!(riderId in prev)) return prev;
+        const next = { ...prev };
+        delete next[riderId];
+        return next;
+      });
+      setLastKnown((prev) => {
+        if (!(riderId in prev)) return prev;
+        const next = { ...prev };
+        delete next[riderId];
+        return next;
+      });
+      const rid = rideIdRef.current;
+      if (rid) {
+        void logMeasurement({
+          rideId: rid,
+          kind: 'app_state_change',
+          payload: { event: 'departed_recv', riderId, self: riderId === myRiderIdRef.current },
+        });
+      }
+    });
     // Broadcast/Presence handlers may bind after subscribe() (useRideChannel
     // already subscribed); postgres_changes may not — none are used here.
   }, [channel]);
@@ -391,6 +425,10 @@ export function useFleetPositions(
   // whole ride regardless of channel state; it stops only on leave / lost permission / unmount.
   useEffect(() => {
     if (!backgroundReady || !rideId || !myRiderId) return;
+    // D87: remember the ride we're tracking so AuthContext.signOut can broadcast a departure
+    // for it even after this screen unmounts (sign-out happens from Home). Not cleared on
+    // cleanup — it must survive Home → Sign Out; overwritten when the next ride starts.
+    setActiveRide({ rideId, riderId: myRiderId });
     // Sender half of the W174 state machine — fresh per (ride, thresholds).
     const tracker = new SenderStateTracker(thresholds);
     let last: LatLng | null = null;

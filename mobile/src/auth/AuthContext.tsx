@@ -12,6 +12,8 @@ import { supabase } from '../lib/supabase';
 import { resetMeasureIdentity } from '../lib/measure';
 import { isIdentityChange } from '../lib/identityDelta';
 import { TENANT_SLUG } from '../lib/env';
+import { broadcastDeparture } from '../lib/backgroundLocation';
+import { getActiveRide, clearActiveRide } from '../lib/activeRide';
 
 // Auto-join the build's tenant on sign-in (W191 — staging PoC onboarding).
 //
@@ -135,6 +137,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // scope: 'local' here — that leaves the server session alive and the user
       // gets silently re-authenticated (supabase-patterns D33 sign-out scope).
       signOut: async () => {
+        // D87: if we were tracking a ride, tell the fleet we've LEFT before the session dies —
+        // the departure broadcast + last-known clear both need this still-valid JWT. Never let a
+        // failed departure block sign-out. Clear the holder so a later sign-out can't re-depart.
+        const active = getActiveRide();
+        if (active) {
+          try {
+            await broadcastDeparture(active.rideId, active.riderId);
+          } catch {
+            // best-effort — a missed departure just leaves the pre-existing greying phantom
+          }
+          clearActiveRide();
+        }
         await supabase.auth.signOut();
       },
     }),

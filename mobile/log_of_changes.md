@@ -579,3 +579,33 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - tsc clean on bgGeo.ts / useFleetPositions.ts / geo.ts (only pre-existing deepLinkAuth.ts errors remain).
 - NOT YET BUILT/VALIDATED: needs an EAS build + on-device backgrounded-walk re-test on the S20 FE
   (watch sink for heartbeat_check rows + reengaged:true). Branch: d88-heartbeat-selfcheck (off d86).
+
+## D87 — departed rider clears from the fleet (no more phantom marker) (2026-07-18)
+- ROOT CAUSE: the fleet is additive — it renders (pings ∪ lastKnown) ∩ roster and staleness only
+  GREYS a rider, never removes them. Sign-out/leave emitted no departure signal and didn't clear
+  last-known, so a logged-out rider lingered as a greying phantom (field-confirmed twice on ride
+  3efe17fc: rogers logged out, marker stayed; a new login added a 2nd marker beside it).
+- Fix — a DELIBERATE departure signal, distinct from passive greying:
+  - backgroundLocation.ts: broadcastDeparture(rideId, riderId) — (1) live `depart` broadcast
+    (DEPARTED_EVENT) so subscribed receivers drop the marker now; (2) clears MY persisted
+    last-known (ride_participants last_lat/long/ping = null, scoped account_id=auth.uid()) so a
+    later resume-fetch doesn't re-materialise it. restBroadcast gained an optional `event` arg
+    (default POSITION_EVENT); D77 identity check still applies (only depart AS yourself).
+  - useFleetPositions.ts: receiver handler on DEPARTED_EVENT removes the rider from BOTH pings and
+    lastKnown; export DEPARTED_EVENT; register the active ride (activeRide.ts) when tracking starts.
+  - activeRide.ts (new): module-level holder of the last-tracked {rideId, riderId}, so sign-out
+    (from Home, after the map unmounts) can still depart it. Not cleared on unmount; overwritten
+    on next ride; cleared after a sign-out departure.
+  - AuthContext.tsx: signOut() broadcasts the departure BEFORE supabase.auth.signOut() (needs the
+    live JWT), best-effort, never blocks sign-out.
+  - RideMapScreen.tsx: beforeRemove nav listener departs on leaving the ride map (back/gesture/D57
+    auto-leave). A D77 account-swap REMOUNT tears down via React (not a nav pop) so it does NOT
+    false-fire — the swap is covered by the sign-out/holder path.
+- COLLISION-SAFE: if the same account is still live on a 2nd device, its live pings re-add the
+  rider and repopulate last-known — so only a TRULY gone rider is removed. Passive signal-loss is
+  untouched (no `depart` fires) → those still grey (W174/W261 safety fallback preserved).
+- SAFETY BIAS: a false departure (live rider vanishes) is dangerous; a missed one just leaves the
+  pre-existing greying phantom — so triggers are DELIBERATE actions only (sign-out, leave-map),
+  never transient unmounts. Instrumented: app_state_change {event:'departed_sent'|'departed_recv'}.
+- tsc clean on all touched files (only pre-existing deepLinkAuth.ts errors). JS-only → OTA-safe.
+  CODED, not yet on-device-validated.

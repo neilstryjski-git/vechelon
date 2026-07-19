@@ -19,6 +19,7 @@ import FirstRideExplainer from '../components/FirstRideExplainer';
 import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
+import { broadcastDeparture } from '../lib/backgroundLocation';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
@@ -278,6 +279,19 @@ const RideMapScreen: React.FC = () => {
       navigation.goBack();
     }
   }, [ride, myRole, navigation]);
+
+  // D87: leaving the live ride map is a DELIBERATE departure — clear my marker for the fleet so
+  // it doesn't linger as a greying phantom. Fires on genuine navigation-away (back / gesture /
+  // the D57 ride-ended auto-leave). A D77 account-swap REMOUNT tears down via React (not a nav
+  // pop), so it does NOT false-fire here — the swap/sign-out path is covered by AuthContext via
+  // the active-ride holder. Fire-and-forget over REST so it escapes the unmount.
+  useEffect(() => {
+    if (!rideId || !myRiderId) return;
+    const unsub = navigation.addListener('beforeRemove', () => {
+      void broadcastDeparture(rideId, myRiderId);
+    });
+    return unsub;
+  }, [navigation, rideId, myRiderId]);
 
   // §4.1: Captain/SAG see the whole fleet; Riders see Captain+SAG only.
   // Defense-in-depth: the RLS-gated roster already bounds what a Rider can

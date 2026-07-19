@@ -4,8 +4,10 @@ import { logMeasurement } from './measure';
 import { isCurrentIdentity } from './identity';
 import { rail3RideTopic } from '../hooks/useRideChannel';
 
-// Mirror of useFleetPositions.POSITION_EVENT — inlined to avoid a circular import.
+// Mirror of useFleetPositions.POSITION_EVENT / DEPARTED_EVENT — inlined to avoid a circular
+// import. Keep these in sync with the exports in useFleetPositions.ts.
 const POSITION_EVENT = 'pos';
+const DEPARTED_EVENT = 'depart';
 
 // Shared REST broadcast on the rail3 ride topic. REST (HTTP), NOT the websocket —
 // a Doze/background context can't be trusted to keep a socket alive (W179), and the
@@ -18,7 +20,11 @@ const POSITION_EVENT = 'pos';
 // USED BY: the Transistorsoft engine (bgGeo, via useFleetPositions) for every position
 // ping, and by sendDormantPing below. (The old expo-location FGS TaskManager path that
 // also used this was removed in W203 once Transistorsoft became the sole engine.)
-export async function restBroadcast(rideId: string, payload: Record<string, unknown>): Promise<boolean> {
+export async function restBroadcast(
+  rideId: string,
+  payload: Record<string, unknown>,
+  event: string = POSITION_EVENT,
+): Promise<boolean> {
   // The try wraps getSession() TOO, not just the fetch. It used to cover only the fetch, so the
   // contract above ("false if there was no token or it threw") was a lie: getSession() can REJECT
   // — auth-js takes the processLock configured in supabase.ts and throws on a lock-acquire
@@ -50,7 +56,7 @@ export async function restBroadcast(rideId: string, payload: Record<string, unkn
       },
       body: JSON.stringify({
         messages: [
-          { topic: rail3RideTopic(rideId), event: POSITION_EVENT, private: true, payload },
+          { topic: rail3RideTopic(rideId), event, private: true, payload },
         ],
       }),
     });
@@ -83,4 +89,37 @@ export async function sendDormantPing(args: {
     kind: 'app_state_change',
     payload: { event: 'dormant_sent', sent },
   });
+}
+
+// D87 — DELIBERATE departure. On sign-out or leaving a ride, tell the fleet the rider is GONE
+// so their marker is removed, rather than lingering as a greying phantom at their last-known
+// position (the fleet is otherwise additive — it never drops a rider, only greys them, so a
+// deliberate leave was indistinguishable from a signal loss). TWO mechanisms, both needed:
+//   1. a live `depart` broadcast → receivers currently subscribed drop the marker at once;
+//   2. clear MY persisted last-known (ride_participants) → a receiver that only fetches later
+//      (on resume) doesn't re-materialise the marker from the stale fallback.
+// MUST run BEFORE supabase.auth.signOut() — both the broadcast RLS and the row update need the
+// still-valid JWT. Scoped to my own row (account_id = auth.uid()), and restBroadcast's D77
+// identity check ensures we only ever depart AS ourselves. Never throws; a failed departure
+// just leaves the pre-existing (greying) phantom — strictly no worse than today.
+//
+// COLLISION-SAFE: if the same account is still live on another device, that device's live pings
+// re-add the rider on the receiver and repopulate last-known — so this correctly removes only a
+// TRULY departed rider, and self-heals when a second device is still present.
+export async function broadcastDeparture(rideId: string, riderId: string): Promise<void> {
+  await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
+  try {
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id;
+    if (uid) {
+      await supabase
+        .from('ride_participants')
+        .update({ last_lat: null, last_long: null, last_ping: null })
+        .eq('ride_id', rideId)
+        .eq('account_id', uid);
+    }
+  } catch (e) {
+    console.warn('[Rail3] departure clear failed', e);
+  }
+  void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'departed_sent', riderId } });
 }
