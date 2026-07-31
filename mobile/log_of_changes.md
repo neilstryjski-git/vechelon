@@ -1,5 +1,49 @@
 # Rail 3 Mobile — Log of Changes (LLD decisions)
 
+## 2026-07-30 — W277 Architecture & state-machine survey (assessment only — ZERO code changed)
+
+- SCOPE: survey task under G33. Two artifacts delivered to
+  `productdocuments/rail 3 integration back to hands/`: `w277_artifact1_current_state.md`
+  (six-domain state model + drift + SC-1–8 + integration surface) and
+  `w277_artifact2_recommendations.md` (proposals for the Strategic Re-engagement session).
+  Baseline surveyed: `rail3-integration` @ 2e422f8. No source file was modified — the dead
+  detector code found below was deliberately LEFT IN PLACE per the brief's Edit Authority.
+- CHANGE REQUEST applied first (Senior PM-approved 2026-07-27): G33 description candidate-example
+  sentence replaced with the D91 engine-lifecycle consolidation; W277 `why` APPENDED (not rewritten)
+  with the D91-supersedes-D86–D90 note.
+- HEADLINE: the consolidation W277 was chartered to PROPOSE is already BUILT. D86's Saver-off
+  listener was deleted, D89 + D90 prong 2 are one idempotent resume-nudge
+  (`useFleetPositions.ts:330-348`), and D90 prong 1 is MERGED at `bgGeo.ts:261-265` — not "coded on
+  branch" as the BDD inventory states. SC-6's dead-detector class is therefore NOT the D86–D90
+  cluster; the real dead code is `watchBatterySaverOnScreenLock` (`batteryGuards.ts:77-85`, zero
+  callers), whose absence ALSO silently drops committed behaviour (Pillar II §2 + committed R3-06).
+- ENGINE VERDICT: healthy. D91 correctly implemented (deps `[backgroundReady, rideId, myRiderId]`).
+  What is missing is the lifecycle AROUND the engine — BDD Layer 3 is entirely absent (no native
+  heartbeat/headless, no autoSync, no server staleness, no FCM wake), so against OEM suspension of a
+  HEALTHY engine there is still no mechanism and no surface reports the failure (R3-48 invariant
+  does not hold).
+- STOP POSTURE (R3-50, documented not selected): the build runs the stopTimeout-stationary posture —
+  stop detection ACTIVE, `stopTimeout` never set so the vendor default 5 min governs
+  (`node_modules/react-native-background-geolocation/src/declarations/interfaces/Config.d.ts:81`).
+  Noted that this 5 min and the fleet-view Inactive default 5 min coincide by ACCIDENT, not design.
+- DRIFT (f) REFUTED: there is no Leave Ride action. Departure is an implicit side effect of
+  navigating off the map (`RideMapScreen.tsx:288-294`). The behaviour is implemented; the
+  first-class action the finding describes is not.
+- DRIFT (e) CORRECTED: guests are `ride_participants` rows (`account_id NULL`, `role='guest'`), not a
+  separate entity; the map excludes them by a null-check, the ROSTER PAGE renders them by design
+  (`RosterScreen.tsx:21-25`). Senior PM ruled 2026-07-30 that the PoC is not guest-exposed and the
+  observed rows were captain-seeded test data — recorded as such. Structural note retained because
+  Pillar II §1 (no guests in PoC) and §4.1/§4.2 ("Rider / Guest Rider", identical capability)
+  contradict each other; that conflict is Brain territory (A1).
+- LIFECYCLE GAP (largest non-engine finding): neither the auto-close nor the Hard Purge edge function
+  is SCHEDULED — no pg_cron, no cron.schedule, no config.toml entry. The purge also touches NO Rail 3
+  table, so `rail3_breadcrumb` retains the full leader route as JSONB indefinitely. R3-36 fails and
+  V-008 would fail today.
+- Two authorization defects found incidentally and filed separately with Senior PM approval:
+  D93 (`participant_update_policy` has no WITH CHECK → a rider can self-promote to captain) and
+  D94 (rail3 Broadcast authz is tenant-scoped, not ride-scoped → any tenant member can receive any
+  ride's live GPS). Both are on shared Rails 1 & 2 schema that is LIVE ON PRODUCTION. Not fixed here.
+
 ## 2026-07-19 — D91 Engine torn down ~1s after ride start (the REAL root cause; supersedes D86–D90)
 
 - THE FINDING (native TSLocationManager log, captain phone, Cinnamon ride): the engine started
