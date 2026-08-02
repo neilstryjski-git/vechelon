@@ -193,8 +193,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         googlePlayServicesLocationVersion: '21.3.0',
         // Align bg-geo's library module to the app's SDK levels (its defaults are
         // compileSdk 31 — too low for the FOREGROUND_SERVICE_LOCATION API-34 surface).
+        // target 35 = Google Play's minimum target API for new submissions (2026);
+        // must match the app module's expo-build-properties targetSdkVersion.
         compileSdkVersion: 35,
-        targetSdkVersion: 34,
+        targetSdkVersion: 35,
         minSdkVersion: 24,
       },
     ],
