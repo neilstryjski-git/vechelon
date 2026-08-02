@@ -54,7 +54,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
-        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
+        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_GIT_COMMIT": "fdd3cfa"
       }
     },
     "validate": {
