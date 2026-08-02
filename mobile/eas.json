@@ -50,10 +50,11 @@
       "android": {
         "buildType": "app-bundle"
       },
+      "environment": "production",
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://drktcxggaizkbvqccfhp.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REPLACE_WITH_PROD_PUBLISHABLE_ANON_KEY",
-        "EXPO_PUBLIC_TENANT_SLUG": "REPLACE_PER_W221_TENANT_RESOLUTION"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
+        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
       }
     },
     "validate": {
