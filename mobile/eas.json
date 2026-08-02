@@ -47,6 +47,7 @@
       "channel": "production",
       "node": "22.11.0",
       "distribution": "store",
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
