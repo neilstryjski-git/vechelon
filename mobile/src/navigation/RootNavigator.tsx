@@ -5,8 +5,15 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
+import RideMapScreen from '../screens/RideMapScreen';
 
-const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  Home: undefined;
+  SignIn: undefined;
+  RideMap: { rideId: string };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Auth gate: a persisted/just-restored session routes to the app surface;
 // otherwise the sign-in screen. While the initial session check runs we show a
@@ -27,7 +34,10 @@ const RootNavigator: React.FC = () => {
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0E0E10' } }}
     >
       {session ? (
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="RideMap" component={RideMapScreen} />
+        </>
       ) : (
         <Stack.Screen name="SignIn" component={SignInScreen} />
       )}

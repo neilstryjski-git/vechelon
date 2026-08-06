@@ -35,9 +35,38 @@ are developed and tested here, on the local stack, first.
 3. CI (`.github/workflows/rail3-ci.yml`) wires this as a **merge gate** on PRs to
    `master` that touch `supabase/**` or `mobile/**`.
 
-This is the harness-*proving* gate. The full Rail 3 behavioral matrix
-(`beacon_alerts` / `rider_states` cross-tenant + Broadcast deny) is **W182/3549**,
-which lands once the W169 schema exists.
+This is the harness-*proving* gate.
+
+### The DoD-12 behavioral matrix (W182 / 3549)
+
+On top of the SQL gate, the same workflow runs
+`mobile/tests/rlsIsolation.test.mjs` (`cd mobile && npm test`) against the local
+stack — real signed-in users via supabase-js, covering **both** isolation layers:
+
+- **DB RLS (W169):** cross-tenant `beacon_alerts` / `rider_states` reads return
+  zero rows; in-tenant access works; a tenant with no Rail 3 data reads cleanly.
+- **Broadcast authz (W170 / G-1):** subscribing to another tenant's private
+  `rail3:ride:<uuid>` channel is denied **by the real Realtime server**; the
+  in-tenant subscribe + send succeeds; an unknown-ride topic is fail-closed.
+  A DB-only matrix would miss a Broadcast leak — this layer is why the matrix
+  is a Node test, not more SQL.
+- **Isolation regression control:** the web app's in-tenant queries on shared
+  tables (`rides`, `ride_participants`, `tenants`) still behave identically
+  after the Rail 3 schema — in both directions (no loss, no widening).
+
+Like the SQL gate, the matrix **skips** its Rail 3 assertions when the held
+W169/W170 migrations aren't applied (e.g. master-based PRs), so it is safe on
+every PR; the full matrix executes on branches carrying the Rail 3 migrations
+and permanently once they merge at the promotion gate.
+
+To run it locally (needs Docker + the stack up):
+
+```sh
+eval "$(npx supabase status -o env)"
+cd mobile && npm install
+SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY \
+  SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY npm test
+```
 
 ## Run it locally
 
