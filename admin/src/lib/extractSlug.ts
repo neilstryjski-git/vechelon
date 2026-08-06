@@ -25,3 +25,19 @@ export function extractSlug(hostname: string | null | undefined): string | null 
 
   return null;
 }
+
+// Tenant resolution with a build-time override (W192). When
+// VITE_TENANT_SLUG_OVERRIDE is set, the SPA serves that tenant regardless of
+// host — this lets a deployment on a host extractSlug can't resolve (e.g. a
+// *.vercel.app preview, or localhost) still load the club. Used by the Rail 3
+// staging fleet-view deployment so race control opens at a real URL without a
+// dedicated *.vechelon.ca subdomain. Mirrors the mobile app's
+// EXPO_PUBLIC_TENANT_SLUG. MUST stay UNSET in the production project — prod
+// resolves tenants strictly from the *.vechelon.ca subdomain (extractSlug).
+export function resolveTenantSlug(hostname: string | null | undefined): string | null {
+  const override = import.meta.env.VITE_TENANT_SLUG_OVERRIDE;
+  if (typeof override === 'string' && override.trim()) {
+    return override.trim().toLowerCase();
+  }
+  return extractSlug(hostname);
+}

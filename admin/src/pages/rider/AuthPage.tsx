@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
-import { extractSlug } from '../../lib/extractSlug';
+import { resolveTenantSlug } from '../../lib/extractSlug';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error' | 'verifying';
 
@@ -15,7 +15,9 @@ const AuthPage: React.FC = () => {
   const [stage, setStage] = useState<Stage>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
+  // W192: honor VITE_TENANT_SLUG_OVERRIDE (same as the App.tsx gate) so sign-in
+  // resolves the tenant's branding/config on a non-vechelon.ca staging host.
+  const slug = React.useMemo(() => resolveTenantSlug(window.location.hostname), []);
 
   // Subscribe to the same query key App.tsx uses — React Query deduplicates the
   // network request, but this subscription ensures we re-render when data arrives

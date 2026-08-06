@@ -21,11 +21,20 @@ import { useTierDetection } from './hooks/useTierDetection';
 import { usePlatformAdminCheck } from './hooks/usePlatformAdminCheck';
 import { useAppStore } from './store/useAppStore';
 import { supabase } from './lib/supabase';
-import { extractSlug } from './lib/extractSlug';
+import { resolveTenantSlug } from './lib/extractSlug';
 import { PORTAL_BASE } from './lib/portalBase';
 import { firePortalVisitOnce, type RiderType } from './lib/analyticsEvents';
 import ClubNotFound from './pages/ClubNotFound';
 import PlatformAdminApp from './pages/PlatformAdminApp';
+import RaceControl from './pages/RaceControl';
+import RaceControlIndex from './pages/RaceControlIndex';
+import RaceControlGate from './components/RaceControlGate';
+
+// W190: the Rail 3 web fleet view ("Race Control") consumes the staging-only
+// rail3:ride:<id> Broadcast channel. The route is registered only when
+// VITE_RAIL3_FLEET_ENABLED is set, so it stays INERT in production (where the
+// W170 channel-authorization policy does not yet exist) until Rail 3 promotion.
+const RAIL3_FLEET_ENABLED = import.meta.env.VITE_RAIL3_FLEET_ENABLED === 'true';
 
 // W140: store now initializes currentTenantId to null. The AdaptiveLayout
 // effect and the broadcast_copy guard short-circuit on null, so no placeholder
@@ -166,7 +175,9 @@ function AppContent() {
   // single source of truth for which tenant the app loads. Apex, admin.*,
   // localhost, vercel previews, and unrelated domains all resolve to null —
   // those contexts render ClubNotFound (no fallback to "first tenant").
-  const slug = React.useMemo(() => extractSlug(window.location.hostname), []);
+  // W192: VITE_TENANT_SLUG_OVERRIDE (unset in prod) lets a staging deployment
+  // on a non-vechelon.ca host pin a tenant; resolveTenantSlug applies it.
+  const slug = React.useMemo(() => resolveTenantSlug(window.location.hostname), []);
 
   // W129: admin.vechelon.ca is the Platform Admin surface. Short-circuit
   // here before slug===null falls through to ClubNotFound.
@@ -290,6 +301,14 @@ function AppContent() {
           <Route path="profile"   element={<Profile />}          />
           <Route path="settings"  element={<ClubSettings />}    />
           <Route path="ride/:rideId" element={<RideLanding />}  />
+
+          {/* W190/W192: Rail 3 web fleet view — gated off in prod (see RAIL3_FLEET_ENABLED) */}
+          {RAIL3_FLEET_ENABLED && (
+            <>
+              <Route path="race-control" element={<RaceControlGate><RaceControlIndex /></RaceControlGate>} />
+              <Route path="race-control/:rideId" element={<RaceControlGate><RaceControl /></RaceControlGate>} />
+            </>
+          )}
 
           {/* Catch-all */}
           <Route path="*" element={<div className="p-20 text-center font-label text-error">ROUTE NOT MATCHED</div>} />
