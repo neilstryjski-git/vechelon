@@ -80,7 +80,12 @@ export type MeasureKind =
   // D77 — the identity invariant tripped: a broadcast or DB write was attempted under an id
   // that is NOT the current session's user. Should never appear; if it does, the fleet is
   // being fed fabricated (but validly signed) data and this row is the only way to see it.
-  | 'identity_mismatch';
+  | 'identity_mismatch'
+  // W279 (wTBD2, Ledger §6) — ONE row per engine run: engine start → first accepted fix.
+  // value = delta_ms; payload = { outcome: 'fix' | 'no_fix', saver_on, cold_start,
+  // engine_start_client_ts }. A 'no_fix' row's value is how long the run lasted. Feeds the
+  // Saver-at-start Decision Brief (startup ceiling + steady-state threshold proposals).
+  | 'engine_first_fix';
 
 // One id per SIGNED-IN RUN, so multiple testers (and multiple launches) stay separable within
 // a ride. In-memory is intentional — a new run is a new session; D77 adds: so is a new USER.

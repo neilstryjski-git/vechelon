@@ -1,8 +1,13 @@
 import type BackgroundGeolocationType from 'react-native-background-geolocation';
 import type { Location } from 'react-native-background-geolocation';
+import * as Battery from 'expo-battery';
+import { Platform } from 'react-native';
 
+import { createFirstFixTracker, withTimeout, type EngineFirstFixInfo } from './engineFirstFix';
 import { haversineDistanceM } from './geo';
 import { loadTrackingPingFlag, playTrackingPing } from './trackingPing';
+
+export type { EngineFirstFixInfo } from './engineFirstFix';
 
 // RC4 engine — Transistorsoft Background Geolocation (sole engine since W203).
 //
@@ -61,8 +66,25 @@ const HEARTBEAT_MOVE_THRESHOLD_M = 40;
 let currentHandler: ((fix: BgFix) => void) | null = null;
 let currentMotionHandler: ((isMoving: boolean, fix: BgFix | null) => void) | null = null;
 let currentHeartbeatHandler: ((info: HeartbeatCheckInfo) => void) | null = null;
+let currentFirstFixHandler: ((info: EngineFirstFixInfo) => void) | null = null;
 let configured = false;
 let listenerBound = false;
+
+// W279 (wTBD2) — engine start → first fix bookkeeping for the Saver-at-start measurement.
+// Pure tracker (engineFirstFix.ts); one report per engine run, surfaced to the caller the
+// same way HeartbeatCheckInfo is (bgGeo stays ride-agnostic; the caller owns the sink).
+const firstFixTracker = createFirstFixTracker();
+// Bound the Battery Saver read at start() so measurement can never wedge the start path.
+const SAVER_READ_TIMEOUT_MS = 1500;
+
+function reportFirstFix(info: EngineFirstFixInfo | null): void {
+  if (!info) return;
+  try {
+    currentFirstFixHandler?.(info);
+  } catch (e) {
+    console.warn('[Rail3][bgGeo] first-fix report failed', e);
+  }
+}
 
 // D88 middle-ground state. Both are updated from the onLocation / onMotionChange handlers so
 // the heartbeat self-check can answer "am I already moving?" and "how far from my last fix?"
@@ -88,10 +110,21 @@ export async function startBgGeo(
   handler: (fix: BgFix) => void,
   onMotionChange?: (isMoving: boolean, fix: BgFix | null) => void,
   onHeartbeatCheck?: (info: HeartbeatCheckInfo) => void,
+  onEngineFirstFix?: (info: EngineFirstFixInfo) => void,
 ): Promise<void> {
   currentHandler = handler;
   currentMotionHandler = onMotionChange ?? null;
   currentHeartbeatHandler = onHeartbeatCheck ?? null;
+  currentFirstFixHandler = onEngineFirstFix ?? null;
+  // W279: cold = ready() has never run in this process; anything after is a warm re-start.
+  const coldStart = !configured;
+  // W279: kick off the (bounded, never-rejecting) Battery Saver read NOW so it overlaps the
+  // listener binding and ready() work below instead of adding latency in front of start().
+  // It is awaited only at the last moment before start(); by then it has almost always settled.
+  const saverRead: Promise<boolean | null> =
+    Platform.OS === 'android'
+      ? withTimeout<boolean | null>(() => Battery.isLowPowerModeEnabledAsync(), SAVER_READ_TIMEOUT_MS, null)
+      : Promise.resolve(null);
   const BG = getBgGeo();
   // W231: hydrate the audible-ping toggle once so the onLocation hot path reads a
   // cached flag (never storage). Off by default; see trackingPing.ts.
@@ -103,6 +136,14 @@ export async function startBgGeo(
         // against them without a caller round-trip.
         lastFixPos = { lat: location.coords.latitude, lng: location.coords.longitude };
         engineMoving = location.is_moving;
+        // W279: first fix of this run only. The SDK's own timestamp lets a queued fix from the
+        // PREVIOUS run (warm restart: stop() is not awaited before the next start()) be ignored
+        // instead of recorded as a near-zero first fix. Parsed only while a run is pending.
+        if (firstFixTracker.pending()) {
+          const raw = location.timestamp as string | number; // SDK types it as string | number
+          const fixTs = typeof raw === 'number' ? raw : Date.parse(raw);
+          reportFirstFix(firstFixTracker.onFix(Date.now(), Number.isFinite(fixTs) ? fixTs : undefined));
+        }
         currentHandler?.({
           lat: location.coords.latitude,
           lng: location.coords.longitude,
@@ -176,6 +217,7 @@ export async function startBgGeo(
             reengaged = true;
             // Route the triggering fix through the normal handler so the rider reappears live
             // IMMEDIATELY, not only on the next onLocation.
+            reportFirstFix(firstFixTracker.onFix(Date.now())); // W279: a heartbeat sample counts as a fix
             currentHandler?.({ lat: cur.lat, lng: cur.lng, isMoving: true, ts: Date.now() });
           }
         } catch (e) {
@@ -243,7 +285,15 @@ export async function startBgGeo(
     await BG.ready(readyConfig as unknown as Parameters<typeof BG.ready>[0]);
     configured = true;
   }
+  // W279 (wTBD2): Battery Saver AT start() is the state the measurement keys on (a toggle during
+  // warm-up is deliberately not tracked here). Open the run BEFORE start() so a fix that lands
+  // while start() is still resolving is never missed; markStarted refines the start timestamp once
+  // start() resolves. The read was started above and is bounded: null = unreadable, never a
+  // blocked start.
+  const saverOn = await saverRead;
+  firstFixTracker.begin({ startTs: Date.now(), coldStart, saverOn });
   await BG.start();
+  firstFixTracker.markStarted(Date.now());
   // D90 — FORCE the moving state at ride join. Per Transistorsoft's Philosophy of Operation,
   // start() leaves the engine STATIONARY with location-services OFF; it only begins tracking once
   // its Motion-Activity API detects movement OR the device exits a ~200m stationary geofence. TS
@@ -285,9 +335,13 @@ export async function nudgeBgGeo(): Promise<void> {
 }
 
 export async function stopBgGeo(): Promise<void> {
+  // W279: a run that ends without ever producing a fix is a first-class measurement (how long
+  // it ran), reported BEFORE the handler refs are dropped so the caller can still log it.
+  reportFirstFix(firstFixTracker.onStop(Date.now()));
   currentHandler = null;
   currentMotionHandler = null;
   currentHeartbeatHandler = null;
+  currentFirstFixHandler = null;
   if (!BackgroundGeolocation) return; // never started (e.g. expo-only build) — nothing to stop
   try {
     await BackgroundGeolocation.stop();
