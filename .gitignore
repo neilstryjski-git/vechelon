@@ -29,3 +29,6 @@ public/portal/
 # Windows/WSL Mark-of-the-Web cruft
 *:Zone.Identifier
 .stride/
+
+# Brain-session seeds live in Drive, not git (Neil, 2026-09-13)
+productdocuments/rail 3 integration back to hands/
