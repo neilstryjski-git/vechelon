@@ -547,6 +547,20 @@ export function useFleetPositions(
       // of movement and our self-check caught it. Zero heartbeat_check rows during a
       // backgrounded stop = the OS killed the FGS → captain-side detection territory.
       void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'heartbeat_check', ...hb } });
+    }, (ff) => {
+      // W279 (wTBD2) — engine start → first fix, one row per engine run (or a no_fix row with the
+      // run's duration). Ids and deltas only; device/OS/build fields ride on every measurement.
+      void logMeasurement({
+        rideId,
+        kind: 'engine_first_fix',
+        value: ff.delta_ms,
+        payload: {
+          outcome: ff.outcome,
+          saver_on: ff.saver_on,
+          cold_start: ff.cold_start,
+          engine_start_client_ts: ff.engine_start_ts,
+        },
+      });
     });
     // D89: D86's watchBatterySaverCleared (a foreground-only Saver ON->OFF listener) is REMOVED —
     // it missed the backgrounded toggle (field-confirmed to never fire) and is superseded by the

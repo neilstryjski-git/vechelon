@@ -718,3 +718,32 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - stopTimeout still returns a genuinely-parked engine to stationary → battery preserved.
 - Combines with D90 prong 1 (changePace(true) at start): engage deterministically at join, AND
   re-assert on every resume. Prong 3 (self-health signal) remains a follow-up. tsc clean.
+
+## W279 (= wTBD2) — Saver-at-start engine-start→first-fix instrumentation (2026-09-13)
+- wTBDn SUBSTITUTION: wTBD2 (Rail 3 Ledger v1.1.3 §6, §14 item 9) = W279, goal G34. Recorded here
+  and on the ticket so the Stride ticket traces back to the Brain proposal.
+- NOTE on this log's drift: D91 (2026-07-20/21, the thresholds-dep engine teardown fix, field-validated)
+  has no entry here even though bgGeo.ts/useFleetPositions.ts already carry it (deps =
+  [backgroundReady, rideId, myRiderId]). Treat the code, not the last entries, as current.
+- LLD: pure tracker in src/lib/engineFirstFix.ts (createFirstFixTracker: begin / markStarted / onFix /
+  onStop, one report per engine run; withTimeout race helper). bgGeo.ts stays ride-agnostic and surfaces
+  the report through a 4th optional startBgGeo callback (same shape as HeartbeatCheckInfo); the caller
+  (useFleetPositions) owns the sink call. Rejected alternative: importing measure.ts into bgGeo.ts — that
+  would make the location source depend on supabase and the ride id it deliberately does not know.
+- Sampling: cold_start = !configured before ready() (first ready() in the process); saver_on read via
+  expo-battery isLowPowerModeEnabledAsync bounded at 1500 ms (null on timeout / non-Android), sampled
+  ONCE at start(); the run opens BEFORE BG.start() so a fix landing while start() resolves is never
+  missed, and markStarted refines the start ts once start() resolves (unless a fix already arrived).
+  A heartbeat re-engage sample counts as a fix. stopBgGeo reports a no_fix run with its duration.
+- Sink: new MeasureKind 'engine_first_fix' — value = delta_ms; payload { outcome, saver_on, cold_start,
+  engine_start_client_ts }. Rides the existing query_timeout carrier: NO migration, no RLS change,
+  no coordinates. Measurement only — no tuning, no threshold selection, no Pillar edits (D4).
+- Brief skeleton: docs/rail3/decision_briefs/wTBD2_saver_at_start_decision_brief.md (protocol,
+  extraction SQL, two-value proposal table, Senior PM confirmation lines). Values PENDING field runs.
+- Review (stride:task-reviewer, approved, 4 minor, all taken): Saver read now STARTS before ready() and is
+  awaited only just before start(), so it overlaps existing work instead of fronting start(); withTimeout
+  takes a thunk and swallows a sync throw (lifecycle.ts guard carried over); onLocation ignores a fix whose
+  SDK timestamp predates the run (warm-restart carry-over from an un-awaited stop() would otherwise seed the
+  warm population with near-zero deltas); test count corrected.
+- Tests: tests/engineFirstFix.test.mjs (7 cases). npm test: 63 tests, 61 pass; the 2 failing files need
+  the local Supabase stack (env vars), identical on the base branch. tsc clean (only pre-existing deepLinkAuth).
