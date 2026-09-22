@@ -1,0 +1,111 @@
+{
+ "domain": "vechelon.ca",
+ "exported": "2026-09-22",
+ "source": "POST https://api.porkbun.com/api/json/v3/dns/retrieve/vechelon.ca",
+ "records": [
+  {
+   "name": "vechelon.ca",
+   "type": "ALIAS",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "admin.vechelon.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "bikes-and-beers.vechelon.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "lakeside-wheelers.vechelon.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "3600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "racer-sportif.vechelon.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "send.vechelon.ca",
+   "type": "MX",
+   "content": "feedback-smtp.us-east-1.amazonses.com",
+   "ttl": "600",
+   "prio": "10",
+   "notes": "resend - enable sending email"
+  },
+  {
+   "name": "vechelon.ca",
+   "type": "NS",
+   "content": "curitiba.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "vechelon.ca",
+   "type": "NS",
+   "content": "fortaleza.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "vechelon.ca",
+   "type": "NS",
+   "content": "maceio.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "vechelon.ca",
+   "type": "NS",
+   "content": "salvador.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "resend._domainkey.vechelon.ca",
+   "type": "TXT",
+   "content": "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDUYKLXms9675Pvr71XpWGCIiTZCGjH/DQ44fIh5ou9xV6Le4xwjPrgQxsor2RyyGme1Juv3ZkC4+G59Y5B4LRcM2UFgbLH7GNSquQgeGJbtRpV8Nd77HzOBhs8VSM8+/VmNDaBfchd1I9iRM6XfVbyt6gCfzA1pWfOpoIjnFgZSQIDAQAB",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "resend domain verification"
+  },
+  {
+   "name": "send.vechelon.ca",
+   "type": "TXT",
+   "content": "v=spf1 include:amazonses.com ~all",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "resend enable sending"
+  },
+  {
+   "name": "_dmarc.vechelon.ca",
+   "type": "TXT",
+   "content": "v=DMARC1; p=none;",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "resend DMARC"
+  }
+ ]
+}
