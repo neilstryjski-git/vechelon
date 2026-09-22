@@ -10,6 +10,7 @@ Single log for all affected repos (`vechelon`, `neil-branding`, `itin-wizard`), 
 | 2026-09-22 | 1 | Review round 2 (cap): fixes verified; cutover-record count corrected to nine (post-cap minor, no further round); criterion 2 (Porkbun export) remains a recorded gap. | inventory.md | Reviewer findings. |
 | 2026-09-22 | 1 | Decisions recorded: S1 blog.productdelivered.ca dropped from scope (never existed); S9 public Cloudflare previews accepted. | inventory.md | Neil, in review of the inventory. |
 | 2026-09-22 | 1 | Decisions recorded: S7 add Google SPF/DKIM/DMARC to productdelivered.ca at Cloudflare (logged addition, Phase 2); S5 wildcard *.vechelon.ca (Phase 3). | inventory.md | Neil. |
+| 2026-09-22 | 1 | Authoritative zone exports pulled from the Porkbun API and committed (`dns-export-*.json`). Diff vs probes: +1 Google verification CNAME on productdelivered.ca; vechelon.ca apex = ALIAS confirmed. Acceptance criterion 2 of W294 now satisfied. | docs/hosting-migration/ | Phase 2 source of truth. |
 | 2026-09-22 | 1 | Stride goal G35 created (W294–W298, one task per phase). | Stride board 116 | Track the work. |
 
-Pending (not yet done): Porkbun zone export (Neil) — until it lands, acceptance criterion 2 of W294 (full record set exported) is a documented gap, and the `vechelon.ca` apex record type is unconfirmed;  Maps referrer list; Play-hold confirmation; Cloudflare account choice.
+Pending (not yet done):  Maps referrer list; Play-hold confirmation; Cloudflare account choice.

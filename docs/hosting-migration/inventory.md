@@ -39,7 +39,7 @@ Every fact below names the command that produced it. Values of env vars, tokens 
 
 ### 1.2 Record set as observed from outside (verified_by: DoH probes of 36 candidate names, `A/AAAA/CNAME/MX/TXT/CAA`, 2026-09-22)
 
-A zone cannot be enumerated from outside. The table below is what public resolvers return for every name we know about. **The authoritative Porkbun export is still required** (see §6) and will be diffed against this table.
+**Authoritative export obtained 2026-09-22** via the Porkbun API (`POST /api/json/v3/dns/retrieve/<domain>`), saved verbatim as `dns-export-productdelivered.ca.json` (11 records) and `dns-export-vechelon.ca.json` (13 records) beside this file. Diff against the outside probes below: **one record the probes missed** — `googlee64237846d8ffe72.productdelivered.ca CNAME google.com` (Google Workspace domain-verification; preserve) — and the `vechelon.ca` apex confirmed as **ALIAS → cname.vercel-dns.com**. Everything else matched exactly. The four `NS` rows in each export are Porkbun's own delegation records and are not recreated at Cloudflare. Phase 2 recreates from the JSON exports, not from these tables.
 
 **productdelivered.ca**
 
@@ -48,6 +48,7 @@ A zone cannot be enumerated from outside. The table below is what public resolve
 | @ | A | 216.198.79.1 | 600 | Vercel | Vercel answers 307 → www. Not attached to a project. |
 | @ | MX | 1 smtp.google.com | 3600 | Google Workspace | **Email — preserve exactly.** |
 | @ | TXT | `google-site-verification=…` | 600 | Google | Preserve. |
+| googlee64237846d8ffe72 | CNAME | `google.com` | 600 | Google Workspace verification | **Preserve.** Missed by probes; present in the export. |
 | www | CNAME | `32741a363a8128ad.vercel-dns-017.com` | 600 | Vercel (neil-branding) | Cutover record. |
 | vechelon | CNAME | `cname.vercel-dns.com` | 600 | Vercel (vechelon) | Cutover record. |
 | itin-wizard | CNAME | `cname.vercel-dns.com` | 600 | Vercel (itin-wizard) | Cutover record. |
@@ -58,7 +59,7 @@ A zone cannot be enumerated from outside. The table below is what public resolve
 
 | Name | Type | Value | TTL | Points at | Note |
 |---|---|---|---|---|---|
-| @ | ALIAS / flattened CNAME → `cname.vercel-dns.com` (observed as A answers that rotate every query: 66.33.60.x / 76.76.21.x, TTL 60–300, tracking `cname.vercel-dns.com`'s own A set) | — | Vercel (vechelon) | Vercel answers 308 → vechelon.productdelivered.ca (project domain redirect). **Record type to be confirmed by the Porkbun export; do not recreate the snapshot IPs as static A records.** Verified_by: three consecutive `dns.google` A queries + `cname.vercel-dns.com` A. |
+| @ | ALIAS / flattened CNAME → `cname.vercel-dns.com` (observed as A answers that rotate every query: 66.33.60.x / 76.76.21.x, TTL 60–300, tracking `cname.vercel-dns.com`'s own A set) | — | Vercel (vechelon) | Vercel answers 308 → vechelon.productdelivered.ca (project domain redirect). **Confirmed by the Porkbun export: `ALIAS cname.vercel-dns.com`, TTL 600.** Do not recreate the snapshot IPs as static A records. Verified_by: three consecutive `dns.google` A queries + `cname.vercel-dns.com` A. |
 | admin | CNAME | `cname.vercel-dns.com` | 600 | Vercel (vechelon) | Cutover record. |
 | racer-sportif | CNAME | `cname.vercel-dns.com` | 600 | Vercel (vechelon) | Cutover record (club). |
 | bikes-and-beers | CNAME | `cname.vercel-dns.com` | 600 | Vercel (vechelon) | Cutover record (club). |
@@ -231,7 +232,7 @@ Standing decision (2026-08-29): **Workers with static assets, Free plan**, one W
 ## 6. Open items that block Phase 2 (all need Neil)
 
 1. **Approve this inventory** (the brief's gate).
-2. **Porkbun zone export for both domains** — the record tables in §1.2 are from outside probes and cannot prove completeness. Either enable Porkbun API access on both domains and share the key pair privately, or export the record lists from the Porkbun panel into Drive `rail3/`.
+2. ~~Porkbun zone export~~ — **done 2026-09-22** (API access enabled by Neil; exports committed beside this file).
 3. **Decisions:** ~~S1~~ dropped from scope (2026-09-22) · ~~S9~~ public previews accepted (2026-09-22) · ~~S7~~ add Google SPF/DKIM/DMARC as a logged Phase 2 addition (2026-09-22) · ~~S5~~ wildcard `*.vechelon.ca` (2026-09-22). All four decided.
 4. **Google Maps key referrer list** (paste or screenshot) — needed in Phase 3, not Phase 2.
 5. **Play-verification hold** on `vechelon.productdelivered.ca` — still in force or cleared?
