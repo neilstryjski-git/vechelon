@@ -12,7 +12,7 @@ Every fact below names the command that produced it. Values of env vars, tokens 
 
 | # | Finding | Why it matters | Column |
 |---|---|---|---|
-| S1 | **`blog.productdelivered.ca` does not exist in DNS** (NXDOMAIN from the Porkbun authoritative servers, confirmed by Google and Cloudflare resolvers). The brief lists it as a Hashnode CNAME. | Either it was never created or it was removed. Nothing to carry over unless Neil supplies the Hashnode target. | decision |
+| S1 | **`blog.productdelivered.ca` does not exist in DNS** (NXDOMAIN from the Porkbun authoritative servers, confirmed by Google and Cloudflare resolvers). The brief lists it as a Hashnode CNAME. | Never created. **Decision (Neil, 2026-09-22): dropped from scope.** No record will be created. | dropped |
 | S2 | **The staging Race Control runs on a Vercel-owned hostname** (`vechelon-rail3-staging.vercel.app`, an alias on the `vechelon` project). The staging Supabase project's `site_url` and `uri_allow_list` point at it. | This is the one hostname that *must* change. Proposed new home: `rail3-staging.vechelon.ca` (record does not exist today). | port + external config |
 | S3 | **`itin-wizard` has a live custom domain**, `itin-wizard.productdelivered.ca` (HTTP 200 from Vercel). The brief only mentions the marketing site and the Vechelon apps. | Third project to move; same account-level policy exposure. | redeploy as-is |
 | S4 | **Two apex redirects are served by Vercel, not by DNS:** `productdelivered.ca` → 307 → `www.productdelivered.ca` (apex is not attached to any project; Vercel answers because the A record points at it), and `vechelon.ca` → 308 → `vechelon.productdelivered.ca` (a project-level domain redirect). | Both disappear when the apex records move. Must be recreated as Cloudflare Redirect Rules; the `vechelon.ca` apex is a flattened alias (see §1.2), so Cloudflare needs a proxied placeholder / flattened CNAME on the apex plus the Redirect Rule, not two static A records. | port |
@@ -20,7 +20,7 @@ Every fact below names the command that produced it. Values of env vars, tokens 
 | S6 | **`vechelon.productdelivered.ca` has no email records.** The brief says "DNS and email configured (DKIM via Resend)" for it; in fact DKIM/SPF live on `vechelon.ca` (`resend._domainkey`, `send.vechelon.ca`) and the Resend default From is `notifications@vechelon.ca`. | Fewer records to protect than the brief implies; the ones that matter are all on `vechelon.ca`. | redeploy (records) |
 | S7 | **`productdelivered.ca` has no SPF, DKIM or DMARC** while its MX is Google Workspace and Neil sends from `neil@productdelivered.ca`. Pre-existing gap, not caused by Vercel. | The brief says "recreate exactly". Adding Google SPF/DKIM/DMARC at Cloudflare would be an *addition* — needs Neil's yes. | decision |
 | S8 | **Web Analytics and Speed Insights are switched on for all three Vercel projects** (dashboard-level), but no `@vercel/analytics` / `@vercel/speed-insights` package or script exists in any repo. | Dashboard data is lost at decommission; nothing in code breaks. Cloudflare Web Analytics (free) is the drop-in if wanted. | external config (accept loss) |
-| S9 | **Deployment Protection (Vercel Authentication) is on for `neil-branding` and `itin-wizard`** (`all_except_custom_domains`): preview URLs require a Vercel login. `vechelon` previews are public. | Cloudflare previews on `*.workers.dev` are public unless fronted by Cloudflare Access. Decide whether previews need gating. | decision |
+| S9 | **Deployment Protection (Vercel Authentication) is on for `neil-branding` and `itin-wizard`** (`all_except_custom_domains`): preview URLs require a Vercel login. `vechelon` previews are public. | Cloudflare previews on `*.workers.dev` are public unless fronted by Cloudflare Access. **Decision (Neil, 2026-09-22): accept public previews; no Cloudflare Access.** | accepted |
 | S10 | **The `redesign` branch of neil-branding still carries the old `vercel.json`** alongside its new `wrangler.jsonc`. | Harmless until Phase 5 clean-up, but it must be deleted deliberately, not forgotten. | port (cleanup) |
 | S11 | **`VITE_JOIN_BASE_URL` is read by the web app but is not set in any Vercel environment.** The code falls back to deriving the base from the current host. | No action; recorded so Phase 3 does not "fix" it. | none |
 
@@ -167,7 +167,7 @@ Verified_by: `vercel project ls`, `vercel project inspect <name>`, `GET /v9/proj
 | Google Play listing | privacy-policy URL = `https://vechelon.productdelivered.ca/privacy` (mobile `src/lib/env.ts` on `rail3-integration`; `privacy.html` is in `dist_production/`) | No | None, but the path must keep serving 200 on Cloudflare — today that 200 depends on the `/privacy` → `/privacy.html` rewrite (§2.1), which is in the Port column (§4), not only on `privacy.html` existing. The 2026-08-30 note "hold vechelon.productdelivered.ca on Vercel until Play verification settles" — **Neil to confirm whether that hold still applies**; if so, Phase 4 carves that one record out until it clears. |
 | Mobile app (Rail 3) | Talks to Supabase directly; only web URL is the privacy link above. `assetlinks.json` (App Links) will be needed at `https://vechelon.productdelivered.ca/.well-known/assetlinks.json` — 404 today, no file exists. | No | Phase 3: make the path servable (direct 200, `application/json`, no redirect). |
 | Tenant records (`tenants.logo_url`, prod) | `racer-sportif` and `bikes-and-beers` use relative `/portal/<name>-logo.png` (served by the web build); `lakeside-wheelers` uses Supabase Storage | No | None. Same-origin relative paths keep working on Cloudflare. |
-| Hashnode | `blog.productdelivered.ca` — no record exists (S1) | — | Decision. |
+| Hashnode | `blog.productdelivered.ca` — no record exists (S1) | — | Dropped from scope (Neil, 2026-09-22). |
 
 ---
 
@@ -197,7 +197,7 @@ Verified_by: `vercel project ls`, `vercel project inspect <name>`, `GET /v9/proj
 | Per-club subdomains (4 Vercel domain entries + 4 Porkbun CNAMEs) | Wildcard `*.vechelon.ca` CNAME + Worker route (recommended, S5), or 1:1 records. |
 | Staging Race Control alias `vechelon-rail3-staging.vercel.app` (+ `vercel deploy --build-env` recipe) | Second Worker / environment on `rail3-staging.vechelon.ca`; staging Supabase auth updated. |
 | Git-push deploys (master → prod, branch → preview) via the Vercel GitHub App | Cloudflare Workers Builds GitHub integration (prod branch + preview branches). |
-| Deployment Protection on `neil-branding` / `itin-wizard` previews | Cloudflare Access on the preview hostnames, or accept public previews (S9). |
+| Deployment Protection on `neil-branding` / `itin-wizard` previews | Not ported — public previews accepted (S9, Neil 2026-09-22). |
 | `.well-known/assetlinks.json` (does not exist yet) | Add to `dist_production/.well-known/` in the build; verify direct 200 JSON. |
 | Stale `vercel.json` on neil-branding `redesign` | Delete (S10). |
 
@@ -232,7 +232,7 @@ Standing decision (2026-08-29): **Workers with static assets, Free plan**, one W
 
 1. **Approve this inventory** (the brief's gate).
 2. **Porkbun zone export for both domains** — the record tables in §1.2 are from outside probes and cannot prove completeness. Either enable Porkbun API access on both domains and share the key pair privately, or export the record lists from the Porkbun panel into Drive `rail3/`.
-3. **Decisions:** S1 (blog: recreate with a Hashnode target, or drop), S7 (add Google SPF/DKIM/DMARC to productdelivered.ca at Cloudflare, or keep "exactly as today"), S9 (gate previews with Cloudflare Access, or public), S5 (wildcard `*.vechelon.ca`, or 1:1 club records).
+3. **Decisions:** ~~S1~~ dropped from scope (2026-09-22) · ~~S9~~ public previews accepted (2026-09-22) · S7 (add Google SPF/DKIM/DMARC to productdelivered.ca at Cloudflare, or keep "exactly as today") — open · S5 (wildcard `*.vechelon.ca`, or 1:1 club records) — open, needed by Phase 3 not Phase 2.
 4. **Google Maps key referrer list** (paste or screenshot) — needed in Phase 3, not Phase 2.
 5. **Play-verification hold** on `vechelon.productdelivered.ca` — still in force or cleared?
 6. **Cloudflare account** — which account owns the zones (Product Delivered Inc.), and whether Neil creates it or I do under his login.
