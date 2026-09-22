@@ -189,7 +189,7 @@ Verified_by: `vercel project ls`, `vercel project inspect <name>`, `GET /v9/proj
 |---|---|
 | `vercel.json` host-conditioned rewrites: slug host → `/portal/index.html`; `vechelon.productdelivered.ca/` → `/landing.html` | Worker host router in front of static assets (Cloudflare `_redirects` cannot match hostnames). |
 | `vercel.json` path rules: `/portal/*` SPA fallback, `/admin/*` → `/portal/*` 301, `/ride/*` → `/portal/ride/*` 307 (host-scoped), `/prototype`, `/roadmap`, `/privacy` (Play privacy URL) | `_redirects` for path-only rules; Worker for the host-scoped `/ride` rule. |
-| The seven Vercel-pointing cutover records: `www`, `vechelon`, `itin-wizard` CNAMEs and the apex A under `productdelivered.ca`; `admin` CNAME and the flattened apex under `vechelon.ca`; plus the club CNAMEs below | Phase 2 recreates them grey-cloud pointing at Vercel; Phase 4 re-points each to its Worker custom domain (hostnames unchanged). |
+| The nine Vercel-pointing cutover records: `www`, `vechelon`, `itin-wizard` CNAMEs and the apex A under `productdelivered.ca`; `admin` CNAME and the flattened apex under `vechelon.ca`; plus the club CNAMEs below | Phase 2 recreates them grey-cloud pointing at Vercel; Phase 4 re-points each to its Worker custom domain (hostnames unchanged). |
 | `neil-branding` rewrites `/ptap`, `/jack-hanger` | `_redirects` (or Astro routes on the redesign). |
 | `itin-wizard` rewrite `/itin-wizard/(.*)` → `/index.html` | `_redirects` or assets `not_found_handling: single-page-application`. |
 | Apex redirect `productdelivered.ca` → `www` (307) | Cloudflare Redirect Rule (needs a proxied placeholder record on the apex). |
