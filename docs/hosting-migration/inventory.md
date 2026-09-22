@@ -236,4 +236,4 @@ Standing decision (2026-08-29): **Workers with static assets, Free plan**, one W
 3. **Decisions:** ~~S1~~ dropped from scope (2026-09-22) · ~~S9~~ public previews accepted (2026-09-22) · ~~S7~~ add Google SPF/DKIM/DMARC as a logged Phase 2 addition (2026-09-22) · ~~S5~~ wildcard `*.vechelon.ca` (2026-09-22). All four decided.
 4. **Google Maps key referrer list** (paste or screenshot) — needed in Phase 3, not Phase 2.
 5. ~~Play-verification hold~~ — cleared 2026-09-22; no Phase 4 carve-out.
-6. **Cloudflare account** — which account owns the zones (Product Delivered Inc.), and whether Neil creates it or I do under his login.
+6. ~~Cloudflare account~~ — created by Neil 2026-09-22 (login neil@productdelivered.ca, account id `aa40d158e471dc915ede763a273688cd`, free tier). Scoped API token `vechelon-migration` (Zone/DNS/Zone Settings/SSL/Workers Routes/Single Redirect edit, Workers Scripts edit, Account Settings read; all zones) verified active; stored locally, never committed.
