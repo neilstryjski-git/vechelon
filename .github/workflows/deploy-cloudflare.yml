@@ -1,0 +1,73 @@
+name: Deploy to Cloudflare
+
+# Vercel → Cloudflare migration (docs/hosting-migration/): deploys the Vechelon web app
+# (Admin Portal + Rider Portal) to the `vechelon-web` Worker on every push to master —
+# the same trigger Vercel used. Preview/staging deploys stay manual (`npx wrangler deploy`,
+# `--env staging`) until a branch-preview scheme is wanted.
+#
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN        scoped token (Workers Scripts edit, zone DNS/routes)
+#   VITE_SUPABASE_URL           production Supabase project URL
+#   VITE_SUPABASE_ANON_KEY      production anon/publishable key
+#   VITE_GOOGLE_MAPS_API_KEY    Maps key (referrer-restricted)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'admin/**'
+      - 'worker/**'
+      - 'static/**'
+      - 'wrangler.jsonc'
+      - 'index.html'
+      - 'prototype.html'
+      - 'roadmap.html'
+      - 'privacy.html'
+      - 'echelon-logo-v10.html'
+      - 'package.json'
+      - '.github/workflows/deploy-cloudflare.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloudflare-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build + deploy vechelon-web
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Production build (admin tsc + vite + assemble dist_production)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        run: npm run build
+
+      - name: Verify portal bundle emitted (same guard as web-build.yml)
+        run: |
+          if [ ! -s dist_production/portal/index.html ]; then
+            echo "::error::dist_production/portal/index.html is missing or empty — refusing to deploy an empty portal."
+            exit 1
+          fi
+          if ! grep -q "supabase.co" dist_production/portal/assets/index-*.js; then
+            echo "::error::built bundle has no Supabase URL — build secrets missing; refusing to deploy."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
