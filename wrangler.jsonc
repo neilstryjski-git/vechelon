@@ -7,6 +7,13 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
+  // Preview hostnames (Phase 3 UAT). Cloudflare creates the DNS records + certificates.
+  // Production hostnames are attached in Phase 4, not here.
+  "routes": [
+    { "pattern": "racer-sportif.preview.vechelon.ca", "custom_domain": true },
+    { "pattern": "admin.preview.vechelon.ca", "custom_domain": true },
+    { "pattern": "legacy.preview.vechelon.ca", "custom_domain": true }
+  ],
   "observability": { "enabled": true },
   "assets": {
     "directory": "./dist_production",
@@ -18,8 +25,14 @@
   },
   "env": {
     "staging": {
+      // Staging Race Control: same Worker, built against the staging Supabase project
+      // (replaces vechelon-rail3-staging.vercel.app). Build with the staging VITE_* values, then
+      // `npx wrangler deploy --env staging`.
       "name": "vechelon-web-staging",
-      "workers_dev": true
+      "workers_dev": true,
+      "routes": [
+        { "pattern": "racer-sportif.staging.vechelon.ca", "custom_domain": true }
+      ]
     }
   }
 }
