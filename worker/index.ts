@@ -18,7 +18,7 @@ const LEGACY_HOST = 'vechelon.productdelivered.ca';
 const TENANT_SUFFIX = '.vechelon.ca';
 const NAMESPACES = ['preview', 'staging'];
 
-function effectiveHost(hostname: string): string {
+export function effectiveHost(hostname: string): string {
   const host = hostname.toLowerCase().replace(/\.$/, '');
   for (const ns of NAMESPACES) {
     const suffix = `.${ns}${TENANT_SUFFIX}`;
@@ -30,7 +30,7 @@ function effectiveHost(hostname: string): string {
   return host;
 }
 
-function isSlugHost(host: string): boolean {
+export function isSlugHost(host: string): boolean {
   // Mirrors vercel.json: (?<slug>[a-z0-9-]+)\.vechelon\.ca — includes admin.vechelon.ca.
   return /^[a-z0-9-]+\.vechelon\.ca$/.test(host);
 }
@@ -58,6 +58,8 @@ export default {
     if (path.startsWith('/admin/')) return redirect(url, '/portal/' + path.slice('/admin/'.length), 308);
 
     if (host === LEGACY_HOST) {
+      // Vercel's `/ride/:path*` also matched the bare `/ride` (optional segment) → /portal/ride/
+      if (path === '/ride') return redirect(url, '/portal/ride/', 307);
       if (path.startsWith('/ride/')) return redirect(url, '/portal' + path, 307);
       if (path === '/') return asset(env, url, '/landing.html');
     }

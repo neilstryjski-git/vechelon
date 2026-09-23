@@ -19,9 +19,23 @@
     "directory": "./dist_production",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    // Run the router for every request except the hashed app bundle, which is served
-    // straight from the asset store (unmetered) exactly as Vercel's filesystem-first did.
-    "run_worker_first": ["/*", "!/portal/assets/*"]
+    // Run the router for HTML navigations only. The hashed bundle, PWA files, manifest,
+    // icons and logos are served straight from the asset store (unmetered), exactly as
+    // Vercel's filesystem-first did.
+    "run_worker_first": [
+      "/*",
+      "!/portal/assets/*",
+      "!/portal/sw.js",
+      "!/portal/workbox-*.js",
+      "!/portal/registerSW.js",
+      "!/portal/manifest.webmanifest",
+      "!/portal/*.png",
+      "!/portal/*.svg",
+      "!/portal/*.ico",
+      "!/*.png",
+      "!/*.svg",
+      "!/*.ico"
+    ]
   },
   "env": {
     "staging": {
