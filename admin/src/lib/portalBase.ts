@@ -5,11 +5,13 @@
 // without a forced cutover. Removable after MT-S0-13 (W136) when productdelivered
 // traffic actually moves to the subdomains.
 
-import { extractSlug } from './extractSlug';
+import { extractSlug, effectiveHostname, hostNamespace } from './extractSlug';
 
+// effectiveHostname maps preview/staging namespaces (legacy.preview.vechelon.ca)
+// onto the production host they mimic, so the same build serves both.
 const isLegacyHost =
   typeof window !== 'undefined' &&
-  window.location.hostname === 'vechelon.productdelivered.ca';
+  effectiveHostname(window.location.hostname) === 'vechelon.productdelivered.ca';
 
 /** React Router basename for the current host. */
 export const PORTAL_BASE = isLegacyHost ? '/portal' : '/';
@@ -43,7 +45,11 @@ export function buildRideUrl(
   // host (extractSlug maps it to 'racer-sportif') and per-club subdomains.
   const slug = typeof window !== 'undefined' ? extractSlug(window.location.hostname) : null;
   if (slug) {
-    return `https://${slug}.vechelon.ca/ride/${rideId}?source=${source}${refParam}`;
+    // Stay inside the current namespace (preview/staging) so UAT links do not
+    // escape to production.
+    const ns = typeof window !== 'undefined' ? hostNamespace(window.location.hostname) : null;
+    const nsPart = ns ? `.${ns}` : '';
+    return `https://${slug}${nsPart}.vechelon.ca/ride/${rideId}?source=${source}${refParam}`;
   }
 
   // Fallback: unknown host (localhost without VITE_JOIN_BASE_URL)

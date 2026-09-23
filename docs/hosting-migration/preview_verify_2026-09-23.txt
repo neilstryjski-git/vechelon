@@ -1,0 +1,37 @@
+== preview + staging hostnames
+  racer-sportif.preview.vechelon.ca  /                            http=200 type=text/html loc=
+  racer-sportif.preview.vechelon.ca  /portal/                     http=200 type=text/html loc=
+  racer-sportif.preview.vechelon.ca  /portal/rides                http=200 type=text/html loc=
+  racer-sportif.preview.vechelon.ca  /admin/                      http=308 type= loc=https://racer-sportif.preview.vechelon.ca/portal/
+  racer-sportif.preview.vechelon.ca  /ride/abc                    http=200 type=text/html loc=
+  racer-sportif.preview.vechelon.ca  /rides                       http=200 type=text/html loc=
+  racer-sportif.preview.vechelon.ca  /.well-known/assetlinks.json http=200 type=application/json loc=
+  admin.preview.vechelon.ca          /                            http=200 type=text/html loc=
+  admin.preview.vechelon.ca          /portal/                     http=200 type=text/html loc=
+  admin.preview.vechelon.ca          /portal/rides                http=200 type=text/html loc=
+  admin.preview.vechelon.ca          /admin/                      http=308 type= loc=https://admin.preview.vechelon.ca/portal/
+  admin.preview.vechelon.ca          /ride/abc                    http=200 type=text/html loc=
+  admin.preview.vechelon.ca          /rides                       http=200 type=text/html loc=
+  admin.preview.vechelon.ca          /.well-known/assetlinks.json http=200 type=application/json loc=
+  legacy.preview.vechelon.ca         /                            http=200 type=text/html loc=
+  legacy.preview.vechelon.ca         /portal/                     http=200 type=text/html loc=
+  legacy.preview.vechelon.ca         /portal/rides                http=200 type=text/html loc=
+  legacy.preview.vechelon.ca         /admin/                      http=308 type= loc=https://legacy.preview.vechelon.ca/portal/
+  legacy.preview.vechelon.ca         /ride/abc                    http=307 type= loc=https://legacy.preview.vechelon.ca/portal/ride/abc
+  legacy.preview.vechelon.ca         /rides                       http=404 type= loc=
+  legacy.preview.vechelon.ca         /.well-known/assetlinks.json http=200 type=application/json loc=
+  racer-sportif.staging.vechelon.ca  /                            http=200 type=text/html loc=
+  racer-sportif.staging.vechelon.ca  /portal/                     http=200 type=text/html loc=
+  racer-sportif.staging.vechelon.ca  /portal/rides                http=200 type=text/html loc=
+  racer-sportif.staging.vechelon.ca  /admin/                      http=308 type= loc=https://racer-sportif.staging.vechelon.ca/portal/
+  racer-sportif.staging.vechelon.ca  /ride/abc                    http=200 type=text/html loc=
+  racer-sportif.staging.vechelon.ca  /rides                       http=200 type=text/html loc=
+  racer-sportif.staging.vechelon.ca  /.well-known/assetlinks.json http=200 type=application/json loc=
+== legacy.preview / == production landing.html?
+  prod=e5e124e3 preview=e5e124e3 SAME
+== which Supabase does each host's bundle target?
+  racer-sportif.preview.vechelon.ca  prod=1 staging=0
+  racer-sportif.staging.vechelon.ca  prod=0 staging=1
+== cert
+issuer=C = US, O = Google Trust Services, CN = WE1
+notAfter=Dec 22 01:41:10 2026 GMT

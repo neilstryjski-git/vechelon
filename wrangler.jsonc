@@ -1,0 +1,52 @@
+{
+  // Vechelon web app (Admin Portal + Rider Portal) on Cloudflare Workers static assets.
+  // Build: npm run build  →  Deploy: npx wrangler deploy   (staging: --env staging after a staging-env build)
+  // Product choice + reasons: docs/hosting-migration/MIGRATION_LOG.md (Phase 3).
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vechelon-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  // Preview hostnames (Phase 3 UAT). Cloudflare creates the DNS records + certificates.
+  // Production hostnames are attached in Phase 4, not here.
+  "routes": [
+    { "pattern": "racer-sportif.preview.vechelon.ca", "custom_domain": true },
+    { "pattern": "admin.preview.vechelon.ca", "custom_domain": true },
+    { "pattern": "legacy.preview.vechelon.ca", "custom_domain": true }
+  ],
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist_production",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    // Run the router for HTML navigations only. The hashed bundle, PWA files, manifest,
+    // icons and logos are served straight from the asset store (unmetered), exactly as
+    // Vercel's filesystem-first did.
+    "run_worker_first": [
+      "/*",
+      "!/portal/assets/*",
+      "!/portal/sw.js",
+      "!/portal/workbox-*.js",
+      "!/portal/registerSW.js",
+      "!/portal/manifest.webmanifest",
+      "!/portal/*.png",
+      "!/portal/*.svg",
+      "!/portal/*.ico",
+      "!/*.png",
+      "!/*.svg",
+      "!/*.ico"
+    ]
+  },
+  "env": {
+    "staging": {
+      // Staging Race Control: same Worker, built against the staging Supabase project
+      // (replaces vechelon-rail3-staging.vercel.app). Build with the staging VITE_* values, then
+      // `npx wrangler deploy --env staging`.
+      "name": "vechelon-web-staging",
+      "workers_dev": true,
+      "routes": [
+        { "pattern": "racer-sportif.staging.vechelon.ca", "custom_domain": true }
+      ]
+    }
+  }
+}
