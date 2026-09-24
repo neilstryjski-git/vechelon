@@ -8,8 +8,16 @@
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   // Preview hostnames (Phase 3 UAT). Cloudflare creates the DNS records + certificates.
-  // Production hostnames are attached in Phase 4, not here.
+  // Production hostnames (Phase 4 cutover, 2026-09-24). A deploy REPLACES this Worker's
+  // route list with what is listed here (wrangler PUTs /routes), so the wildcard must stay
+  // in this file or the club subdomains stop resolving to the Worker on the next deploy.
+  // The two no-Worker exclusion routes (*.preview.vechelon.ca/*, *.staging.vechelon.ca/*)
+  // belong to no script and are not managed here — they keep the preview/staging custom
+  // domains on their own Workers (more-specific route wins).
   "routes": [
+    { "pattern": "vechelon.productdelivered.ca", "custom_domain": true },
+    { "pattern": "admin.vechelon.ca", "custom_domain": true },
+    { "pattern": "*.vechelon.ca/*", "zone_name": "vechelon.ca" },
     { "pattern": "racer-sportif.preview.vechelon.ca", "custom_domain": true },
     { "pattern": "admin.preview.vechelon.ca", "custom_domain": true },
     { "pattern": "legacy.preview.vechelon.ca", "custom_domain": true }

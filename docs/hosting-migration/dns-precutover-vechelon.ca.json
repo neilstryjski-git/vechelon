@@ -1,0 +1,119 @@
+[
+ {
+  "id": "f1a37fc79e6048466f8ad6ff09748192",
+  "type": "CNAME",
+  "name": "admin.vechelon.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "ab839aa3f2a4f2a6153c61ba81aeab03",
+  "type": "CNAME",
+  "name": "bikes-and-beers.vechelon.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "d63daaf6e505e82210d592863178ff60",
+  "type": "CNAME",
+  "name": "lakeside-wheelers.vechelon.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "ef0670707269d4841ce7b8a049572f98",
+  "type": "CNAME",
+  "name": "racer-sportif.vechelon.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "c84a21e8fe0dd41ffacc861cae1487e9",
+  "type": "CNAME",
+  "name": "vechelon.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "8c357175c13ce1d535b4c1652078c7d0",
+  "type": "MX",
+  "name": "send.vechelon.ca",
+  "content": "feedback-smtp.us-east-1.amazonses.com",
+  "proxied": false,
+  "ttl": 600,
+  "priority": 10
+ },
+ {
+  "id": "dfa9e8c31b1cf0baa1334c7bd5ac4234",
+  "type": "TXT",
+  "name": "_dmarc.vechelon.ca",
+  "content": "v=DMARC1; p=none;",
+  "proxied": false,
+  "ttl": 600,
+  "priority": null
+ },
+ {
+  "id": "cbbaca537be733aa1faefbfb1f5f24c5",
+  "type": "TXT",
+  "name": "resend._domainkey.vechelon.ca",
+  "content": "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDUYKLXms9675Pvr71XpWGCIiTZCGjH/DQ44fIh5ou9xV6Le4xwjPrgQxsor2RyyGme1Juv3ZkC4+G59Y5B4LRcM2UFgbLH7GNSquQgeGJbtRpV8Nd77HzOBhs8VSM8+/VmNDaBfchd1I9iRM6XfVbyt6gCfzA1pWfOpoIjnFgZSQIDAQAB",
+  "proxied": false,
+  "ttl": 600,
+  "priority": null
+ },
+ {
+  "id": "b2dcabfbe107d9c49f39972e50d52e72",
+  "type": "TXT",
+  "name": "send.vechelon.ca",
+  "content": "v=spf1 include:amazonses.com ~all",
+  "proxied": false,
+  "ttl": 600,
+  "priority": null
+ },
+ {
+  "id": "fb0b3fbddcfe6795d75725029bca69fc",
+  "type": "AAAA",
+  "name": "admin.preview.vechelon.ca",
+  "content": "100::",
+  "proxied": true,
+  "ttl": 1,
+  "priority": null
+ },
+ {
+  "id": "765b0e16accf15ad7e27057e7dc4c5df",
+  "type": "AAAA",
+  "name": "legacy.preview.vechelon.ca",
+  "content": "100::",
+  "proxied": true,
+  "ttl": 1,
+  "priority": null
+ },
+ {
+  "id": "af23bad358451b31fa4fcc7b2d4e1bda",
+  "type": "AAAA",
+  "name": "racer-sportif.preview.vechelon.ca",
+  "content": "100::",
+  "proxied": true,
+  "ttl": 1,
+  "priority": null
+ },
+ {
+  "id": "d3e5f89bc6f01223e1c0addbf6fac16d",
+  "type": "AAAA",
+  "name": "racer-sportif.staging.vechelon.ca",
+  "content": "100::",
+  "proxied": true,
+  "ttl": 1,
+  "priority": null
+ }
+]
