@@ -747,3 +747,49 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   warm population with near-zero deltas); test count corrected.
 - Tests: tests/engineFirstFix.test.mjs (7 cases). npm test: 63 tests, 61 pass; the 2 failing files need
   the local Supabase stack (env vars), identical on the base branch. tsc clean (only pre-existing deepLinkAuth).
+
+## W280 — Screen-lock Battery Saver advisory restored (B3), §5.1 collision gate, D3 dead-code removal (2026-09-30)
+- Pre-flight vs code (rail3-integration 440f914): `watchBatterySaverOnScreenLock` had ZERO callers, so R3-06
+  was silently unmet while R3-05 (join prompt) still fired — confirmed. `lastStatus` in useRideChannel.ts was
+  assigned and read once (`setStatus(lastStatus)`), dead only as retained state — removed, D73 unconditional
+  rebuild untouched, its comment reworded. NO `autoSync` / `url` / `batchSync` residue existed anywhere in
+  mobile/src (ticket asked to confirm; nothing to delete) — B1 exclusion comment added at the `BG.ready()` call so
+  nobody wires it later. RideMapScreen's "wakelock effect" is an unmount cleanup only (acquire lives in
+  handleExplainerDismiss); the new subscription mirrors its cleanup discipline.
+- LLD: pure policy module `src/lib/advisoryPolicy.ts` — `decideSaverAdvisory` / `shouldShowSaverAdvisory` is the
+  §5.1 collision rule (self-health precedence; Saver advisory suppresses while it fires; stands alone when
+  tracking is healthy; Saver off → never), `lockTransition` is the one-advisory-per-lock-cycle rule (only the
+  transition OUT of 'active' is a lock, so Android's inactive → background flap can't double-fire). Erasable TS,
+  no react-native imports, `tests/advisoryPolicy.test.mjs` (16 cases) per the beaconLogic pattern. Decisions are a
+  closed show/suppress/none set with no join-gate input — the policy cannot block (R3-49).
+- LLD: the LOCK event ARMS the check, the next UNLOCK reads Saver once and surfaces. R3-06's "on screen lock
+  event" is the active → background/inactive transition; the advisory is surfaced on the next return to
+  'active', where Battery Saver is read and the collision gate consults the self-health signal. Rationale: RN's
+  Android DialogModule defers an Alert raised while the activity is paused and shows it on resume, so unlock is
+  when the rider sees it regardless — evaluating the gate there uses the self-health state of the unlock the
+  rider actually experiences, which is how §5.1 states the rule. Reading at unlock (review round 1 took the
+  reviewer's suggestion over a lock-time read) means a Saver that switched ON while locked — Android's automatic
+  low-battery onset — is surfaced at that same unlock, a rider who toggled it OFF from the lock screen (R3-47) is
+  never nagged, and there is no lock-time promise that can resolve after the unlock handler ran.
+- LLD (review round 1): the watcher is a dependency-injected, react-native-free state machine,
+  `createScreenLockSaverWatcher` in advisoryPolicy.ts; `watchBatterySaverOnScreenLock` only binds AppState /
+  expo-battery / Alert into it. That is what makes the ticket's integration test real: node tests drive fake
+  AppState events and assert one subscription per call, `remove()` once on dispose, no show after dispose, one
+  show per lock cycle across the inactive → background flap, a pending read discarded when a newer lock cycle
+  starts, and Saver-on-while-locked surfaced at unlock.
+- Self-health input: `isSelfHealthPromptActive` getter option on `watchBatterySaverOnScreenLock`, stubbed
+  `() => false` at the RideMapScreen call site until the R3-40 overlay (W285) connects the real signal — the gate
+  exists now, that ticket only plugs in a getter. The join-time prompt (R3-05, `promptIfBatterySaverOn('join')`)
+  is unchanged and deliberately NOT gated (no self-health prompt exists at join); the Alert is factored into a
+  shared `showBatterySaverAdvisory` so both paths show one copy.
+- Wiring: RideMapScreen effect keyed on `backgroundReady` (tracking engaged); the effect cleanup IS the
+  unsubscribe, so exactly one AppState listener per ride and none stacked across re-renders.
+- D89 (Stride 5379, absorbed here; the Stride record was closed by the Senior PM as superseded by this ticket,
+  its verification evidence lands with the field run recorded below): no OS Saver ON→OFF edge listener
+  reintroduced (D86 removal comment kept in batteryGuards.ts); R3-47 remains served by
+  `useFleetPositions.onResume` (bg_nudge, D89+D90 prong 2) and the D88 heartbeat. On-device evidence for
+  R3-06 / R3-47 / R3-49 / D89 is collected on the next field build cut off rail3-integration (batched with the
+  W279 Saver matrix) — per "fixed = built AND validated" this ticket is NOT done until that run is recorded
+  here. FIELD RUN: _pending_.
+- Tests: `npm test` 79 tests, 77 pass; the 2 failing files (beaconAudit, rlsIsolation) need the local Supabase
+  stack and fail identically on the base branch. `tsc --noEmit`: only the 2 pre-existing deepLinkAuth errors.

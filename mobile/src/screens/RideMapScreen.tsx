@@ -12,6 +12,7 @@ import { selfRsvpWithIdentity } from '../lib/rideJoin';
 import {
   promptOemExclusionOnFirstJoin,
   promptIfBatterySaverOn,
+  watchBatterySaverOnScreenLock,
   acquireRideWakelock,
   releaseRideWakelock,
 } from '../lib/batteryGuards';
@@ -239,6 +240,17 @@ const RideMapScreen: React.FC = () => {
       releaseRideWakelock();
     };
   }, []);
+
+  // W280 (Ledger B3, R3-06): the screen-lock Battery Saver advisory, for the ride's duration.
+  // Subscribed once tracking is engaged (backgroundReady) and unsubscribed on leave/unmount —
+  // the effect's cleanup IS the unsubscribe, so there is exactly one listener per ride and
+  // never a stacked one. Advisory only: it is never a precondition for anything (R3-49).
+  // The §5.1 collision-gate input is a stub until the R3-40 self-health overlay (W285)
+  // connects the real signal.
+  useEffect(() => {
+    if (!backgroundReady) return;
+    return watchBatterySaverOnScreenLock({ isSelfHealthPromptActive: () => false });
+  }, [backgroundReady]);
 
   const mapRef = useRef<RNMapView | null>(null);
   const [region, setRegion] = useState<Region>(FALLBACK_REGION);

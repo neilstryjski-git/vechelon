@@ -70,7 +70,6 @@ export function useRideChannel(rideId: string | null): {
     let ch: RealtimeChannel | null = null;
     let attempt = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastStatus: RideChannelStatus = null;
 
     // W271 — observe the subscribe OUTCOME. Purely additive: nothing below reads `statusLogs` or
     // `lastLoggedStatus`, and no control flow depends on this. A CHANNEL_ERROR backoff loop retries
@@ -123,8 +122,7 @@ export function useRideChannel(rideId: string | null): {
       setChannel(thisCh);
       thisCh.subscribe((s, err) => {
         if (cancelled || ch !== thisCh) return; // drop callbacks from a superseded channel
-        lastStatus = s as RideChannelStatus;
-        setStatus(lastStatus);
+        setStatus(s as RideChannelStatus);
         // W271: additive — logged BEFORE `attempt` resets, so it records how many reconnect
         // attempts this status took. Nothing below depends on it. Wrapped because scheduleReconnect()
         // is downstream: instrumentation must never be able to kill the reconnect it exists to
@@ -162,15 +160,17 @@ export function useRideChannel(rideId: string | null): {
 
     // Recovery (D73 root cause, field-confirmed 2026-07-08): while backgrounded the
     // JS thread is SUSPENDED, so the realtime websocket can die SILENTLY — no subscribe()
-    // callback ever fires, so `lastStatus` stays frozen at 'SUBSCRIBED' and any socket-liveness
-    // flag (readyState) may be stale on resume. The old guard trusted `lastStatus !==
-    // 'SUBSCRIBED'` and therefore SKIPPED the reconnect after a real pocket, leaving the channel
-    // DEAD for the rest of the ride: no live markers, no Support Beacon received, even once
-    // foregrounded. So on EVERY return to foreground we UNCONDITIONALLY rebuild — a dead channel
-    // is a safety failure; a ~1s re-subscribe blink is not (and W262's last-known refetch fires
-    // on the SAME signal, so stopped riders repaint immediately and moving riders on their next
-    // ping). W269: the trigger is no longer AppState — it's the resume signal (clock-gap detector
-    // + AppState + staleness sweep), trailing-coalesced in the driver so a flap costs one rebuild.
+    // callback ever fires, so the last observed status stays frozen at 'SUBSCRIBED' and any
+    // socket-liveness flag (readyState) may be stale on resume. The old guard trusted a local
+    // last-status !== 'SUBSCRIBED' check (the `lastStatus` local, removed by W280 / Ledger D3
+    // as dead once this rebuild became unconditional) and therefore SKIPPED the reconnect
+    // after a real pocket, leaving the channel DEAD for the rest of the ride: no live markers,
+    // no Support Beacon received, even once foregrounded. So on EVERY return to foreground we
+    // UNCONDITIONALLY rebuild — a dead channel is a safety failure; a ~1s re-subscribe blink
+    // is not (and W262's last-known refetch fires on the SAME signal, so stopped riders repaint
+    // immediately and moving riders on their next ping). W269: the trigger is no longer
+    // AppState — it's the resume signal (clock-gap detector + AppState + staleness sweep),
+    // trailing-coalesced in the driver so a flap costs one rebuild.
     rebuildRef.current = () => {
       if (cancelled) return;
       if (retryTimer) {
