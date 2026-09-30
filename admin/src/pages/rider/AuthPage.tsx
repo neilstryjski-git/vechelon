@@ -358,6 +358,25 @@ const AuthPage: React.FC = () => {
           </div>
         </form>
       )}
+
+      {/* D95 — who runs this page and what the link does. Google Safe Browsing read the
+          club-branded sign-in on a third domain as a deceptive page; a crawler needs the
+          operator's identity on the page, not just the club's mark. */}
+      <footer className="w-full max-w-sm mt-12 pt-6 border-t border-outline-variant/20 text-center space-y-3">
+        <p className="font-body text-xs text-on-surface-variant leading-relaxed">
+          Vechelon is a ride-organizing platform for cycling clubs{tenant?.name ? <>, used here by <span className="font-semibold text-on-background">{tenant.name}</span></> : null}.
+          It is made and operated by Product Delivered Inc., Toronto.
+        </p>
+        <p className="font-body text-xs text-on-surface-variant leading-relaxed">
+          Signing in sends a one-time link to your email. We never ask for a password, and we never
+          ask for payment or card details here.
+        </p>
+        <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/70 flex items-center justify-center gap-4">
+          <a href="https://vechelon.productdelivered.ca/privacy" className="hover:text-brand-primary transition-colors">Privacy</a>
+          <a href="https://www.productdelivered.ca/vechelon" className="hover:text-brand-primary transition-colors">About Vechelon</a>
+          <a href="https://www.productdelivered.ca" className="hover:text-brand-primary transition-colors">Product Delivered</a>
+        </p>
+      </footer>
     </div>
   );
 };
