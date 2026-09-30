@@ -4,6 +4,7 @@ import * as Battery from 'expo-battery';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { createScreenLockSaverWatcher, type AppStateLike } from './advisoryPolicy';
 
 // Battery guards (W177 / Pillar II §2 Battery Saver & OEM mitigation, Pillar III
 // R3-05/R3-06, SD-010, R-001).
@@ -52,13 +53,9 @@ async function openBatterySaverSettings(): Promise<void> {
   }
 }
 
-// Advisory, non-blocking. If Battery Saver is on, shows a dismissible alert with a
-// settings shortcut; the caller's ride-join / screen-lock flow proceeds regardless.
-// `context` is for the caller's instrumentation only. Returns whether a prompt fired.
-export async function promptIfBatterySaverOn(
-  context: 'join' | 'screen-lock',
-): Promise<boolean> {
-  if (!(await isBatterySaverOn())) return false;
+// The one Battery Saver advisory, shared by the join path (R3-05) and the screen-lock
+// path (R3-06). Dismissible, with a settings shortcut; nothing awaits its outcome.
+function showBatterySaverAdvisory(): void {
   Alert.alert(
     'Battery Saver is on',
     "Battery Saver can pause location updates and make you disappear from your " +
@@ -68,20 +65,57 @@ export async function promptIfBatterySaverOn(
       { text: 'Open settings', onPress: () => void openBatterySaverSettings() },
     ],
   );
+}
+
+// Advisory, non-blocking. If Battery Saver is on, shows a dismissible alert with a
+// settings shortcut; the caller's ride-join flow proceeds regardless. `context` is for
+// the caller's instrumentation only. Returns whether a prompt fired. This join-time path
+// is deliberately NOT routed through the §5.1 collision gate — the gate is an unlock-time
+// rule (self-health prompt vs Saver advisory) and there is no self-health prompt at join.
+export async function promptIfBatterySaverOn(
+  context: 'join' | 'screen-lock',
+): Promise<boolean> {
+  if (!(await isBatterySaverOn())) return false;
+  showBatterySaverAdvisory();
   return true;
 }
 
-// Subscribe to surface the Battery Saver prompt when the app leaves the foreground
-// (the closest managed-workflow proxy for "screen lock", R3-06). Returns an
-// unsubscribe the caller invokes on ride end / unmount.
-export function watchBatterySaverOnScreenLock(): () => void {
+export type ScreenLockSaverOptions = {
+  // R3-40 self-health prompt signal, read at UNLOCK. Wired to a stub (`() => false`) until
+  // the self-health overlay ticket (W285) lands; that ticket only connects the signal — the
+  // gate below already exists (W280 / Ledger B3 collision ruling).
+  isSelfHealthPromptActive?: () => boolean;
+};
+
+// W280 (Ledger B3, R3-06): subscribe to surface the Battery Saver advisory across a screen
+// lock. Screen lock is proxied by the AppState foreground → background/inactive transition
+// (managed workflow; no native lock listener, by ruling). The lock event ARMS the check and
+// the advisory is SURFACED at the next unlock, where Battery Saver is read and the Pillar II
+// §5.1 collision rule is applied: the self-health prompt takes precedence and the Saver
+// advisory suppresses while it fires; the Saver advisory stands alone when Saver is on but
+// tracking is healthy. Surfacing at unlock is also what the platform does anyway — Android's
+// RN DialogModule defers an Alert raised while the activity is paused and shows it on
+// resume — so the gate runs at the moment the rider will actually see the dialog, with the
+// self-health state of THAT unlock. The state machine itself lives in advisoryPolicy.ts
+// (createScreenLockSaverWatcher) so its subscribe-once / dispose / one-per-lock-cycle
+// behaviour is covered by node tests; this wrapper only binds the react-native pieces.
+//
+// Advisory only: nothing here is a precondition for join, engine start, or the recovery
+// chain (R3-49). Returns an unsubscribe the caller invokes on leave / unmount.
+export function watchBatterySaverOnScreenLock(
+  opts: ScreenLockSaverOptions = {},
+): () => void {
   if (!isAndroid) return () => {};
-  const sub = AppState.addEventListener('change', (state) => {
-    if (state === 'background' || state === 'inactive') {
-      void promptIfBatterySaverOn('screen-lock');
-    }
+  return createScreenLockSaverWatcher({
+    currentState: () => (AppState.currentState as AppStateLike) ?? 'active',
+    addEventListener: (handler) => {
+      const sub = AppState.addEventListener('change', (s) => handler(s as AppStateLike));
+      return () => sub.remove();
+    },
+    readSaver: isBatterySaverOn,
+    isSelfHealthPromptActive: opts.isSelfHealthPromptActive ?? (() => false),
+    show: showBatterySaverAdvisory,
   });
-  return () => sub.remove();
 }
 
 // D89: watchBatterySaverCleared (D86's Saver ON->OFF edge listener) was REMOVED here. Its

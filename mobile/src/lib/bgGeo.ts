@@ -282,6 +282,10 @@ export async function startBgGeo(
       debug: false,
       logLevel: BG.LogLevel.Verbose, // v5: renamed from BG.LOG_LEVEL_VERBOSE
     };
+    // W280 / Ledger B1: `autoSync` (and its companions `url`, `batchSync`, `syncThreshold`) are
+    // EXCLUDED by ruling and deliberately absent from readyConfig — Vechelon never persists
+    // coordinates server-side, and the SDK's own HTTP sync would upload raw fixes. Positions
+    // travel over the Broadcast channel only. Do not wire these keys later.
     await BG.ready(readyConfig as unknown as Parameters<typeof BG.ready>[0]);
     configured = true;
   }
