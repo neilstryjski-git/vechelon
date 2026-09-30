@@ -8,6 +8,10 @@
 // navigating Home → Sign Out); overwritten when the next ride starts. Firing a departure for
 // the last-tracked ride on sign-out is always correct — signing out IS leaving that ride —
 // and is harmless if the rider had already left it (a redundant broadcast + a no-op clear).
+//
+// W281 (R3-57): ALSO cleared on every user-id delta in AuthContext's auth transition, so an
+// account swap that never went through signOut() (SIGNED_IN as B, server-side expiry) cannot
+// hand A's binding to B. Never cleared on a token refresh.
 
 export interface ActiveRide {
   rideId: string;

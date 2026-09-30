@@ -107,19 +107,33 @@ export async function sendDormantPing(args: {
 // re-add the rider on the receiver and repopulate last-known — so this correctly removes only a
 // TRULY departed rider, and self-heals when a second device is still present.
 export async function broadcastDeparture(rideId: string, riderId: string): Promise<void> {
-  await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
+  const sent = await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
+  let cleared = false;
   try {
     const { data } = await supabase.auth.getSession();
     const uid = data.session?.user?.id;
-    if (uid) {
-      await supabase
+    // W281 (R3-58 "never fires after the identity is gone", R3-57): the row write runs only
+    // while the session STILL belongs to the rider we are departing AS. Sign-out waits a bounded
+    // window for this call, so it can outlive the session: with no session there is no uid and
+    // nothing is written; after an account swap uid is B's and this must not null B's row.
+    if (uid && uid === riderId) {
+      const { error } = await supabase
         .from('ride_participants')
         .update({ last_lat: null, last_long: null, last_ping: null })
         .eq('ride_id', rideId)
         .eq('account_id', uid);
+      cleared = !error;
+      if (error) console.warn('[Rail3] departure clear rejected', error.message);
     }
   } catch (e) {
     console.warn('[Rail3] departure clear failed', e);
   }
-  void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'departed_sent', riderId } });
+  // Evidence row for the sign-out ordering (W281 SC-1): records what actually happened rather
+  // than that we tried. `sent` is restBroadcast's verdict (false = no token / identity refused /
+  // fetch threw), `cleared` = the last-known null-out succeeded under our own uid.
+  void logMeasurement({
+    rideId,
+    kind: 'app_state_change',
+    payload: { event: 'departed_sent', riderId, sent, cleared },
+  });
 }

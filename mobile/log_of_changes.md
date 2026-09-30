@@ -793,3 +793,42 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   here. FIELD RUN: _pending_.
 - Tests: `npm test` 79 tests, 77 pass; the 2 failing files (beaconAudit, rlsIsolation) need the local Supabase
   stack and fail identically on the base branch. `tsc --noEmit`: only the 2 pre-existing deepLinkAuth errors.
+
+## W281 — Sign-out ordering verified and pinned: departure → holder clear → signOut → cache clear (2026-09-30)
+- Pre-flight vs code (rail3-integration 15692d3): the built order was departure → clearActiveRide → signOut,
+  lazy-required, no scope arg (D33 ok), and a THROWN departure never blocked sign-out — but two ticket
+  statements did not match. (A) The departure was fully AWAITED with no bound anywhere in backgroundLocation.ts,
+  so a hung REST call blocked sign-out indefinitely: "fire-and-forget" was not true. (D) The onAuthStateChange
+  user-id-delta path fired no departure for the old binding and did NOT clear the active-ride holder, so on a
+  swap that bypassed signOut() account B inherited A's ride/rider binding (R3-57 gap; B's later sign-out then
+  emitted a harmless identity_mismatch). Also: the `departed_sent` sink row was logged unconditionally, even when
+  restBroadcast refused or failed — useless as SC-1 evidence.
+- LLD: `src/lib/signOutSequence.ts` (pure, DI, node-tested) owns the order. `runSignOutSequence`: departure
+  ISSUED under the still-valid JWT → bounded wait (Promise.race, 3 s; the call keeps running, only the WAIT is
+  bounded) → clearActiveRide → supabase.auth.signOut(). "Fire-and-forget" is implemented as "never wait for
+  acknowledgement", NOT as a bare `void` after signOut — that would race the token revoke and lose (D1). A
+  rejected or hung departure never blocks sign-out; a rejected signOut still propagates.
+  `runIdentityTransition`: resetMeasureIdentity on every auth event; on a user-id DELTA only, clearActiveRide
+  then `clearRosterCache()` — the R3-58 last-clause hook point (`src/lib/rosterCache.ts`, no-op until W289),
+  which sits AFTER the departure by construction (the SIGNED_OUT event is emitted by the revoke that follows
+  the departure window). Never on TOKEN_REFRESHED (same id ⇒ userChanged=false ⇒ nothing clears).
+- "Never fires after the identity is gone": broadcastDeparture now re-checks `uid === riderId` from the LIVE
+  session before the last-known null-out (restBroadcast already refuses the broadcast on mismatch via
+  isCurrentIdentity). A departure that outlives the bounded window therefore finds no session (no uid, no write)
+  or the next account's session (uid ≠ riderId, no write) — it cannot null B's row.
+- Evidence: `departed_sent` payload now carries `sent` (restBroadcast's verdict: false = no token / identity
+  refused / fetch threw) and `cleared` (row null-out succeeded under own uid), so the sink row says what
+  happened. SC-1 field evidence = `departed_sent{sent:true,cleared:true}` before the SIGNED_OUT lifecycle row.
+- Residue (recorded, not fixed here): restBroadcast never checks `res.ok`, so a non-2xx (e.g. 401 on an expired
+  JWT) still reads as `sent:true` — hot-path change, out of this ticket's scope; a rider who declined
+  background permission never sets the holder (engine never starts) so no departure fires at sign-out — the
+  no-FGS path's roster state is W288/W292 territory. On a swap that bypasses signOut() A's roster row stays
+  un-departed until the server-side staleness detector (deferred to a later sprint).
+- Tests: tests/signOutSequence.test.mjs (9 cases: order, no-ride, rejected departure, hung departure bounded by
+  the 3 s window, issued-before-signOut, timer cleared, signOut rejection propagates, transition on delta,
+  refresh clears nothing). `npm test` 88 tests, 86 pass (same 2 Supabase-stack files as base). tsc: only the 2
+  pre-existing deepLinkAuth errors.
+- Field validation (R3-58 / R3-57 / R3-56; verification steps 0–2) pending on the next field build, batched
+  with W279/W280. Ticket stays open until recorded here. FIELD RUN: _pending_ — record the ride id, the sender's
+  `departed_sent{sent,cleared}` row (+ timestamp), the SIGNED_OUT lifecycle row that follows it, and the second
+  device's `departed_recv` row (corroborates the broadcast half: `sent:true` only means the POST went out).
