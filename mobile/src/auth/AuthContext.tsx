@@ -13,6 +13,8 @@ import { resetMeasureIdentity } from '../lib/measure';
 import { isIdentityChange } from '../lib/identityDelta';
 import { TENANT_SLUG } from '../lib/env';
 import { getActiveRide, clearActiveRide } from '../lib/activeRide';
+import { clearRosterCache } from '../lib/rosterCache';
+import { runIdentityTransition, runSignOutSequence } from '../lib/signOutSequence';
 // NOTE: backgroundLocation is imported LAZILY inside signOut, NOT at module top level.
 // AuthProvider mounts at app launch (App.tsx), so a static import here would pull
 // backgroundLocation + its useRideChannel/identity/useResume subtree into the LAUNCH import
@@ -111,7 +113,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Module-level caches outlive the React tree, so the RootNavigator remount below cannot
       // clear them — they must be reset explicitly, and BEFORE setSession, so nothing that
       // reacts to the new session can still read the old user's id.
-      resetMeasureIdentity(userChanged);
+      //
+      // W281 (R3-58 last clause, R3-57): on a user-id DELTA this also clears the active-ride
+      // holder and the roster cache (hook point; W289 builds the cache). ORDER IS LOAD-BEARING:
+      // this is the auth transition, which sits AFTER the departure — signOut() below issues
+      // the departure under the outgoing JWT and only then revokes the session that emits the
+      // SIGNED_OUT event landing here. Clearing the holder here is also what stops account B
+      // inheriting account A's binding on a swap that never went through signOut() (SIGNED_IN
+      // as B, server-side expiry): A's JWT is gone by then, so no departure can be sent for it.
+      // Never on TOKEN_REFRESHED — same id, `userChanged` is false, nothing clears.
+      runIdentityTransition(userChanged, {
+        resetMeasure: resetMeasureIdentity,
+        clearActive: clearActiveRide,
+        clearRosterCache,
+      });
 
       setSession(nextSession);
       // Keep the REALTIME socket's JWT current on every auth event that carries a
@@ -141,24 +156,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // scope: 'local' here — that leaves the server session alive and the user
       // gets silently re-authenticated (supabase-patterns D33 sign-out scope).
       signOut: async () => {
-        // D87: if we were tracking a ride, tell the fleet we've LEFT before the session dies —
-        // the departure broadcast + last-known clear both need this still-valid JWT. Never let a
-        // failed departure block sign-out. Clear the holder so a later sign-out can't re-depart.
-        const active = getActiveRide();
-        if (active) {
-          try {
+        // D87 / W281 (R3-58, D1) — ORDER IS LOAD-BEARING and pinned by tests/signOutSequence:
+        //   1. departure (depart broadcast + last-known null-out) under this STILL-VALID JWT,
+        //   2. clear the active-ride holder,
+        //   3. supabase.auth.signOut()  — revokes the session; the SIGNED_OUT transition then
+        //      clears the roster cache (see onAuthStateChange).
+        // Reordering 1 and 3 leaves the departure without credentials — the D1 phantom.
+        // Fire-and-forget = sign-out waits a BOUNDED window (3s) for the departure, never for
+        // acknowledgement; a rejected or hung departure never blocks sign-out. It is never
+        // issued after the session is gone, and broadcastDeparture re-checks the identity
+        // before its row write, so a late-arriving departure cannot touch the next account.
+        await runSignOutSequence({
+          getActive: getActiveRide,
+          departure: (rideId, riderId) => {
             // Lazy require — see the note by the imports. Loading backgroundLocation's subtree
             // here (runtime, post-launch) instead of at module load keeps it out of the app
             // launch sequence, where it is not safe to eval. Matches bgGeo.ts's lazy-require.
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { broadcastDeparture } = require('../lib/backgroundLocation');
-            await broadcastDeparture(active.rideId, active.riderId);
-          } catch {
-            // best-effort — a missed departure just leaves the pre-existing greying phantom
-          }
-          clearActiveRide();
-        }
-        await supabase.auth.signOut();
+            return broadcastDeparture(rideId, riderId);
+          },
+          clearActive: clearActiveRide,
+          // Default scope ('global') — see the D33 note above. Never scope: 'local'.
+          signOut: () => supabase.auth.signOut(),
+        });
       },
     }),
     [session, initializing],
