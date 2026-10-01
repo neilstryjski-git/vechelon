@@ -915,3 +915,23 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - Field validation (R3-55 pocketed-Captain recovery; R3-20/21/22 cancel paths; D81 end-ride-with-beacon;
   Management API `SELECT account_id, beacon_active, last_ping FROM ride_participants WHERE ride_id = …`) pending on
   the next field build, batched with W279/W280/W281. FIELD RUN: _pending_.
+
+## W283 — A4 periodic last-known cadence stated, declared once, Decision Brief delivered (2026-09-30)
+- Pre-flight vs code (rail3-integration cb996be): `LAST_KNOWN_WRITE_INTERVAL_MS = 60000` was a non-exported
+  const in useFleetPositions with one caller (the onLocation throttle); the stop transition resets the clock;
+  the W282 beacon raise writes the same row without resetting it; departure nulls last_lat/last_long/last_ping
+  (the ticket's "nulls it (D87)" is accurate for those three fields). Every write is an UPDATE on ONE row scoped
+  by ride_id + live uid through lib/lastKnown.ts — single-row overwrite confirmed, never accumulated.
+- Done: constant moved to `src/lib/lastKnown.ts` (exported, with the bound and rationale in its comment),
+  imported by useFleetPositions; brief at `docs/rail3/decision_briefs/a4_last_known_cadence_decision_brief.md`
+  proposing 60 s within [30 s, 120 s] — ceiling = the committed 30 s Stopped/Inactive ping interval (the
+  persisted row must never be a denser channel than the ephemeral one it backs up), floor = the 2-min Stopped
+  threshold (a quiet rider is rendered where they were within one ladder rung, R3-62). No Pillar edited; the
+  number lands in §12.2 by the TPM after Senior PM confirmation (brief §6).
+- Surfaced, not fixed: hard-purge-location nulls last_lat/last_long/phone but NOT last_ping (nor beacon_active)
+  while R3-36 lists all three — recorded in the brief §5 for the R3-36 purge extension (W259 sequencing).
+- Tests: no new node test — lastKnown.ts imports the supabase client (react-native-url-polyfill) and cannot load
+  under node; verification is `grep -rn LAST_KNOWN_WRITE_INTERVAL_MS mobile/src` (one declaration, one import,
+  one use) + tsc. `npm test` 104 tests, 102 pass (same 2 stack files); tsc only the 2 pre-existing deepLinkAuth.
+- Remaining: Senior PM confirms the value (verification step 3); Management API single-row check after the next
+  field ride (step 1). The code half needs no device.

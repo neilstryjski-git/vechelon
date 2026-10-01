@@ -23,6 +23,21 @@ import { logMeasurement } from './measure';
 
 export type LastKnownTrigger = 'stop' | 'throttle' | 'beacon';
 
+// A4 CADENCE BOUND — declared HERE and nowhere else (W283, Ledger A4 / §14 item 21).
+// How often EVERY device overwrites its last-known position while actively riding (W266). The
+// SDK stop transition also writes it, but on real rides stopTimeout rarely fires, so without
+// this periodic write the fallback is stale at ride-start. Proposed value 60 s, bounded
+// [30 s, 120 s] — see docs/rail3/decision_briefs/a4_last_known_cadence_decision_brief.md:
+//   • ceiling for privacy: never more often than the live ping cadence the fleet already
+//     receives (30 s Stopped/Inactive ping interval), so the server-held row is never a second,
+//     denser tracking channel — and it is ONE overwritten row, never a trail;
+//   • floor for fallback quality: never less often than the 2-minute Stopped threshold, so a
+//     rider who goes quiet is rendered where they were within one state rung (R3-62).
+// The stop transition resets this clock (a stop write counts as a periodic write); the beacon
+// raise (W282) writes the same row and does not reset it; departure nulls the row.
+// Confirmed value lands in Pillar IV §12.2 by the TPM — the Hands never edit a Pillar.
+export const LAST_KNOWN_WRITE_INTERVAL_MS = 60_000;
+
 // The only columns this path may touch on MY row. Cancel-side flag clears for ANOTHER rider's
 // row live in useBeacons (double-scoped by ride_id + that rider's account_id), never here.
 export interface ParticipantSelfPatch {

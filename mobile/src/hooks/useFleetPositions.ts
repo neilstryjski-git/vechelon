@@ -9,7 +9,7 @@ import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
 import { setActiveRide } from '../lib/activeRide';
-import { persistLastKnown } from '../lib/lastKnown';
+import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
@@ -121,14 +121,9 @@ const STATE_TICK_MS = 15000;
 // W234: how often the captain upserts its route to rail3_breadcrumb (throttled — not per
 // fix, to keep writes cheap; receivers fetch on open/resume and extend live in between).
 const BREADCRUMB_UPSERT_INTERVAL_MS = 60000;
-// W266: how often EVERY device overwrites its last-known position while actively riding. The
-// SDK stop transition also writes it, but on real rides stopTimeout rarely fires, so without
-// this periodic write the fallback is stale at ride-start. One OVERWRITTEN row per rider (the
-// last place we knew you were) — not a coordinate trail, so within the Pillar II §2 last-known
-// exception; live pings still win on receivers, this only matters once transmission stops.
-const LAST_KNOWN_WRITE_INTERVAL_MS = 60000;
-
-// W282: persistLastKnown moved to ../lib/lastKnown (shared with the Support Beacon raise).
+// W282/W283: persistLastKnown and the A4 cadence constant LAST_KNOWN_WRITE_INTERVAL_MS live in
+// ../lib/lastKnown — the ONE place the cadence is declared (Ledger A4, §14 item 21; Decision
+// Brief docs/rail3/decision_briefs/a4_last_known_cadence_decision_brief.md).
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
