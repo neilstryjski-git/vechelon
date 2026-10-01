@@ -832,3 +832,86 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   with W279/W280. Ticket stays open until recorded here. FIELD RUN: _pending_ — record the ride id, the sender's
   `departed_sent{sent,cleared}` row (+ timestamp), the SIGNED_OUT lifecycle row that follows it, and the second
   device's `departed_recv` row (corroborates the broadcast half: `sent:true` only means the POST went out).
+
+## W282 — Beacon current state on ride_participants.beacon_active + raise-time last-known (slate 7, A4) (2026-09-30)
+- Pre-flight vs code (rail3-integration 35e54bf): `beacon_active` existed (initial schema, default false) and NOTHING
+  read or wrote it; the seed read `beacon_alerts WHERE beacon_cancelled_at IS NULL` (history) and merged
+  `{...seed, ...prev}`, which kept a beacon cancelled-while-blind alive until the next seed; `persistLastKnown` was
+  module-private in useFleetPositions (60 s throttle + stop only), so a beacon could be raised on a null/stale
+  last-known; FleetParticipant had no `source`; RiderMarker had no stale styling. Staging drift noted (not this
+  ticket): `schema_migrations` lists only 20260610000000 of the Rail 3 set although the objects from
+  0610010000/0714/0718 all exist (applied out of band); `participant_update_policy` on staging carries an extra
+  `OR is_tenant_admin(…)` clause the repo lacks.
+- MIGRATION: NONE. `participant_update_policy` USING = `account_id = auth.uid() OR is_captain_or_support(ride_id)`
+  (20260410000001:91-96, no WITH CHECK) already permits the own-row raise and a Captain/SAG clear on another
+  rider's row; no new policy ⇒ no recursion surface. `participant_tactical_select` shapes the seed server-side to
+  own + Captain/SAG rows — exactly canSeeBeacon's §4.1 shape.
+- LLD: `src/lib/lastKnown.ts` = the ONE write path for MY row (`persistMyParticipantPatch` / `persistLastKnown`,
+  `.eq ride_id` AND `.eq account_id = live uid`, optional retries, sink row `last_position_write{ok,trigger,fields}`
+  — no coordinates). Trigger `'beacon'` added; useFleetPositions imports it (throttle/stop call sites unchanged).
+- LLD: raise = `buildRaisePatch(coords, at)` → `{beacon_active:true, last_lat, last_long, last_ping}` in ONE update
+  (flag only when there is no fix yet — D79, last_* untouched), issued BEFORE `channel.send`, never awaited by it,
+  one retry, failure = sink row + console.error only (never composed into the alert's error message).
+- LLD: cancel = audit UPDATE on beacon_alerts FIRST (keyed by `ride_id` + `rider_id` + `cancelled_at IS NULL`,
+  not by id — a flag-adopted beacon has no audit id, and one account on two devices leaves two open rows), THEN
+  `{beacon_active:false}` on the rider's row (double-scoped, flag only) concurrently with the fan-out; on
+  `updErr` nothing else runs (flag change never precedes a successful audit write, SD-011 intact); the 0-rows
+  branch still clears the flag (raise-time flag write is independent of the audit insert). `settledAtRef` records
+  the cancel time so a seed that started earlier cannot re-add it.
+- LLD: seed = `ride_participants(account_id, beacon_active, last_lat, last_long, last_ping) WHERE beacon_active`
+  on mount, every resume (D75) and channel activation (SUBSCRIBED), 3 s debounce, `fetch_result{target:'beacon'}`
+  row. `mergeSeededBeacons` (pure) makes the seed AUTHORITATIVE for absence (no history replay; a beacon settled
+  while blind is dropped and never re-raised) with two race exceptions: a live record newer than the read start
+  minus 10 s grace is kept; a seed row for a rider cancelled locally after the read started is not re-added. Live
+  beaconId wins; the seed supplies the R3-55 anchor (raise-time last-known). `ActiveBeacon` moved to
+  beaconLogic.ts (`beaconId: string|null`, `anchor`), re-exported from useBeacons.
+- §5.3 overlay: `FleetParticipant.source: 'live'|'lastKnown'` set in the fleet compose (precedence unchanged:
+  live wins iff live.ts ≥ lk.ts); `isStaleUnderBeacon(source, beaconActive, viewerRole)` true ONLY for
+  lastKnown + active beacon + Captain/SAG viewer; RiderMarker `staleUnderBeacon` prop renders a DASHED pulse ring
+  (fill stays SOS red — red is distress-only) and joins the tracksViewChanges deps (Android bitmap gotcha). Not a
+  TacticalState (A3). Own marker never gets it. Exact dp/colour = design pass.
+- D81 (Stride 5154, server-side cancel of open beacons at ride end; semantics undecided) — RELATED, not built.
+  W282 fixes the client contract so D81 can land server-side with no client change: (1) the client treats
+  beacon_active=false or an absent seed row as SETTLED and never re-raises from beacon_alerts history; (2) D81's
+  job must clear in the client's order — beacon_alerts.beacon_cancelled_by = a NAMED actor (the ending Captain's
+  uuid or a defined system actor, never null: SD-011 reserves null for system error), beacon_cancelled_at = now(),
+  THEN ride_participants.beacon_active=false; (3) devices learn of it on their next seed (focus/resume/channel
+  activation) — no broadcast, no replay; (4) cancel-vs-preserve at ride end stays D81's decision. R3-36 note:
+  hard-purge-location nulls last_lat/last_long/phone only — extend the purge scope to `beacon_active=false,
+  last_ping=null` (note only, not built here).
+- Review round 1 (stride:task-reviewer, 4 important + 2 minor, all taken): (1) R3-55 reconnect half — the
+  raise-time `anchor` was carried but never RENDERED (the fleet's last-known fetch runs on mount/resume, not on
+  channel activation) → `anchorBeaconedFleet` (pure) runs before the §4.1 filter in RideMapScreen: a beaconed
+  rider is placed at the anchor whenever it is newer than the fleet's position, and a beaconed rider the fleet
+  does not list is surfaced from the roster as last-known; a LIVE fix at least as fresh as the anchor always
+  wins, so the overlay clears when live supersedes; riders RLS hid (not in roster) are skipped. (2) A FAILED
+  raise-time flag write could let the now-authoritative seed drop a live beacon (own device loses myBeacon, other
+  devices lose it on their next seed) → `pendingRaiseRef`: the seed re-asserts the raise patch before every read
+  and `mergeSeededBeacons` takes `protectedRiderIds` so my own beacon is never dropped on the row's say-so until
+  the write lands; the rider is told ("status flag not saved") without overwriting a sterner alert-path message;
+  cancelling my beacon clears the pending raise. (3)+(4) DB-backed tests WRITTEN (they skip without the local
+  stack and run on the staging/CI pass): beaconAudit.test.mjs +3 (own-row raise seen by the flag seed and not
+  resurrected by cancelled audit history; Captain clears another rider's flag under participant_update_policy;
+  rider-keyed cancel settles every open audit row) and rlsIsolation.test.mjs +4 with a second tenant-A
+  participant (member cannot update another's beacon_active → 0 rows; tenant-B user cannot touch a tenant-A
+  row → 0 rows; own row → 1; Captain on a rider's row → 1 via is_captain_or_support). (5) `isStaleUnderBeacon`
+  now REQUIRES the viewer role and fails closed. (6) `ActiveBeacon.triggeredAt` documented as a lower bound for
+  flag-adopted records.
+- Review round 2 (1 important + 1 minor, both on the fix-2 reconciliation path; FIXED after the two-round cap
+  without a third agent round — stated here and on the PR): a remote (Captain/SAG) cancel of my beacon did not
+  clear `pendingRaiseRef`, so after a failed raise write the next seed re-asserted the flag and resurrected a
+  cancelled beacon → the broadcast cancel branch now clears it, and the seed's re-assert is gated on my beacon
+  still being live locally (`beaconsRef`), which also covers a cancel broadcast missed while pocketed; the
+  re-assert replayed the raise-time `last_*`, moving my last-known back in time → it now writes the FLAG ONLY
+  (the throttle/stop path owns last_*).
+- Known residue: a beacon whose rider has NO last-known at all (no fix ever) still cannot be placed on the
+  Captain/SAG map (RiderMarker needs a position) — pre-existing, list surface later; a Captain-cancelled own
+  beacon learned via seed (broadcast missed while pocketed) gives no R3-24 haptic.
+- Tests: tests/beaconState.test.mjs (16 cases: raise patch with/without coords, clear patch + SD-011 throw,
+  stale predicate incl. viewer role + fail-closed, merge semantics × 7 incl. protected own beacon,
+  anchorBeaconedFleet × 4); beaconAudit +3 and rlsIsolation +4 DB-backed (skip here — Docker not running; run on
+  the staging/CI pass). `npm test` 104 tests, 102 pass (same 2 stack files as base). tsc: only the 2 pre-existing
+  deepLinkAuth errors.
+- Field validation (R3-55 pocketed-Captain recovery; R3-20/21/22 cancel paths; D81 end-ride-with-beacon;
+  Management API `SELECT account_id, beacon_active, last_ping FROM ride_participants WHERE ride_id = …`) pending on
+  the next field build, batched with W279/W280/W281. FIELD RUN: _pending_.

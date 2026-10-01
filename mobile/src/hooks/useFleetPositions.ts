@@ -9,6 +9,7 @@ import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
 import { setActiveRide } from '../lib/activeRide';
+import { persistLastKnown } from '../lib/lastKnown';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
@@ -127,38 +128,7 @@ const BREADCRUMB_UPSERT_INTERVAL_MS = 60000;
 // exception; live pings still win on receivers, this only matters once transmission stops.
 const LAST_KNOWN_WRITE_INTERVAL_MS = 60000;
 
-// Persist MY last-known position to ride_participants — the fleet's FALLBACK when live pings
-// stop (a rider goes quiet on stop / screen-lock / dead-zone). Shared by the periodic throttle
-// (onLocation) and the SDK stop transition (onMotionChange). SCOPE TO MY ROW EXPLICITLY:
-// participant_update_policy also lets a captain update anyone, so an unscoped update from a
-// captain would clobber the whole fleet's last position. RLS already permits
-// account_id = auth.uid() — pure client write, no migration (W261/W266).
-//
-// D77: this reads the LIVE session for `uid` and always did — that was half the split. The
-// broadcast beside it carried a MOUNT-TIME snapshot, so after an account swap the same GPS fix
-// went out as rider A while landing in rider B's row. Both sides now resolve to the live
-// session (myRiderId flows from useAuth), so they agree by construction rather than by luck.
-async function persistLastKnown(
-  rideId: string,
-  lat: number,
-  lng: number,
-  ts: number,
-  trigger: 'stop' | 'throttle',
-): Promise<void> {
-  const { data } = await supabase.auth.getSession();
-  const uid = data.session?.user?.id;
-  if (!uid) return;
-  const { error } = await supabase
-    .from('ride_participants')
-    .update({ last_lat: lat, last_long: lng, last_ping: new Date(ts).toISOString() })
-    .eq('ride_id', rideId)
-    .eq('account_id', uid);
-  void logMeasurement({
-    rideId,
-    kind: 'last_position_write',
-    payload: { ok: !error, trigger, ...(error ? { err: error.message } : {}) },
-  });
-}
+// W282: persistLastKnown moved to ../lib/lastKnown (shared with the Support Beacon raise).
 
 // Live fleet state for a ride: subscribes to the tenant-authorized Broadcast
 // channel (W170) and renders ONLY from received broadcasts joined against the
@@ -690,6 +660,7 @@ export function useFleetPositions(
         state: deriveRenderState(live.state ?? 'active', live.receivedAtMs, nowMs, thresholds),
         position: { lat: live.lat, lng: live.lng },
         lastPingAt: live.ts,
+        source: 'live',
       });
     } else if (lk) {
       fleet.push({
@@ -705,6 +676,7 @@ export function useFleetPositions(
         state: deriveRenderState('stopped', lk.ts, nowMs, thresholds),
         position: { lat: lk.lat, lng: lk.lng },
         lastPingAt: lk.ts,
+        source: 'lastKnown',
       });
     }
   }

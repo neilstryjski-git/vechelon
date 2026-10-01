@@ -24,6 +24,9 @@ export interface FleetParticipant {
   state: TacticalState;
   position: { lat: number; lng: number } | null;
   lastPingAt: number | null; // epoch ms
+  // W282: where `position` came from — presentation input for the §5.3 "stale under beacon"
+  // overlay ONLY. Never a TacticalState (A3): the ladder is not extended by this.
+  source?: 'live' | 'lastKnown';
 }
 
 const isCommand = (role: RideRole) => role === 'captain' || role === 'support';

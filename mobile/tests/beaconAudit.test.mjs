@@ -175,3 +175,68 @@ test('cancelled beacons are not re-cancelled (idempotency guard)', async (t) => 
     .select('beacon_cancelled_by').eq('id', fx.firstBeaconId).single();
   assert.equal(row.beacon_cancelled_by, fx.rider.id, 'original self-cancel actor preserved');
 });
+
+// ── W282: beacon current state on ride_participants.beacon_active ───────────────────────────
+// Same fixture, same guard. Row counts / ids only — never coordinates in assertions' output.
+
+test('W282: rider raise writes beacon_active + last_* on OWN row in one update; the flag seed sees it, cancelled audit history does not resurrect it', async (t) => {
+  if (!fx.schema) return t.skip('Rail 3 schema not applied');
+  const { data: touched, error } = await fx.rider.client
+    .from('ride_participants')
+    .update({ beacon_active: true, last_lat: 43.65, last_long: -79.38, last_ping: new Date().toISOString() })
+    .eq('ride_id', fx.ride.id)
+    .eq('account_id', fx.rider.id)
+    .select('account_id');
+  assert.ifError(error);
+  assert.equal(touched.length, 1);
+
+  // The seed query, as the captain (participant_tactical_select): the flag is the state.
+  const { data: seed, error: seedErr } = await fx.captain.client
+    .from('ride_participants')
+    .select('account_id, beacon_active, last_ping')
+    .eq('ride_id', fx.ride.id)
+    .eq('beacon_active', true);
+  assert.ifError(seedErr);
+  assert.deepEqual(seed.map((r) => r.account_id), [fx.rider.id]);
+  assert.ok(seed[0].last_ping);
+
+  // A cancelled audit row exists for this rider (from the earlier cases); once the flag is
+  // false the seed is empty — history is never replayed into state.
+  assert.ifError((await admin.from('ride_participants').update({ beacon_active: false }).eq('ride_id', fx.ride.id).eq('account_id', fx.rider.id)).error);
+  const { data: after } = await fx.captain.client
+    .from('ride_participants').select('account_id').eq('ride_id', fx.ride.id).eq('beacon_active', true);
+  assert.deepEqual(after, []);
+});
+
+test('W282: captain clears beacon_active on ANOTHER rider\'s row under participant_update_policy (flag only, double-scoped)', async (t) => {
+  if (!fx.schema) return t.skip('Rail 3 schema not applied');
+  assert.ifError((await admin.from('ride_participants').update({ beacon_active: true }).eq('ride_id', fx.ride.id).eq('account_id', fx.rider.id)).error);
+  const { data: touched, error } = await fx.captain.client
+    .from('ride_participants')
+    .update({ beacon_active: false })
+    .eq('ride_id', fx.ride.id)
+    .eq('account_id', fx.rider.id)
+    .select('account_id, beacon_active');
+  assert.ifError(error);
+  assert.equal(touched.length, 1);
+  assert.equal(touched[0].beacon_active, false);
+});
+
+test('W282: rider-keyed cancel settles EVERY open audit row for that rider (two devices, one account)', async (t) => {
+  if (!fx.schema) return t.skip('Rail 3 schema not applied');
+  const { data: rows, error: insErr } = await admin.from('beacon_alerts').insert([
+    { tenant_id: fx.tenant.id, ride_id: fx.ride.id, rider_id: fx.rider.id, triggered_at: new Date().toISOString() },
+    { tenant_id: fx.tenant.id, ride_id: fx.ride.id, rider_id: fx.rider.id, triggered_at: new Date().toISOString() },
+  ]).select('id');
+  assert.ifError(insErr);
+  const ids = rows.map((r) => r.id).sort();
+  const { data: touched, error } = await fx.rider.client
+    .from('beacon_alerts')
+    .update({ beacon_cancelled_by: fx.rider.id, beacon_cancelled_at: new Date().toISOString() })
+    .eq('ride_id', fx.ride.id)
+    .eq('rider_id', fx.rider.id)
+    .is('beacon_cancelled_at', null)
+    .select('id');
+  assert.ifError(error);
+  assert.deepEqual(touched.map((r) => r.id).sort(), ids);
+});

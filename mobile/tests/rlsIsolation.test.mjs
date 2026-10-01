@@ -55,6 +55,7 @@ const fx = {
   tenantA: null,
   tenantB: null,
   userA: null, // { id, email, client }  — member of tenant A only
+  userA2: null, // second member of tenant A, participant of ride A (W282 own-row negative tests)
   userB: null, // member of tenant B only
   rideA: null,
   rideB: null,
@@ -120,7 +121,7 @@ before(async () => {
   // get_my_tenant_id() — the helper every Rail 3 policy scopes by — is
   // deterministic per user.
   const password = `Pw-${RUN}-secret`;
-  for (const [key, tenant] of [['userA', fx.tenantA], ['userB', fx.tenantB]]) {
+  for (const [key, tenant] of [['userA', fx.tenantA], ['userA2', fx.tenantA], ['userB', fx.tenantB]]) {
     const email = `${RUN}-${key}@test.local`;
     const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     assert.ifError(error);
@@ -152,7 +153,10 @@ before(async () => {
 
   const { error: pErr } = await admin
     .from('ride_participants')
-    .insert({ ride_id: fx.rideA.id, account_id: fx.userA.id, role: 'member', status: 'rsvpd' });
+    .insert([
+      { ride_id: fx.rideA.id, account_id: fx.userA.id, role: 'member', status: 'rsvpd' },
+      { ride_id: fx.rideA.id, account_id: fx.userA2.id, role: 'member', status: 'rsvpd' },
+    ]);
   assert.ifError(pErr);
 
   // Rail 3 rows for tenant B ONLY — so tenant A doubles as the
@@ -172,7 +176,7 @@ before(async () => {
 after(async () => {
   // Best-effort teardown (local throwaway stack; CI destroys it anyway).
   try {
-    for (const u of [fx.userA, fx.userB]) {
+    for (const u of [fx.userA, fx.userA2, fx.userB]) {
       if (!u) continue;
       await u.client?.auth.signOut();
       u.client?.realtime.disconnect();
@@ -183,7 +187,7 @@ after(async () => {
     }
     await admin.from('ride_participants').delete().eq('ride_id', fx.rideA?.id ?? '');
     await admin.from('rides').delete().in('id', [fx.rideA?.id, fx.rideB?.id].filter(Boolean));
-    for (const u of [fx.userA, fx.userB]) {
+    for (const u of [fx.userA, fx.userA2, fx.userB]) {
       if (!u) continue;
       await admin.from('account_tenants').delete().eq('account_id', u.id);
       await admin.from('accounts').delete().eq('id', u.id);
@@ -299,4 +303,56 @@ test('web regression: rides cross-tenant boundary unchanged (no widening)', asyn
     .from('rides').select('id').eq('tenant_id', fx.tenantB.id);
   assert.ifError(error);
   assert.equal(data.length, 0, 'REGRESSION: Rail 3 changes widened cross-tenant rides visibility');
+});
+
+// ── W282: ride_participants.beacon_active own-row scoping (participant_update_policy) ────────
+// Base-schema table, so these run even without the Rail 3 migrations. Row counts only.
+
+test('W282: a plain member cannot update another participant\'s beacon_active (0 rows)', async () => {
+  const { data, error } = await fx.userA.client
+    .from('ride_participants')
+    .update({ beacon_active: false })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', fx.userA2.id)
+    .select('account_id');
+  assert.ifError(error);
+  assert.deepEqual(data, []);
+});
+
+test('W282: a tenant-B user cannot touch a tenant-A participant row (0 rows)', async () => {
+  const { data, error } = await fx.userB.client
+    .from('ride_participants')
+    .update({ beacon_active: false })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', fx.userA.id)
+    .select('account_id');
+  assert.ifError(error);
+  assert.deepEqual(data, []);
+});
+
+test('W282: a member CAN set beacon_active on their own row (1 row)', async () => {
+  const { data, error } = await fx.userA.client
+    .from('ride_participants')
+    .update({ beacon_active: true })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', fx.userA.id)
+    .select('account_id');
+  assert.ifError(error);
+  assert.equal(data.length, 1);
+});
+
+test('W282: a captain CAN clear beacon_active on a rider\'s row in their ride (1 row), via is_captain_or_support', async () => {
+  assert.ifError((await admin.from('ride_participants').update({ role: 'captain' }).eq('ride_id', fx.rideA.id).eq('account_id', fx.userA.id)).error);
+  try {
+    const { data, error } = await fx.userA.client
+      .from('ride_participants')
+      .update({ beacon_active: false })
+      .eq('ride_id', fx.rideA.id)
+      .eq('account_id', fx.userA2.id)
+      .select('account_id');
+    assert.ifError(error);
+    assert.equal(data.length, 1);
+  } finally {
+    await admin.from('ride_participants').update({ role: 'member' }).eq('ride_id', fx.rideA.id).eq('account_id', fx.userA.id);
+  }
 });

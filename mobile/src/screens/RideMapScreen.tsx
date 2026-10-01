@@ -24,7 +24,8 @@ import { broadcastDeparture } from '../lib/backgroundLocation';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
-import { canSeeBeacon, canCancelBeacon } from '../lib/beaconLogic';
+import { canSeeBeacon, canCancelBeacon, isStaleUnderBeacon, anchorBeaconedFleet } from '../lib/beaconLogic';
+import { deriveRenderState } from '../state/riderState';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
 import RiderMarker from '../components/RiderMarker';
@@ -308,9 +309,22 @@ const RideMapScreen: React.FC = () => {
   // §4.1: Captain/SAG see the whole fleet; Riders see Captain+SAG only.
   // Defense-in-depth: the RLS-gated roster already bounds what a Rider can
   // identify; this client-side filter re-asserts the §4.1 matrix on top.
+  // W282 (R3-55 render half): before the §4.1 filter, anchor beaconed riders at their raise-time
+  // last-known when the fleet's position is older (or missing — a reconnect can adopt a beacon
+  // before the fleet's own last-known fetch has run). Live newer than the anchor always wins.
+  const anchoredFleet = useMemo(
+    () =>
+      anchorBeaconedFleet(
+        fleet,
+        beacons,
+        (id) => roster[id] ?? null,
+        (ts) => deriveRenderState('stopped', ts, Date.now(), ride?.thresholds),
+      ),
+    [fleet, beacons, roster, ride?.thresholds],
+  );
   const visible = useMemo(
-    () => (myRiderId ? visibleParticipants(myRole, myRiderId, fleet) : []),
-    [myRiderId, myRole, fleet],
+    () => (myRiderId ? visibleParticipants(myRole, myRiderId, anchoredFleet) : []),
+    [myRiderId, myRole, anchoredFleet],
   );
 
   // R3-13/R3-14: indicator only when a finish exists AND is off-screen.
@@ -502,6 +516,9 @@ const RideMapScreen: React.FC = () => {
               // the sheet's Cancel Support is reachable (§4.1).
               tappable={canOpenSheet(myRole, p.role) || (showBeacon && myRiderId != null && canCancelBeacon(myRole, myRiderId, p.riderId))}
               beaconActive={showBeacon}
+              // W282 / §5.3: overlay only when the beacon is anchored at last-known AND the
+              // viewer is command (a Rider watching a Captain SOS gets the plain beacon).
+              staleUnderBeacon={isStaleUnderBeacon(p.source, showBeacon, myRole)}
               onPress={setSelected}
             />
           );
