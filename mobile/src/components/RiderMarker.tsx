@@ -61,10 +61,16 @@ interface Props {
   // W173: pulsing high-visibility distress state. The CALLER gates this with
   // canSeeBeacon (Captain/SAG + self only) — this component just renders it.
   beaconActive?: boolean;
+  // W282 / §5.3 "Stale under beacon": the beacon is anchored at the rider's LAST-KNOWN (no live
+  // fix yet). Presentation only — the CALLER computes it with isStaleUnderBeacon (Captain/SAG
+  // surfaces, in coincidence with beaconActive); this component just renders it. Never a
+  // TacticalState (A3).
+  staleUnderBeacon?: boolean;
   onPress: (participant: FleetParticipant) => void;
 }
 
-const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onPress }) => {
+const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, staleUnderBeacon, onPress }) => {
+  const stale = Boolean(beaconActive && staleUnderBeacon);
   const ring = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -104,6 +110,7 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
     return () => clearTimeout(t);
   }, [
     beaconActive,
+    stale, // W282: the overlay changes the bitmap — re-snapshot (Android bitmap gotcha)
     participant.state,
     participant.role,
     participant.position?.lat,
@@ -133,6 +140,9 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, onP
           <Animated.View
             style={[
               styles.beaconRing,
+              // §5.3 stale-under-beacon: a DASHED pulse says "last-known, not live" while the
+              // fill stays SOS red — red remains distress-only. Exact dp/colour is a design pass.
+              stale ? styles.beaconRingStale : null,
               {
                 opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }),
                 transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.8] }) }],
@@ -205,6 +215,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderColor: '#F59E0B',
     borderWidth: 4,
+  },
+  beaconRingStale: {
+    borderStyle: 'dashed',
   },
 });
 
