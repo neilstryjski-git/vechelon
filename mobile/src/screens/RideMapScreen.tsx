@@ -27,6 +27,7 @@ import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { canSeeBeacon, canCancelBeacon, isStaleUnderBeacon, anchorBeaconedFleet } from '../lib/beaconLogic';
+import { canEndRide } from '../lib/rideControlsLogic';
 import { deriveRenderState } from '../state/riderState';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
@@ -283,17 +284,22 @@ const RideMapScreen: React.FC = () => {
   // one-shot ride.status effect, which could never converge after the open.
   const { endedRef, checkNow, markEnded } = useRideEndWatch(rideId, navigation, {
     clearLocalBeacons,
-    iAmCaptain: myRole === 'captain',
-    ready: ride != null, // myRole is a pre-load default until the ride row resolves
+    // W291: the Captain who presses End Ride calls markEnded first, so the watch never decides for
+    // them; every OTHER Captain is a co-Captain who should be told like anyone else. Muting all
+    // captains would have left co-Captains with a silent teardown.
+    iAmCaptain: false,
+    ready: ride != null, // the ride row must resolve before the mount read
   });
 
-  // D57 fast path: the captain's RIDE_ENDED_EVENT broadcast TRIGGERS the status read (RideControls
-  // awaits the UPDATE before sending, so the read sees 'saved'); only the read acts. Bind once the
-  // ride is loaded so myRole is final.
+  // D57 fast path: a captain's RIDE_ENDED_EVENT broadcast TRIGGERS the status read (RideControls
+  // awaits the UPDATE before sending, so the read sees 'saved'); only the read acts. W291: bound for
+  // EVERY role — a co-Captain's map must react to another Captain's End Ride in real time (the old
+  // non-captain-only gate left it blind). The ending Captain has already called markEnded, so the
+  // watch's endedRef makes their own echo a no-op. Bind once the ride is loaded.
   useEffect(() => {
-    if (!channel || !ride || myRole === 'captain') return;
+    if (!channel || !ride) return;
     channel.on('broadcast', { event: RIDE_ENDED_EVENT }, () => checkNow('ride_ended_event'));
-  }, [channel, ride, myRole, checkNow]);
+  }, [channel, ride, checkNow]);
 
   // D87: leaving the live ride map is a DELIBERATE departure — clear my marker for the fleet so
   // it doesn't linger as a greying phantom. Fires on genuine navigation-away (back / gesture /
@@ -592,7 +598,7 @@ const RideMapScreen: React.FC = () => {
           `ride &&` guard covers the render-first window: until the role hydrates,
           myRole defaults to 'member' so this is already hidden, and ride.id is only
           read once the ride exists. */}
-      {ride && myRole === 'captain' ? (
+      {ride && canEndRide(myRole) ? (
         <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} onRideEnded={markEnded} />
       ) : null}
 

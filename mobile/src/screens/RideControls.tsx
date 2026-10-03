@@ -5,6 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
+import { fetchRideStatus } from '../lib/rideStatus';
 import { endRidePatch } from '../lib/rideControlsLogic';
 import type { LatLng } from '../lib/geo';
 
@@ -47,17 +48,38 @@ const RideControls: React.FC<Props> = ({ rideId, getMyCoords, channel, onRideEnd
       .eq('status', 'active') // idempotent: a ride already Saved matches 0 rows
       .select('id');
 
-    // D60: a real RLS/permission failure is `updErr`. 0 rows with NO error just
-    // means the ride was ALREADY saved (the idempotent guard) — that's success,
-    // not a permission problem, so don't show the scary message; just leave.
+    // A true write error is `updErr`.
     if (updErr) {
-      // RLS (ride_admin_modify: tenant admin OR created_by) or a true write error.
       setError(updErr.message || 'Could not end the ride — check your permissions.');
       setEnding(false);
       return;
     }
 
     const closedNow = (data?.length ?? 0) > 0;
+
+    // W291: 0 rows with NO error is AMBIGUOUS — either the ride was already Saved (the idempotent
+    // guard; D60 treated this as success) OR RLS denied this account (a Captain who is neither the
+    // creator nor a tenant admin, before the rides_rail3_captain_end policy is on the server). The
+    // old code took the first reading unconditionally, so a denied co-Captain got a silent false
+    // success: RIDE_ENDED broadcast, map left, ride still active. Re-read the persisted status and
+    // act on the truth.
+    if (!closedNow) {
+      let status: string | null = null;
+      try {
+        status = await fetchRideStatus(rideId);
+      } catch {
+        status = null;
+      }
+      if (status !== 'saved') {
+        setError(
+          status === null
+            ? 'Could not confirm the ride ended — check your connection and try again.'
+            : 'End Ride wasn’t accepted for your account — another Captain or the organiser can end it.',
+        );
+        setEnding(false);
+        return; // no RIDE_ENDED broadcast, no onRideEnded, no goBack: the ride is still live
+      }
+    }
 
     // Queue the AI summary ONLY when THIS call actually closed the ride (D60: not
     // on an already-saved no-op). Existing edge function, fire-and-forget (R3-26:
