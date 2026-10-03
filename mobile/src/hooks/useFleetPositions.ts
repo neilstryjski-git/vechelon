@@ -7,7 +7,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
-import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
+import { startBgGeo, stopBgGeo, nudgeBgGeo, isEngineSessionActive } from '../lib/bgGeo';
 import { setActiveRide } from '../lib/activeRide';
 import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown';
 import { recordCounter, fullCaptureEvent, loadOperatorConfig } from '../lib/telemetry';
@@ -307,9 +307,12 @@ export function useFleetPositions(
     // No need to detect WHY: changePace(true) is a no-op on a healthy/moving engine and a no-op if
     // the engine was never configured, so an unconditional resume-nudge is safe. stopTimeout still
     // returns a genuinely-parked engine to stationary, so battery is preserved.
-    void nudgeBgGeo();
+    // W287: a torn-down engine (ride-end teardown, slate 13) must not be poked back by a resume —
+    // nudge only while bgGeo owns a live engine session.
+    const active = isEngineSessionActive();
+    if (active) void nudgeBgGeo();
     const rid = rideIdRef.current;
-    if (rid) void logMeasurement({ rideId: rid, kind: 'bg_nudge', payload: { reason: 'resume', source } });
+    if (rid) void logMeasurement({ rideId: rid, kind: 'bg_nudge', payload: { reason: 'resume', source, skipped: !active } });
   }, []);
   useResume(rideId, onResume);
 

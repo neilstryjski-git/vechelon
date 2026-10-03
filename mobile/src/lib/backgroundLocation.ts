@@ -106,7 +106,15 @@ export async function sendDormantPing(args: {
 // COLLISION-SAFE: if the same account is still live on another device, that device's live pings
 // re-add the rider on the receiver and repopulate last-known — so this correctly removes only a
 // TRULY departed rider, and self-heals when a second device is still present.
-export async function broadcastDeparture(rideId: string, riderId: string): Promise<void> {
+// W287 (R3-70): `clearLastKnown: false` on a RIDE-END teardown — the 'departed' broadcast still
+// goes out (harmless; clears my marker on any peer not yet torn down) but last_lat / last_long /
+// last_ping are NOT nulled: on a Saved ride they persist to the T+4h Hard Purge. Default true
+// (a Leave Ride mid-ride is a real departure and clears them as before).
+export async function broadcastDeparture(
+  rideId: string,
+  riderId: string,
+  opts: { clearLastKnown?: boolean } = {},
+): Promise<void> {
   const sent = await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
   let cleared = false;
   try {
@@ -116,7 +124,7 @@ export async function broadcastDeparture(rideId: string, riderId: string): Promi
     // while the session STILL belongs to the rider we are departing AS. Sign-out waits a bounded
     // window for this call, so it can outlive the session: with no session there is no uid and
     // nothing is written; after an account swap uid is B's and this must not null B's row.
-    if (uid && uid === riderId) {
+    if (opts.clearLastKnown !== false && uid && uid === riderId) {
       const { error } = await supabase
         .from('ride_participants')
         .update({ last_lat: null, last_long: null, last_ping: null })

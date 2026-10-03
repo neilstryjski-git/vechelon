@@ -1088,3 +1088,61 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   `last_position_write{trigger:headless}`; Leave Ride → swipe-away → ZERO rows; service disabled while the process
   lives; FGS killed by OEM = documented non-recoverable) pending on the next field build (needs the W284 migration on
   staging). FIELD RUN: _pending_.
+
+## W287 — Device-side convergent ride-end teardown (slate 13, A2, item 14; R3-69/35/67/70) (2026-10-03)
+- Pre-flight vs code (rail3-integration c63869d): only two ride-end paths existed, both foreground + Alert — the D57
+  RIDE_ENDED broadcast handler and a ONE-SHOT `ride.status` read on open (useRideDetails never re-reads, so it could
+  not converge); NO connectivity signal exists (no NetInfo dependency — none added, a native module means a new
+  build) so "connectivity resumption" is approximated by the W269 resume sources clockgap + stale (+ appstate);
+  `rides.status` enum is created|active|saved — 'purged' is a PARTICIPANT status, so the headless 'purged' branch
+  was dead; useRideChannel has no remove API (teardown = unmount) and its resume rebuild is unconditional; the
+  headless task already read rides.status but returned noop on Saved; `nudgeBgGeo` guarded only on `configured`,
+  so a resume would have poked a torn-down engine back; R3-70 HOLE: today's ride-ended goBack fired beforeRemove →
+  broadcastDeparture → NULLED last_lat/last_long/last_ping, wiping a last-known that must persist to T+4h.
+- LLD: `src/lib/rideEndCheck.ts` (pure, node-tested) — `shouldTearDown` = 'saved' ONLY (A2: affirmative read; null /
+  unknown never); bounded jittered retry (3 attempts, 1 s base, 4 s cap, [base/2, base), injectable rand/sleep) —
+  a failed read yields null and the NEXT signal retries, never strands, never tears down;
+  `decideRideEndAction` (saved + foreground → notify with the existing Alert, the A2 foreground-only notification;
+  backgrounded or Captain → silent); `shouldReadStatusOnBeat` (every beat when the engine is disabled — the read
+  replaces a blind re-assert on a Saved ride; every 3rd beat when enabled, ≈3 min worst-case background convergence
+  on the 60 s heartbeat floor, bounded by the inactivity backstop). `src/lib/rideStatus.ts` = the one shared REST
+  read (throws on error so retry engages; missing row → null).
+- LLD: `src/hooks/useRideEndWatch.ts` — on mount, on every resume signal (`useResume`, consumer 'ride_end'), and on
+  the D57 RIDE_ENDED broadcast (now a TRIGGER for the read, never the decision): read with retry → decide → on
+  Saved: `endedRef` (idempotent), `clearLocalBeacons()` (NEW on useBeacons; local only — D81, R3-70),
+  `clearPersistedActiveRide()` (R3-67), evidence row `ride_end_teardown{trigger, action}`, Alert only when
+  foregrounded, `navigation.goBack()` → unmount removes the channel (useRideChannel cleanup) and stops the engine
+  (useFleetPositions cleanup → stopBgGeo). Single-flight guard. RideMapScreen's one-shot effect removed.
+- R3-70 fix: `broadcastDeparture(rideId, riderId, { clearLastKnown })` — on a ride-END teardown (`endedRef`, incl.
+  the Captain's own End Ride via a new `onRideEnded` prop on RideControls) the 'departed' broadcast still goes out
+  but last_* are NOT nulled; a mid-ride Leave clears them as before. Fixes the pre-existing D57 behaviour too.
+- Heartbeat / headless: bgGeo's beat reads `getState()` then, per `shouldReadStatusOnBeat` and single-flight,
+  the durable holder → session gate (uid === holder.riderId) → `readStatusWithRetry(fetchRideStatus)`; on Saved
+  (and not `stopping`): evidence `wake_attempt{outcome:'torn_down_saved', reason:'saved'}` BEFORE stopBgGeo drops
+  the refs → `clearPersistedActiveRide()` → `stopBgGeo()` (engineSession=false → no re-assert) → return; null →
+  the W286 re-assert / D88 path unchanged. `beatIndex` reset per run so the first beat reads. Headless:
+  `decideHeadlessAction` returns 'teardown' on 'saved' (any recovery event, enabled or not): `BG.stop()` FIRST,
+  holder cleared on success only (a failed stop keeps the holder so the next beat retries rather than going inert
+  with the engine streaming) → `wake_attempt{torn_down_saved}` / `teardown_failed`; no re-assert, no last-known
+  write, no rider-facing surface. R3-39 nudge gated on new `isEngineSessionActive()` (bg_nudge payload records
+  `skipped`).
+- Explicitly OUT (slate 13 / B2): the server-initiated wake fast path (FCM) and the staleness detector. Accepted
+  limit recorded: a device with neither connectivity nor focus continues until one changes, bounded by the
+  inactivity backstop. BG.stop() dismissing the Android FGS notification is NOT documented in the SDK types on disk
+  → device validation item (R3-35).
+- Tests: tests/rideEndCheck.test.mjs (6: saved-only matrix, jitter bounds + cap, retry then answer with bounded
+  sleeps, exhausted → null / null row = answer, foreground action matrix, beat cadence); headlessTask.test.mjs
+  Saved case rewritten for 'teardown' (every recovery event × enabled, 'purged' no longer special, no holder / non-
+  recovery event → noop). `npm test` 128 tests, 126 pass (same 2 stack files); tsc: only the 2 pre-existing
+  deepLinkAuth errors.
+- Review round 1 (stride:task-reviewer, approved; 4 minor, all taken): the in-process heartbeat teardown now mirrors
+  the headless order — `stopBgGeo()` returns a boolean and the durable holder is cleared only on success (a failed
+  stop keeps it so the next beat retries; evidence `teardown_failed`); `fetchRideStatus` carries an 8 s deadline
+  (`withTimeout`) so a hung request counts as a failed attempt and the single-flight guards are always released, and
+  `statusReadInFlight` resets per run; bgGeo imports supabase / rideStatus / clearPersistedActiveRide statically
+  (bgGeo is itself lazily required, so this is launch-safe — the lazy-require rule is the headless task's); the
+  watch's mount read waits for the ride row (`ready`), so a Captain opening an already-Saved ride is never shown the
+  non-captain Alert because the role was still a pre-load default.
+- Field validation (pocketed + airplane → connectivity resumes; backgrounded → focus; Captain Leave does NOT tear
+  down; SOS cleared on end; inactivity auto-close converges without RIDE_ENDED; FGS notification clears silently)
+  pending on the next field build (W284 migration on staging first). FIELD RUN: _pending_.

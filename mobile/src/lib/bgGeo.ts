@@ -6,8 +6,11 @@ import { Platform } from 'react-native';
 import { createFirstFixTracker, withTimeout, type EngineFirstFixInfo } from './engineFirstFix';
 import { haversineDistanceM } from './geo';
 import { loadTrackingPingFlag, playTrackingPing } from './trackingPing';
-import { readPersistedActiveRide } from './activeRide';
+import { readPersistedActiveRide, clearPersistedActiveRide } from './activeRide';
+import { supabase } from './supabase';
+import { fetchRideStatus } from './rideStatus';
 import { buildWakeAttemptPayload, decideForegroundHeartbeat } from './headlessLogic';
+import { readStatusWithRetry, shouldReadStatusOnBeat, shouldTearDown } from './rideEndCheck';
 
 export type { EngineFirstFixInfo } from './engineFirstFix';
 
@@ -76,7 +79,7 @@ export interface EngineEventInfo {
   // W286 adds 'wake_attempt' (full-capture only — the caller must not count it) and the
   // 'heartbeat_reassert' reason for an engine_started produced by the in-process re-assert.
   kind: 'engine_started' | 'engine_died' | 'wake_attempt';
-  reason: 'start_resolved' | 'enabled_false' | 'provider_disabled' | 'heartbeat_reassert';
+  reason: 'start_resolved' | 'enabled_false' | 'provider_disabled' | 'heartbeat_reassert' | 'saved';
   detail?: Record<string, unknown>;
 }
 let currentEngineEventHandler: ((info: EngineEventInfo) => void) | null = null;
@@ -94,6 +97,17 @@ let diedReported = false;
 // unlike `stopping`, which is transient. A heartbeat whose getState() was in flight when we
 // stopped therefore cannot re-assert the engine we just stopped.
 let engineSession = false;
+// W287: heartbeat cadence counter for the persisted-status read (reset per run) and a single-flight
+// guard so a slow read never stacks across beats.
+let beatIndex = 0;
+let statusReadInFlight = false;
+
+// W287: whether bgGeo currently owns a running engine session (set after start() resolves, cleared
+// at the top of stopBgGeo). The R3-39 resume nudge is gated on it: a torn-down engine must not be
+// poked back to life by a resume.
+export function isEngineSessionActive(): boolean {
+  return engineSession;
+}
 
 // W279 (wTBD2) — engine start → first fix bookkeeping for the Saver-at-start measurement.
 // Pure tracker (engineFirstFix.ts); one report per engine run, surfaced to the caller the
@@ -203,6 +217,8 @@ export async function startBgGeo(
   stopping = false;
   engineRunning = false;
   diedReported = false;
+  beatIndex = 0; // W287: the first beat of a run reads status
+  statusReadInFlight = false; // W287: a read hung across a run boundary must not mute the next run
   // W279: cold = ready() has never run in this process; anything after is a warm re-start.
   const coldStart = !configured;
   // W279: kick off the (bounded, never-rejecting) Battery Saver read NOW so it overlaps the
@@ -286,14 +302,58 @@ export async function startBgGeo(
         // not short-circuit this check. A disabled engine during a persisted ride is re-asserted
         // and the D88 self-check is skipped for this beat. In-process heartbeats ride the FGS, so
         // an enabled:false here is rare; the headless task is the primary R3-42 path.
+        let enabled: boolean | null = null;
+        // W287: stopBgGeo() nulls the handler refs, so hold the engine-event handler for the
+        // teardown evidence row that follows a stop.
+        const currentEngineEventHandlerSnapshot = currentEngineEventHandler;
         try {
-          const st = await BG.getState();
-          if (!st.enabled) {
-            await reassertEngine(BG, 'heartbeat');
-            return;
-          }
+          enabled = (await BG.getState()).enabled;
         } catch (e) {
           console.warn('[Rail3][bgGeo] heartbeat getState failed', e);
+        }
+        // W287 (slate 13 / A2): the persisted-status check "hangs on B1's heartbeat" so a pocketed
+        // phone converges too. Every beat when the engine is disabled (the read replaces a blind
+        // re-assert on a Saved ride); every Nth beat when enabled (an enabled engine keeps
+        // streaming on a Saved ride). Only an affirmative 'saved' tears down; null never does.
+        if (enabled !== null && !statusReadInFlight && shouldReadStatusOnBeat({ beatIndex: beatIndex++, engineEnabled: enabled })) {
+          statusReadInFlight = true;
+          try {
+            const ride = await readPersistedActiveRide();
+            if (ride) {
+              const { data } = await supabase.auth.getSession();
+              if (data.session?.user?.id === ride.riderId) {
+                const status = await readStatusWithRetry(() => fetchRideStatus(ride.rideId));
+                if (shouldTearDown(status) && !stopping) {
+                  // Same order as the headless path: engine FIRST, holder cleared only when the stop
+                  // succeeded (a failed stop keeps the holder so the next beat re-reads and retries
+                  // instead of going inert with the engine still streaming). Evidence is reported
+                  // BEFORE stopBgGeo drops the handler refs.
+                  const stopped = await stopBgGeo();
+                  if (stopped) clearPersistedActiveRide();
+                  currentEngineEventHandlerSnapshot?.({
+                    kind: 'wake_attempt',
+                    reason: 'saved',
+                    detail: buildWakeAttemptPayload({
+                      outcome: stopped ? 'torn_down_saved' : 'teardown_failed',
+                      reason: 'saved',
+                      event: 'heartbeat',
+                      engineEnabledBefore: enabled,
+                      context: 'foreground',
+                    }),
+                  });
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[Rail3][bgGeo] heartbeat status read failed', e);
+          } finally {
+            statusReadInFlight = false;
+          }
+        }
+        if (enabled === false) {
+          await reassertEngine(BG, 'heartbeat');
+          return;
         }
         // A moving engine already streams via onLocation — nothing to re-engage.
         if (engineMoving) {
@@ -471,7 +531,9 @@ export async function nudgeBgGeo(): Promise<void> {
   }
 }
 
-export async function stopBgGeo(): Promise<void> {
+// Returns true when the engine is stopped (or there was nothing to stop), false when BG.stop()
+// rejected — callers that clear durable state on teardown (W287) must only do so on true.
+export async function stopBgGeo(): Promise<boolean> {
   // W284: our own stop is a clean teardown — mark it BEFORE stop() so the onEnabledChange(false)
   // it provokes is never counted as an engine death. W286: end the engine session here too, and
   // for good (no finally reset) — see `engineSession`.
@@ -488,12 +550,14 @@ export async function stopBgGeo(): Promise<void> {
   currentEngineEventHandler = null;
   if (!BackgroundGeolocation) {
     stopping = false;
-    return; // never started (e.g. expo-only build) — nothing to stop
+    return true; // never started (e.g. expo-only build) — nothing to stop
   }
   try {
     await BackgroundGeolocation.stop();
+    return true;
   } catch (e) {
     console.warn('[Rail3][bgGeo] stop failed', e);
+    return false;
   } finally {
     stopping = false;
   }
