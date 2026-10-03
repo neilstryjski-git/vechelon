@@ -85,7 +85,9 @@ export type MeasureKind =
   // value = delta_ms; payload = { outcome: 'fix' | 'no_fix', saver_on, cold_start,
   // engine_start_client_ts }. A 'no_fix' row's value is how long the run lasted. Feeds the
   // Saver-at-start Decision Brief (startup ceiling + steady-state threshold proposals).
-  | 'engine_first_fix';
+  | 'engine_first_fix'
+  // W287: convergent ride-end teardown fired on the device; payload = { trigger, action }.
+  | 'ride_end_teardown';
 
 // One id per SIGNED-IN RUN, so multiple testers (and multiple launches) stay separable within
 // a ride. In-memory is intentional — a new run is a new session; D77 adds: so is a new USER.

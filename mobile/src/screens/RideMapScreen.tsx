@@ -22,6 +22,7 @@ import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
 import { broadcastDeparture } from '../lib/backgroundLocation';
 import { clearPersistedActiveRide } from '../lib/activeRide';
+import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
@@ -99,7 +100,7 @@ const RideMapScreen: React.FC = () => {
   const myCoordsRef = useRef<typeof myCoords>(null);
   myCoordsRef.current = myCoords;
   const getMyCoords = useCallback(() => myCoordsRef.current, []);
-  const { beacons, myBeacon, triggerBeacon, cancelBeacon, error: beaconError } = useBeacons(
+  const { beacons, myBeacon, triggerBeacon, cancelBeacon, error: beaconError, clearLocalBeacons } = useBeacons(
     rideId,
     ride?.tenantId ?? null,
     myRiderId,
@@ -265,34 +266,25 @@ const RideMapScreen: React.FC = () => {
 
   const myRole = ride?.myRole ?? 'member';
 
-  // D57 — leave the live map when the ride ends. The captain ends it itself (in
-  // RideControls) and navigates there; only NON-captains react here. Guard against
-  // double-firing once we've left.
-  const leftEndedRef = useRef(false);
+  // W287 (slate 13 / A2) — CONVERGENT ride-end teardown. Re-reads persisted rides.status on mount,
+  // on every resume signal and when the D57 RIDE_ENDED broadcast arrives (a trigger for the read,
+  // never the decision); tears down only on an affirmative 'saved': local beacons cleared,
+  // durable holder cleared, goBack → unmount removes the channel and stops the engine. Foreground
+  // keeps the Alert (A2 foreground-only notification); backgrounded is silent. Replaces the old
+  // one-shot ride.status effect, which could never converge after the open.
+  const { endedRef, checkNow, markEnded } = useRideEndWatch(rideId, navigation, {
+    clearLocalBeacons,
+    iAmCaptain: myRole === 'captain',
+    ready: ride != null, // myRole is a pre-load default until the ride row resolves
+  });
 
-  // (a) Live: the captain's RIDE_ENDED_EVENT broadcast. Bind only once the ride is
-  // loaded (so myRole is final, not the pre-load 'member') and never for the captain.
+  // D57 fast path: the captain's RIDE_ENDED_EVENT broadcast TRIGGERS the status read (RideControls
+  // awaits the UPDATE before sending, so the read sees 'saved'); only the read acts. Bind once the
+  // ride is loaded so myRole is final.
   useEffect(() => {
     if (!channel || !ride || myRole === 'captain') return;
-    channel.on('broadcast', { event: RIDE_ENDED_EVENT }, () => {
-      if (leftEndedRef.current) return;
-      leftEndedRef.current = true;
-      Alert.alert('Ride ended', 'The captain has ended this ride.');
-      navigation.goBack();
-    });
-  }, [channel, ride, myRole, navigation]);
-
-  // (b) Fresh open of an already-saved ride: a non-captain who opens a ride that is
-  // no longer Active gets the same leave-the-map treatment (the broadcast is
-  // ephemeral, so a late joiner relies on ride.status).
-  useEffect(() => {
-    if (!ride || myRole === 'captain' || leftEndedRef.current) return;
-    if (ride.status !== 'active') {
-      leftEndedRef.current = true;
-      Alert.alert('Ride ended', 'This ride has already ended.');
-      navigation.goBack();
-    }
-  }, [ride, myRole, navigation]);
+    channel.on('broadcast', { event: RIDE_ENDED_EVENT }, () => checkNow('ride_ended_event'));
+  }, [channel, ride, myRole, checkNow]);
 
   // D87: leaving the live ride map is a DELIBERATE departure — clear my marker for the fleet so
   // it doesn't linger as a greying phantom. Fires on genuine navigation-away (back / gesture /
@@ -305,10 +297,12 @@ const RideMapScreen: React.FC = () => {
       // W286 (R3-67): a departure ends the ENGINE SESSION too — clear the durable holder first so
       // neither the headless task nor the heartbeat re-assert can re-engage this ride.
       clearPersistedActiveRide();
-      void broadcastDeparture(rideId, myRiderId);
+      // W287 (R3-70): on a RIDE-END teardown the 'departed' broadcast still goes out, but my
+      // last-known is NOT nulled — on a Saved ride it persists to the T+4h purge.
+      void broadcastDeparture(rideId, myRiderId, { clearLastKnown: !endedRef.current });
     });
     return unsub;
-  }, [navigation, rideId, myRiderId]);
+  }, [navigation, rideId, myRiderId, endedRef]);
 
   // §4.1: Captain/SAG see the whole fleet; Riders see Captain+SAG only.
   // Defense-in-depth: the RLS-gated roster already bounds what a Rider can
@@ -590,7 +584,7 @@ const RideMapScreen: React.FC = () => {
           myRole defaults to 'member' so this is already hidden, and ride.id is only
           read once the ride exists. */}
       {ride && myRole === 'captain' ? (
-        <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} />
+        <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} onRideEnded={markEnded} />
       ) : null}
 
       {ride ? (

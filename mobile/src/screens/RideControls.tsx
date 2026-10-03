@@ -25,9 +25,12 @@ interface Props {
   // Shared ride channel (useRideChannel) — used to broadcast the end so other
   // participants leave the live map (D57).
   channel: RealtimeChannel | null;
+  // W287 (R3-70): the Captain's own End Ride is a ride-end teardown, not a mid-ride departure —
+  // the map marks itself ended so the beforeRemove departure keeps last_* for the purge.
+  onRideEnded?: () => void;
 }
 
-const RideControls: React.FC<Props> = ({ rideId, getMyCoords, channel }) => {
+const RideControls: React.FC<Props> = ({ rideId, getMyCoords, channel, onRideEnded }) => {
   const navigation = useNavigation();
   const [confirming, setConfirming] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -77,6 +80,7 @@ const RideControls: React.FC<Props> = ({ rideId, getMyCoords, channel }) => {
 
     setConfirming(false);
     setEnding(false);
+    onRideEnded?.(); // W287: ride-end, not departure — keep last_* (R3-70)
     navigation.goBack(); // the ride is no longer live — leave the map
   };
 

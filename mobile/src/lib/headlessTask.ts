@@ -62,13 +62,13 @@ export async function runHeadlessEvent(BG: BG, event: HeadlessEvent): Promise<vo
     if (!data.session?.user?.id) return;
     if (data.session.user.id !== ride.riderId) return; // D77: never act for a stale identity
 
-    let rideStatus: string | null = null;
-    try {
-      const { data: r } = await supabase.from('rides').select('status').eq('id', ride.rideId).maybeSingle();
-      rideStatus = (r?.status as string | undefined) ?? null;
-    } catch {
-      rideStatus = null; // unknown → accept the re-assert (the slate 13 teardown owns Saved)
-    }
+    // W287: the shared persisted-status read with bounded retry. null (RLS-hidden / failed) is
+    // never Saved → the normal recovery path; an affirmative 'saved' → teardown below.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readStatusWithRetry } = require('./rideEndCheck') as typeof import('./rideEndCheck');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { fetchRideStatus } = require('./rideStatus') as typeof import('./rideStatus');
+    const rideStatus = await readStatusWithRetry(() => fetchRideStatus(ride.rideId));
 
     let enabledBefore: boolean | null = null;
     try {
@@ -103,8 +103,26 @@ export async function runHeadlessEvent(BG: BG, event: HeadlessEvent): Promise<vo
         }),
       );
 
+    if (action === 'teardown') {
+      // W287 (slate 13 / A2 / R3-35): affirmative Saved → stop the engine (clears the FGS
+      // notification), THEN clear the durable holder — on success only, so a failed stop leaves
+      // the holder for the next beat to retry rather than going inert with the engine still
+      // streaming. No re-assert, no last-known write, no rider-facing surface.
+      try {
+        await BG.stop();
+      } catch (e) {
+        await wake('teardown_failed', e instanceof Error ? e.message : String(e));
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { clearPersistedActiveRide } = require('./activeRide') as typeof import('./activeRide');
+      clearPersistedActiveRide();
+      await wake('torn_down_saved');
+      return;
+    }
+
     if (action === 'noop') {
-      await wake(rideStatus === 'saved' || rideStatus === 'purged' ? 'skipped_saved' : 'noop');
+      await wake('noop');
       return;
     }
 

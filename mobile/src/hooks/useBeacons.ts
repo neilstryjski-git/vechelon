@@ -74,6 +74,9 @@ export function useBeacons(
   cancelBeacon: (beacon: ActiveBeacon) => Promise<void>;
   lastLatencyMs: number | null;
   error: string | null;
+  // W287 (D81): drop LOCAL beacon state at ride-end teardown so a beacon never outlives its ride
+  // on the device. Local only — no beacon_alerts / ride_participants write (R3-70).
+  clearLocalBeacons: () => void;
 }{
   const [beacons, setBeacons] = useState<Record<string, ActiveBeacon>>({});
   // Mirror for the seed closure (bound once per ride): the pending-raise re-assert must only run
@@ -451,6 +454,12 @@ export function useBeacons(
     [rideId, myRiderId, channel],
   );
 
+  const clearLocalBeacons = useCallback(() => {
+    setBeacons({});
+    pendingRaiseRef.current = null;
+    settledAtRef.current = {};
+  }, []);
+
   return {
     beacons,
     myBeacon: myRiderId ? beacons[myRiderId] ?? null : null,
@@ -458,5 +467,6 @@ export function useBeacons(
     cancelBeacon,
     lastLatencyMs,
     error,
+    clearLocalBeacons,
   };
 }

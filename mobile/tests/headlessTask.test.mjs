@@ -47,11 +47,19 @@ test('disabled engine during an active ride: heartbeat/providerchange → reasse
   assert.equal(decideHeadlessAction({ event: 'terminate', persistedRide: ride, engineEnabled: false }), 'reassert_and_write_last_known');
 });
 
-test('a ride already Saved or purged → noop even with a stale durable holder (teardown is the slate 13 sibling)', () => {
-  assert.equal(decideHeadlessAction({ event: 'heartbeat', persistedRide: ride, engineEnabled: false, rideStatus: 'saved' }), 'noop');
-  assert.equal(decideHeadlessAction({ event: 'terminate', persistedRide: ride, engineEnabled: false, rideStatus: 'purged' }), 'noop');
+test("W287: an affirmative 'saved' → teardown for every recovery event, enabled or not; null/active unchanged", () => {
+  for (const event of ['heartbeat', 'terminate', 'providerchange']) {
+    for (const engineEnabled of [true, false]) {
+      assert.equal(decideHeadlessAction({ event, persistedRide: ride, engineEnabled, rideStatus: 'saved' }), 'teardown', `${event}/${engineEnabled}`);
+    }
+  }
   assert.equal(decideHeadlessAction({ event: 'heartbeat', persistedRide: ride, engineEnabled: false, rideStatus: 'active' }), 'reassert');
   assert.equal(decideHeadlessAction({ event: 'heartbeat', persistedRide: ride, engineEnabled: false, rideStatus: null }), 'reassert');
+  // 'purged' is a PARTICIPANT status, never a ride's — no longer special-cased.
+  assert.equal(decideHeadlessAction({ event: 'heartbeat', persistedRide: ride, engineEnabled: false, rideStatus: 'purged' }), 'reassert');
+  // Saved never tears down without a durable holder, and never on a non-recovery event.
+  assert.equal(decideHeadlessAction({ event: 'heartbeat', persistedRide: null, engineEnabled: false, rideStatus: 'saved' }), 'noop');
+  assert.equal(decideHeadlessAction({ event: 'location', persistedRide: ride, engineEnabled: false, rideStatus: 'saved' }), 'noop');
 });
 
 test('unknown events are ignored', () => {

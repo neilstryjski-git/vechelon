@@ -32,8 +32,9 @@ export function parsePersistedRide(raw: string | null | undefined): PersistedRid
   }
 }
 
-export type HeadlessAction = 'noop' | 'reassert' | 'reassert_and_write_last_known' | 'write_last_known';
-export type RideStatusLike = 'created' | 'active' | 'saved' | 'purged' | string | null;
+export type HeadlessAction = 'noop' | 'teardown' | 'reassert' | 'reassert_and_write_last_known' | 'write_last_known';
+// rides.status enum is created | active | saved ('purged' is a PARTICIPANT status, never a ride's).
+export type RideStatusLike = 'created' | 'active' | 'saved' | string | null;
 
 const HEADLESS_EVENTS = new Set(['heartbeat', 'terminate', 'providerchange']);
 
@@ -47,7 +48,9 @@ export function isRecoveryEvent(name: string | null | undefined): boolean {
 // What the headless task does for one SDK event:
 //   • no durable ride → noop (this IS R3-67's "background task de-registered": AppRegistry
 //     registration is permanent, so the task must be inert when there is nothing to recover)
-//   • ride already Saved → noop (teardown-on-Saved belongs to the slate 13 sibling ticket)
+//   • ride affirmatively Saved (W287, slate 13 / A2) → teardown: stop the engine, clear the
+//     durable holder, never re-assert, never write last-known. Only an affirmative 'saved'
+//     read — null / unknown is never Saved.
 //   • terminate → the A4 last-known write (the process is going away; the fleet needs a fresh
 //     fallback), plus a re-assert when the engine is disabled
 //   • heartbeat / providerchange → re-assert only when the engine is disabled
@@ -58,8 +61,8 @@ export function decideHeadlessAction(args: {
   rideStatus?: RideStatusLike;
 }): HeadlessAction {
   if (!args.persistedRide) return 'noop';
-  if (args.rideStatus === 'saved' || args.rideStatus === 'purged') return 'noop';
   if (!HEADLESS_EVENTS.has(args.event)) return 'noop';
+  if (args.rideStatus === 'saved') return 'teardown';
   if (args.event === 'terminate') return args.engineEnabled ? 'write_last_known' : 'reassert_and_write_last_known';
   return args.engineEnabled ? 'noop' : 'reassert';
 }
@@ -98,7 +101,8 @@ export type WakeOutcome =
   | 'skipped_no_ride'
   | 'skipped_stopping'
   | 'skipped_no_session'
-  | 'skipped_saved'
+  | 'torn_down_saved' // W287: affirmative Saved → engine stopped, durable holder cleared
+  | 'teardown_failed' // W287: Saved read but BG.stop() rejected; holder kept so the next beat retries
   | 'noop';
 
 // Full-capture 'wake_attempt' payload. Device operational state only — never a coordinate key.
