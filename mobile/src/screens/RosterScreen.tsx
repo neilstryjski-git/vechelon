@@ -56,6 +56,7 @@ type Row = {
   phone: string | null;
   role: RideRole;
   rail3_joined_at: string | null; // W288: the app-tracked signal (NOT joined_at)
+  departed_at: string | null; // W292: the durable departed mark (a timestamp, never a coordinate)
   accounts: AccountEmbed | AccountEmbed[] | null;
 };
 
@@ -68,7 +69,7 @@ const roleRank: Record<RideRole, number> = { captain: 0, support: 1, member: 2, 
 // The ride row's own name/phone is the fallback — used for guests with no account.
 const acctOf = (r: Row): AccountEmbed | null =>
   (Array.isArray(r.accounts) ? r.accounts[0] : r.accounts) ?? null;
-// W289: the seven roster fields the cache slot carries (contact fields included; nothing positional).
+// W289: the roster fields the cache slot carries (contact fields included; nothing positional). W292 adds departed_at (eight).
 const toCachedRow = (r: Row): CachedRow => ({
   id: r.id,
   account_id: r.account_id,
@@ -76,6 +77,7 @@ const toCachedRow = (r: Row): CachedRow => ({
   phone: r.phone,
   role: r.role,
   rail3_joined_at: r.rail3_joined_at,
+  departed_at: r.departed_at ?? null,
   accounts: acctOf(r),
 });
 const timeAgo = (iso: string): string => {
@@ -122,7 +124,7 @@ const RosterScreen: React.FC = () => {
     try {
       const { data, error: pErr } = await supabase
         .from('ride_participants')
-        .select('id, account_id, display_name, phone, role, rail3_joined_at, accounts(name, phone)')
+        .select('id, account_id, display_name, phone, role, rail3_joined_at, departed_at, accounts(name, phone)')
         .eq('ride_id', rideId);
       if (pErr) throw pErr;
       const live = (data ?? []) as Row[];
@@ -217,7 +219,11 @@ const RosterScreen: React.FC = () => {
     const resolvedPhone = phoneOf(item);
     const lead = isCommand(item.role);
     const self = isSelf(item);
-    const state = participationState({ accountId: item.account_id, rail3JoinedAt: item.rail3_joined_at });
+    const state = participationState({
+      accountId: item.account_id,
+      rail3JoinedAt: item.rail3_joined_at,
+      departedAt: item.departed_at, // W292: a departed row is retained and marked, never dropped (R3-65/70)
+    });
     // slate 8 / §4.1: leaders' numbers to everyone; every number to command (co-captains included —
     // a call sheet, a deliberate divergence from the map's canSeePhone). Rider↔rider parked.
     const phoneAllowed = !self && phoneVisibleTo(myRole, item.role);
@@ -243,7 +249,15 @@ const RosterScreen: React.FC = () => {
             )}
             {self && <Text style={[styles.roleChip, styles.youChip]}>YOU</Text>}
             {/* R3-74: roster-only is a declared structural state — neutral grey, never a warning. */}
-            <Text style={[styles.stateChip, state === 'app_tracked' && styles.stateChipTracked]}>
+            {/* W292 / R3-65: 'Left ride' is its own look — not the grey of roster-only, not the light of
+                tracked, not the map's dark/dormant palette — so left ≠ lost at a glance. */}
+            <Text
+              style={[
+                styles.stateChip,
+                state === 'app_tracked' && styles.stateChipTracked,
+                state === 'departed' && styles.stateChipDeparted,
+              ]}
+            >
               {participationLabel(state).toUpperCase()}
             </Text>
           </View>
@@ -378,6 +392,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stateChipTracked: { color: '#C8C8C8', borderColor: '#5A5A60' },
+  stateChipDeparted: { color: '#7FA6C9', borderColor: '#3E5F78' }, // W292: muted slate-blue — deliberate act, not failure
   closed: { color: '#9A9A9A', fontSize: 15, textAlign: 'center', lineHeight: 22 },
   phone: { color: '#C8C8C8', fontSize: 15, marginTop: 3 },
   phoneMuted: { color: '#5A5A5A', fontStyle: 'italic' },

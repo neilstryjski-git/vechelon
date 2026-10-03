@@ -1322,3 +1322,81 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - Field validation (co-Captain who did not create the ride ends it from the chip; the creator's map reacts in real
   time; a member sees no chip; a SAG sees no chip) pending on a build + staging push that include this migration.
   FIELD RUN: _pending_.
+
+## W292 — Durable departed mark: departure beats seed, never deletion, clean rejoin (C3 item 7; R3-65/67/68/70) (2026-10-03)
+
+- Pre-flight vs code (rail3-integration ea4b0e1): no composeFleet / mapLogic.ts existed — the fleet join was INLINE in
+  useFleetPositions (~l.645-703) and tests/mapLogic.test.mjs covers geo + roleVisibility only; markRail3Joined() is
+  NULL-only, so a rejoin needed its own statement; the join effect lives in RideMapScreen, not rideJoin.ts; no trigger
+  acts on ride_participants and participant_update_policy has no column list → additive column, no policy change.
+- Migration `20260918000000_rail3_participant_departed_at.sql`: `ride_participants.departed_at timestamptz NULL`
+  (Pattern 5 IF NOT EXISTS; comment states the write/clear contract and "a timestamp, never a coordinate"); re-issues the
+  rail3_joined_at comment (W292 widens it: refreshed by a rejoin AFTER a departure). **DEPLOY ORDER — stronger than
+  W288: three paths name the column (fetchLastKnown SELECT, RosterScreen SELECT, broadcastDeparture UPDATE). Without
+  it on staging the whole last-known fleet fallback errors, the roster falls to the W289 cache, and the departure UPDATE
+  fails atomically (PGRST204) so last_* is NOT nulled either → the D87 phantom returns. Push to staging before the field
+  build.** Held off the prod `db push --linked` pipeline (W259).
+- LLD — the mark is written ONLY by a TRUE departure: `broadcastDeparture` adds `departed_at: now` to the SAME own-row
+  UPDATE that nulls last_* (one statement → land or fail together); the W287 ride-end teardown (`clearLastKnown:false`)
+  skips the branch, so a Saved ride never marks anyone departed (R3-70). `departed_sent` evidence carries `departedAt`.
+- LLD — rejoin = fresh join (R3-68): new `markRail3Rejoined()` clears `departed_at` and refreshes `rail3_joined_at` in
+  one statement guarded on `departed_at IS NOT NULL` (a plain re-open still never moves the W288 first-open stamp; a
+  second call matches 0 rows). The join effect selects `departed_at` and routes: departed → rejoin; else NULL stamp →
+  markRail3Joined; else nothing. `markRail3Joined` is unchanged (AdHocCreator + the W288 RLS test depend on its shape).
+- LLD — pure `lib/fleetCompose.ts` (erasable TS, `import type` only, deriveRenderState INJECTED like beaconLogic's
+  stateFor): `composeFleet({pings,lastKnown,roster,departed,nowMs,deriveState}) → {fleet, unknownLiveRiderIds,
+  departedSuppressed}` is the W262/W270 inline join lifted verbatim + ONE rule; `pingBeatsDeparture(ts, mark) =
+  !mark || ts > mark.atMs`; `lastKnownFromRows(rows, seenAtMs)` splits a fetch into seeds vs marks (a departed row is
+  NEVER a seed even if a late persistLastKnown write left coordinates on it — the whole point of the durable mark);
+  `mergeDepartedMarks(fetched, local, fetchStartedAtMs)` = fetch authoritative EXCEPT a broadcast mark learned after the
+  fetch started (closes the pre-existing D87 race where a slow fetch re-materialised a just-departed rider; also lets a
+  rejoin drop a stale local mark).
+- **THE RULE, precisely:** departure beats SEED unconditionally; it beats a LIVE ping only when the ping's `ts` ≤ the
+  mark; it never beats a REJOIN (whose first ping is newer by construction). Both instants are the SAME sender device's
+  clock — `ts` is that device's Date.now()/fix.ts, `departed_at` was written by it as `new Date().toISOString()`, the
+  depart broadcast carries its `Date.now()` as `payload.ts` (the receiver stores it as `atMs`). Receiver clock is used
+  only for `seenAtMs` vs `fetchStartedAtMs` (receiver vs receiver). Clock caveat: the same-account-on-two-devices
+  collision has two clocks — skew suppresses the second device for at most |skew| + one ping interval, then monotonic
+  `ts` wins; the rejoin clears the server mark on the next fetch anyway. Documented, not engineered around.
+- useFleetPositions wiring: `departed` state beside `lastKnown`; fetch selects `departed_at`, logs `departed` count
+  beside `usable` (W271 meaning kept: rows that CAN render); `departed_recv` records `{atMs: payload.ts, seenAtMs}`
+  (+ `hadTs` evidence) and still drops pings/lastKnown; the render AND the `fleet_compose` log both run `composeFleet`
+  (one rule, one place — the log used to hand-mirror the loop and would have disagreed with the map once the departed
+  rule existed); payload gains `departed` + `suppressed` id lists (ids only, never coordinates). `onUnknownRider` fires
+  once per render when any unknown live id exists (was once per id; debounced 10 s downstream → equivalent).
+  'departed' is NOT a TacticalState (A3); deriveRenderState untouched; FleetParticipant gains no field.
+- Roster: `ParticipationState` gains `'departed'`; precedence no-account → roster_only (a guest can never depart —
+  broadcastDeparture writes only under `uid === riderId`), then departedAt → departed, then the W288 rule; label
+  **'Left ride'** (a deliberate act — not the Dark/stale/lost vocabulary; R3-65 "left ≠ lost at a glance"). RosterScreen
+  selects `departed_at`, chip gets its own muted slate-blue (not roster-only grey, not tracked light, not the map's
+  dark/dormant palette); `rowVisibleTo`/phone/Call untouched → departed rows are RETAINED with details available to
+  Captain/SAG (R3-70: never a deletion). W289 cache `CachedRow` gains `departed_at` coerced to null when missing, **no
+  `v` bump**: a pre-W292 slot coerces to "nobody departed" (exactly what its writer could see), whereas a bump would read
+  every existing slot as empty and strand an offline rider who upgraded between loads (§9.2 correction #2);
+  `hasCoordinateKeys` unaffected (not a coordinate key).
+- Navigation-away audit (item 6): beforeRemove fires on back chip, hardware back/gesture, the W287 auto-leave
+  (useRideEndWatch) and End Ride (RideControls); on both ride-end paths `endedRef.current = true` is set in the SAME
+  synchronous continuation as the goBack() that fires the listener (no await between) → `clearLastKnown:false` by
+  construction. The D77 account-swap remount is a React unmount, not a nav pop → no false fire; sign-out departs via the
+  AuthContext holder (a true departure → gets the mark for free). ONE change: on a ride-end teardown beforeRemove now
+  also clears the IN-MEMORY holder (`clearActiveRide()`), so a later sign-out cannot "depart" a Saved ride (which would
+  null last_* — a pre-existing W287 residue — and, from W292, stamp departed_at on it). Mid-ride the in-memory holder
+  still survives the unmount (D87: sign-out from Home departs the live ride).
+- Writer-side guard decision: NONE added — viewer-side exclusion is sufficient. persistLastKnown's writers die with the
+  engine effect cleanup microseconds after beforeRemove (one in-flight request at most); the headless path is gated on the
+  durable holder, which is cleared BEFORE the departure is issued; `ParticipantSelfPatch` has no `departed_at` key so a
+  late write can never clear the mark; `lastKnownFromRows` ignores coordinates on a departed row by construction. The
+  residue (a stale coordinate on a departed row until the T+4h purge) is one overwritten row, within A4. A writer-side
+  guard would need cross-module "I have departed" state reset on rejoin — the mount-time-snapshot class D77 fixed.
+- D87 (Stride id 5376) residue closed BY CODE: durable mark (a later viewer tells departed from never-pinged), the roster
+  marks departed, the fetch race, the late-write re-seed. "Fixed means built AND validated" → **FIELD RUN: pending** on
+  the batched staging build (rider leaves while the Captain is pocketed; Dark rider side by side; rejoin → one entry, no
+  ghost). D87 is closed in Stride only on that evidence.
+- Residue: W291's `commandState(rows, departedIds)` still has no caller (W290/B2 consumer); `useRideRoster` does not
+  select `departed_at` (not needed: departed riders are not in the fleet, so RiderBottomSheet is unaffected).
+- Tests: NEW tests/fleetCompose.test.mjs (10: regression with no marks, >= tie, seed suppressed, rejoin renders live,
+  older/equal ping suppressed, rule table, no ladder entry, fetch split incl. late-write + garbage date, merge);
+  rosterLogic +1 (precedence; label 'Left ride' in the neutral loop); rosterCache +1 (legacy slot → null marks, marked row
+  round-trips, v:2 rejected); rlsIsolation +1 stack test (own-row departure shape 1 row; another member's row 0 rows;
+  rejoin clears once, second call 0 rows). `npm test` 163 / 161 (the 2 "fails" = the stack-gated files, no local Docker —
+  identical on base); `npm run typecheck` = 2 pre-existing deepLinkAuth errors.

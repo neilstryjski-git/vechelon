@@ -10,12 +10,17 @@
 
 import type { RideRole } from './roleVisibility';
 
-export type ParticipationState = 'app_tracked' | 'roster_only';
+// W292 adds 'departed' (C3 item 7; R3-65): a durable ROSTER state read from ride_participants.departed_at
+// (stamped by a true departure, cleared by a rejoin). Distinct from Dark / stale / greyed, which are
+// FLEET render states derived from ping age; a departed row is retained, never deleted (R3-70).
+export type ParticipationState = 'departed' | 'app_tracked' | 'roster_only';
 
 export interface RosterRowLike {
   accountId: string | null;
   // ride_participants.rail3_joined_at — set only by the in-app join path (W288). NOT joined_at.
   rail3JoinedAt: string | null;
+  // ride_participants.departed_at (W292). Optional so W288 callers and tests are unchanged.
+  departedAt?: string | null;
 }
 
 // roleVisibility's isCommand is module-private; redefined here on the same two roles.
@@ -23,14 +28,22 @@ const isCommand = (r: RideRole): boolean => r === 'captain' || r === 'support';
 
 // One binary state, widened population (item 23): no account OR never opened the app ⇒ roster-only.
 // The input deliberately carries NO ping/position/state field — slate 17 forbids deriving from it.
+// Precedence (W292): no account → roster-only (a guest can never depart — broadcastDeparture writes
+// only under `uid === riderId`, so this is belt-and-braces); then a departed mark wins over the
+// app-tracked stamp (a rider who left is "left", however they joined); then the W288 rule.
 export function participationState(row: RosterRowLike): ParticipationState {
-  if (!row.accountId || !row.rail3JoinedAt) return 'roster_only';
+  if (!row.accountId) return 'roster_only';
+  if (row.departedAt) return 'departed';
+  if (!row.rail3JoinedAt) return 'roster_only';
   return 'app_tracked';
 }
 
 // Mark copy is ours to choose (item 23: "no committed text describes the mark itself"). Neutral,
 // never a failure framing (R3-74).
+// 'Left ride' (W292): a plain statement of a deliberate act — not the Dark/stale/lost vocabulary
+// (R3-65 "Captain and SAG can tell left from lost at a glance").
 export function participationLabel(state: ParticipationState): string {
+  if (state === 'departed') return 'Left ride';
   return state === 'app_tracked' ? 'App tracked' : 'Roster only';
 }
 

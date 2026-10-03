@@ -23,6 +23,10 @@ export interface CachedRow {
   phone: string | null;
   role: RideRole;
   rail3_joined_at: string | null;
+  // W292: the durable departed mark. A pre-W292 slot lacks the key and coerces to null ("nobody
+  // departed" — exactly what its writer could see), so `v` stays 1: a bump would read every existing
+  // slot as empty and strand an offline rider who upgraded between loads (§9.2 correction #2).
+  departed_at: string | null;
   accounts: { name: string | null; phone: string | null } | null;
 }
 
@@ -82,6 +86,7 @@ export function parseSlot(json: string | null | undefined): RosterSlot | null {
         phone: typeof row.phone === 'string' ? row.phone : null,
         role: row.role as RideRole,
         rail3_joined_at: typeof row.rail3_joined_at === 'string' ? row.rail3_joined_at : null,
+        departed_at: typeof row.departed_at === 'string' ? row.departed_at : null,
         accounts: a ? { name: typeof a.name === 'string' ? a.name : null, phone: typeof a.phone === 'string' ? a.phone : null } : null,
       });
     }
