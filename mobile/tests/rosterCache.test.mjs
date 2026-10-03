@@ -58,6 +58,19 @@ const rows = [
 ];
 const slotFor = (rideId, userId = 'me', extra = {}) => ({ rideId, userId, lastStatus: 'active', myRole: 'member', rows, ...extra });
 
+// W292: departed_at joins the row (eight fields). A pre-W292 slot lacks the key → coerces to null ("nobody
+// departed", exactly what its writer could see); v stays 1 so no existing slot reads as empty. A row that
+// carries the mark round-trips; v:2 is still foreign.
+test('W292: a v:1 slot WITHOUT departed_at parses with null marks; a row WITH departed_at round-trips; v:2 still rejected', () => {
+  const base = { v: 1, rideId: 'r', userId: 'u', savedAt: '2026-10-03T00:00:00Z', lastStatus: null, myRole: 'member' };
+  const legacy = parseSlot(JSON.stringify({ ...base, rows }));
+  assert.ok(legacy);
+  assert.deepEqual(legacy.rows.map((r) => r.departed_at), [null, null]);
+  const marked = parseSlot(JSON.stringify({ ...base, rows: [{ ...rows[0], departed_at: '2026-10-03T11:30:00.000Z' }] }));
+  assert.equal(marked.rows[0].departed_at, '2026-10-03T11:30:00.000Z');
+  assert.equal(parseSlot(JSON.stringify({ ...base, v: 2, rows })), null);
+});
+
 test('write then read round-trips for the same ride and user; contact fields are not stored in clear', async () => {
   const { core, store } = harness();
   assert.equal(await core.write(slotFor('ride-A')), true);

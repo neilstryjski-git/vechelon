@@ -17,6 +17,17 @@ const ISO = '2026-10-03T12:00:00.000Z';
 
 // --- participation state: durable signal only -----------------------------------------------------
 
+// W292 (C3 item 7, R3-65/70): the departed mark is a durable ROSTER state with precedence over the
+// app-tracked stamp; a guest (no account) can never be departed; callers that omit it are unchanged.
+test('participationState: departedAt wins over app_tracked AND roster_only for an account holder; never for a guest; omitted = W288 behaviour', () => {
+  assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: ISO, departedAt: ISO }), 'departed');
+  assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: null, departedAt: ISO }), 'departed');
+  assert.equal(participationState({ accountId: null, rail3JoinedAt: null, departedAt: ISO }), 'roster_only', 'a guest cannot depart');
+  assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: ISO, departedAt: null }), 'app_tracked');
+  assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: ISO }), 'app_tracked', 'departedAt optional');
+  assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: null }), 'roster_only');
+});
+
 test('participationState: guest (no account) → roster_only; member who never opened the app → roster_only; app rider → app_tracked', () => {
   assert.equal(participationState({ accountId: null, rail3JoinedAt: null }), 'roster_only');
   assert.equal(participationState({ accountId: 'acct-1', rail3JoinedAt: null }), 'roster_only');
@@ -32,9 +43,10 @@ test('participationState takes no ping/position input — a pocketed app rider i
 
 test('labels are neutral — roster-only is never framed as a failure (R3-74)', () => {
   const bad = /fail|offline|lost|missing|error|no signal|dark|dead|inactive/i;
-  for (const s of ['app_tracked', 'roster_only']) assert.ok(!bad.test(participationLabel(s)), participationLabel(s));
+  for (const s of ['app_tracked', 'roster_only', 'departed']) assert.ok(!bad.test(participationLabel(s)), participationLabel(s));
   assert.equal(participationLabel('roster_only'), 'Roster only');
   assert.equal(participationLabel('app_tracked'), 'App tracked');
+  assert.equal(participationLabel('departed'), 'Left ride'); // W292: a deliberate act, not the Dark/stale vocabulary
 });
 
 // --- §4.1: every row for every role ------------------------------------------------------------------

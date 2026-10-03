@@ -81,3 +81,20 @@ export async function markRail3Joined(rideId: string, accountId: string): Promis
     .is('rail3_joined_at', null);
   return { error };
 }
+
+// W292 (C3 item 7, R3-68): a return AFTER a departure is a FRESH join - clear the durable departed
+// mark and refresh the app-tracked stamp in ONE own-row statement. Guarded on `departed_at IS NOT
+// NULL`, so a plain re-open without a departure still never moves rail3_joined_at (the W288
+// first-open rule holds) and a second call matches 0 rows (idempotent). The server mark is what
+// peers' next last-known fetch reads; until then their fleet re-adds this rider from the first live
+// ping newer than the mark (fleetCompose.pingBeatsDeparture) - departure beats seed, never rejoin.
+// Best-effort, never blocks the open; a 0-row match is not an error.
+export async function markRail3Rejoined(rideId: string, accountId: string): Promise<{ error: unknown }> {
+  const { error } = await supabase
+    .from('ride_participants')
+    .update({ departed_at: null, rail3_joined_at: new Date().toISOString() })
+    .eq('ride_id', rideId)
+    .eq('account_id', accountId)
+    .not('departed_at', 'is', null);
+  return { error };
+}

@@ -15,6 +15,8 @@ import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
+import { composeFleet, lastKnownFromRows, mergeDepartedMarks } from '../lib/fleetCompose';
+import type { DepartedMark } from '../lib/fleetCompose';
 import { logFetchResult, logResumeSignal } from '../lib/lifecycle';
 import { useResume, noteChannelActivity, notePeerCount, noteChannelStatus } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
@@ -234,6 +236,11 @@ export function useFleetPositions(
   // useRideRoster applies. Fetched on open and on every return-to-foreground: a MEANINGFUL
   // event, never per-ping (Pillar II §2).
   const [lastKnown, setLastKnown] = useState<Record<string, { lat: number; lng: number; ts: number }>>({});
+  // W292 (C3 item 7, R3-65/68): the DURABLE departed marks — read from ride_participants.departed_at
+  // on the same fetch, and learned live from the 'depart' broadcast. A marked rider is never seeded
+  // from last-known and renders only from a live ping newer than the mark (fleetCompose.ts). Keyed by
+  // account_id like everything else; carries two timestamps and nothing positional.
+  const [departed, setDeparted] = useState<Record<string, DepartedMark>>({});
   // Bridges the ride-scoped fetch closure to the stable resume subscriber below.
   const resumeFetchRef = useRef<((source: ResumeSource) => void) | null>(null);
   useEffect(() => {
@@ -254,30 +261,29 @@ export function useFleetPositions(
       if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
       lastFetchMs = now;
       if (resumeSource) logResumeSignal(rideId, resumeSource, 'fleet');
+      // W292: a mark learned by broadcast AFTER this instant outranks what the fetch reads (the fetch
+      // may have read the row before the departure landed — the pre-existing D87 race).
+      const fetchStartedAtMs = Date.now();
       const { data, error } = await supabase
         .from('ride_participants')
-        .select('account_id, last_lat, last_long, last_ping')
+        .select('account_id, last_lat, last_long, last_ping, departed_at')
         .eq('ride_id', rideId);
       // W271: distinguish "the query ran and found nothing" from "the query never ran". `usable`
-      // is the count that survives the null-coordinate filter below — the number that can actually
-      // render a marker. No coordinates logged (Pillar II §2), only counts.
-      const usable = (data ?? []).filter(
-        (r) => r.account_id != null && r.last_lat != null && r.last_long != null && r.last_ping,
-      ).length;
+      // is the count that survives the null-coordinate filter — the number that can actually render
+      // a marker (W292: a departed row never can, whatever it carries). No coordinates logged
+      // (Pillar II §2), only counts.
+      const split = lastKnownFromRows(data ?? [], Date.now());
       logFetchResult(rideId, 'lastKnown', {
         rows: data?.length ?? 0,
-        usable,
+        usable: split.usable,
+        departed: split.departedCount,
         cancelled,
         ...(resumeSource ? { source: resumeSource } : {}),
         ...(error ? { err: error.message } : {}),
       });
       if (cancelled || error || !data) return;
-      const next: Record<string, { lat: number; lng: number; ts: number }> = {};
-      for (const row of data) {
-        if (row.account_id == null || row.last_lat == null || row.last_long == null || !row.last_ping) continue;
-        next[row.account_id] = { lat: row.last_lat, lng: row.last_long, ts: Date.parse(row.last_ping) };
-      }
-      setLastKnown(next);
+      setLastKnown(split.lastKnown);
+      setDeparted((local) => mergeDepartedMarks(split.departed, local, fetchStartedAtMs));
     };
     void fetchLastKnown();
     resumeFetchRef.current = (source: ResumeSource) => {
@@ -372,6 +378,12 @@ export function useFleetPositions(
     channel.on('broadcast', { event: DEPARTED_EVENT }, ({ payload }) => {
       const riderId = (payload as { riderId?: string })?.riderId;
       if (!riderId) return;
+      // W292: record the mark LOCALLY too (sender clock from the payload — the departing device's
+      // Date.now(), the same clock its pings carry), so a stored last-known cannot re-seed this rider
+      // on the next fetch and only a ping NEWER than the departure (a rejoin) re-adds them.
+      const payloadTs = (payload as { ts?: unknown })?.ts;
+      const atMs = typeof payloadTs === 'number' && Number.isFinite(payloadTs) ? payloadTs : Date.now();
+      setDeparted((prev) => ({ ...prev, [riderId]: { atMs, seenAtMs: Date.now() } }));
       setPings((prev) => {
         if (!(riderId in prev)) return prev;
         const next = { ...prev };
@@ -389,7 +401,7 @@ export function useFleetPositions(
         void logMeasurement({
           rideId: rid,
           kind: 'app_state_change',
-          payload: { event: 'departed_recv', riderId, self: riderId === myRiderIdRef.current },
+          payload: { event: 'departed_recv', riderId, self: riderId === myRiderIdRef.current, hadTs: typeof payloadTs === 'number' },
         });
       }
     });
@@ -613,34 +625,50 @@ export function useFleetPositions(
   const pingKeys = Object.keys(pings).sort().join(',');
   const rosterKeys = Object.keys(roster).sort().join(',');
   const lastKnownKeys = Object.keys(lastKnown).sort().join(',');
+  const departedKeys = Object.keys(departed).sort().join(',');
   useEffect(() => {
     if (!rideId) return;
     const pIds = pingKeys ? pingKeys.split(',') : [];
     const rIds = rosterKeys ? rosterKeys.split(',') : [];
     const lkIds = lastKnownKeys ? lastKnownKeys.split(',') : [];
-    // Mirror the render's join below: (pings ∪ lastKnown) ∩ roster, live winning when fresher.
-    const fIds = [...new Set([...pIds, ...lkIds])].filter((id) => roster[id]).sort();
-    // Same precedence as the render join below. READER BEWARE: `source` is accurate at emit time,
-    // but this effect fires on SET changes only — a flip driven purely by a `ts` change (a stop
-    // rewrites an existing lastKnown row fresher than a still-present stale ping) re-renders
-    // without re-emitting, so a rider's last-logged source can lag the map. Trust `source` at the
-    // moment of its row, not as a running state.
+    const dIds = departedKeys ? departedKeys.split(',') : [];
+    // W292: ONE rule, one place — the log runs the same composeFleet the render does, so `source`
+    // and `fleet` can never disagree with the map (they used to be a hand-mirrored loop). READER
+    // BEWARE: `source` is accurate at emit time, but this effect fires on SET changes only — a flip
+    // driven purely by a `ts` change (a stop rewrites an existing lastKnown row fresher than a
+    // still-present stale ping) re-renders without re-emitting, so a rider's last-logged source can
+    // lag the map. Trust `source` at the moment of its row, not as a running state.
+    const composed = composeFleet({
+      pings,
+      lastKnown,
+      roster,
+      departed,
+      nowMs: Date.now(),
+      deriveState: (s, t, n) => deriveRenderState(s, t, n, thresholds),
+    });
+    const fIds = composed.fleet.map((f) => f.riderId).sort();
     const source: Record<string, 'live' | 'lastKnown'> = {};
-    for (const id of fIds) {
-      const live = pings[id];
-      const lk = lastKnown[id];
-      source[id] = live && (!lk || live.ts >= lk.ts) ? 'live' : 'lastKnown';
-    }
+    for (const f of composed.fleet) source[f.riderId] = f.source ?? 'live';
     void logMeasurement({
       rideId,
       kind: 'app_state_change',
-      // ids and source only — never coordinates (Pillar II §2).
-      payload: { event: 'fleet_compose', pings: pIds, roster: rIds, lastKnown: lkIds, fleet: fIds, source },
+      // ids and source only — never coordinates (Pillar II §2). `departed` = ids carrying a mark;
+      // `suppressed` = the subset the departed rule actually kept off the map this time.
+      payload: {
+        event: 'fleet_compose',
+        pings: pIds,
+        roster: rIds,
+        lastKnown: lkIds,
+        departed: dIds,
+        suppressed: composed.departedSuppressed.sort(),
+        fleet: fIds,
+        source,
+      },
     });
-    // pings/roster/lastKnown intentionally omitted from deps — keyed via the sorted key strings, so
-    // this fires on SET changes only, not on every ping that moves a rider a few metres.
+    // pings/roster/lastKnown/departed intentionally omitted from deps — keyed via the sorted key
+    // strings, so this fires on SET changes only, not on every ping that moves a rider a few metres.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pingKeys, rosterKeys, lastKnownKeys, rideId]);
+  }, [pingKeys, rosterKeys, lastKnownKeys, departedKeys, rideId]);
 
   // Join LIVE pings + persisted last-known (W262) to the server-gated roster. Unknown
   // riderIds are dropped — for a Rider, "unknown" is exactly the set RLS hid (other riders),
@@ -652,52 +680,23 @@ export function useFleetPositions(
   // are the SAME sender's own clock (p.ts and last_ping were both stamped Date.now() on that
   // device), so they're directly comparable. A moving rider (fresh pings, no/older last-known)
   // renders from live exactly as before; a stopped rider (gone quiet) renders from last-known.
-  const nowMs = Date.now();
-  const fleet: FleetParticipant[] = [];
-  const riderIds = new Set([...Object.keys(pings), ...Object.keys(lastKnown)]);
-  for (const riderId of riderIds) {
-    const entry = roster[riderId];
-    if (!entry) {
-      // Only a LIVE ping from an unidentified rider signals a mid-ride joiner (refetch the
-      // roster, debounced). A stored last-known with no roster row is just a rider RLS hid
-      // from us — stay quiet; the §4.1 boundary holds.
-      if (pings[riderId]) onUnknownRider?.();
-      continue;
-    }
-    const live = pings[riderId];
-    const lk = lastKnown[riderId];
-    if (live && (!lk || live.ts >= lk.ts)) {
-      fleet.push({
-        riderId,
-        displayName: entry.displayName,
-        role: entry.role,
-        phone: entry.phone,
-        accountStatus: entry.participantStatus,
-        // W174 receiver half: staleness past the dark threshold overrides the last
-        // self-reported state; the marker stays greyed AT the last known position.
-        state: deriveRenderState(live.state ?? 'active', live.receivedAtMs, nowMs, thresholds),
-        position: { lat: live.lat, lng: live.lng },
-        lastPingAt: live.ts,
-        source: 'live',
-      });
-    } else if (lk) {
-      fleet.push({
-        riderId,
-        displayName: entry.displayName,
-        role: entry.role,
-        phone: entry.phone,
-        accountStatus: entry.participantStatus,
-        // Last-known is written on the STOP transition (W261), carrying no self-reported
-        // state, so render it as 'stopped' and let receiver staleness derive Dark as it ages.
-        // ts is the sender's clock; nowMs is ours — the skew is negligible at the 2/5/15-min
-        // thresholds this feeds.
-        state: deriveRenderState('stopped', lk.ts, nowMs, thresholds),
-        position: { lat: lk.lat, lng: lk.lng },
-        lastPingAt: lk.ts,
-        source: 'lastKnown',
-      });
-    }
-  }
+  // W292: the join lives in lib/fleetCompose.ts (pure, node-tested) — (pings ∪ lastKnown) ∩ roster,
+  // live wins when fresher, plus the departed rule: a marked rider is never seeded from last-known
+  // and renders only from a live ping newer than the mark. deriveRenderState is injected so the pure
+  // module has no runtime import; 'departed' is NOT a TacticalState (A3) — such riders are simply
+  // absent from the fleet, and the roster is where the mark is shown.
+  const composed = composeFleet({
+    pings,
+    lastKnown,
+    roster,
+    departed,
+    nowMs: Date.now(),
+    deriveState: (s, t, n) => deriveRenderState(s, t, n, thresholds),
+  });
+  const fleet: FleetParticipant[] = composed.fleet;
+  // Only a LIVE ping from an unidentified rider signals a mid-ride joiner (refetch the roster,
+  // debounced in useRideRoster). A stored last-known with no roster row is a rider RLS hid from us.
+  if (composed.unknownLiveRiderIds.length > 0) onUnknownRider?.();
 
   return { fleet, myCoords, channelStatus: status };
 }

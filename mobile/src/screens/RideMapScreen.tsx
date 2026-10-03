@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
-import { selfRsvpWithIdentity, markRail3Joined } from '../lib/rideJoin';
+import { selfRsvpWithIdentity, markRail3Joined, markRail3Rejoined } from '../lib/rideJoin';
 import {
   promptOemExclusionOnFirstJoin,
   promptIfBatterySaverOn,
@@ -20,8 +20,8 @@ import FirstRideExplainer from '../components/FirstRideExplainer';
 import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
-import { broadcastDeparture } from '../lib/backgroundLocation';
-import { clearPersistedActiveRide } from '../lib/activeRide';
+import { broadcastDeparture, awaitPendingDeparture } from '../lib/backgroundLocation';
+import { clearActiveRide, clearPersistedActiveRide } from '../lib/activeRide';
 import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
@@ -152,16 +152,30 @@ const RideMapScreen: React.FC = () => {
     if (!myRiderId || !rideId) return;
     let cancelled = false;
     void (async () => {
+      // W292: a quick leave → re-open must read the row AFTER the departure's UPDATE has landed, or
+      // the mark would be stamped on a present rider with nothing left to clear it. Bounded wait;
+      // no pending departure resolves immediately.
+      await awaitPendingDeparture(rideId);
+      if (cancelled) return;
       const { data: existing } = await supabase
         .from('ride_participants')
-        .select('account_id, rail3_joined_at')
+        .select('account_id, rail3_joined_at, departed_at')
         .eq('ride_id', rideId)
         .eq('account_id', myRiderId)
         .maybeSingle();
       if (cancelled) return;
       if (existing) {
-        // W288 (slate 17): an existing row (admin-added, web RSVP, rejoin) becomes app-tracked
-        // the first time the ride is opened in the app. Best-effort; never blocks the open.
+        // W292 (R3-68): a row carrying the durable departed mark means THIS is a rejoin - a fresh
+        // join in every respect: clear the mark and refresh rail3_joined_at in one statement.
+        // Peers re-add us from our first live ping newer than the mark; their next last-known
+        // fetch drops the mark. Best-effort; never blocks the open.
+        if (existing.departed_at) {
+          const { error: rejoinErr } = await markRail3Rejoined(rideId, myRiderId);
+          if (rejoinErr) console.warn('[Rail3] markRail3Rejoined failed', rejoinErr);
+          return;
+        }
+        // W288 (slate 17): an existing row (admin-added, web RSVP) becomes app-tracked the first
+        // time the ride is opened in the app. Best-effort; never blocks the open.
         if (!existing.rail3_joined_at) {
           const { error: markErr } = await markRail3Joined(rideId, myRiderId);
           if (markErr) console.warn('[Rail3] markRail3Joined failed', markErr);
@@ -306,12 +320,24 @@ const RideMapScreen: React.FC = () => {
   // the D57 ride-ended auto-leave). A D77 account-swap REMOUNT tears down via React (not a nav
   // pop), so it does NOT false-fire here — the swap/sign-out path is covered by AuthContext via
   // the active-ride holder. Fire-and-forget over REST so it escapes the unmount.
+  //
+  // W292 (C3 item 7): every path that pops this screen lands here - the back chip, the hardware
+  // back / gesture, the W287 auto-leave (useRideEndWatch) and End Ride (RideControls). On the two
+  // ride-end paths `endedRef.current = true` is set in the SAME synchronous continuation as the
+  // goBack() that fires this listener (no await between them), so `clearLastKnown` is false there
+  // by construction: no departed_at, last_* kept (R3-70). A Leave Ride mid-ride is a TRUE departure:
+  // broadcastDeparture stamps the durable departed mark with the null-out.
   useEffect(() => {
     if (!rideId || !myRiderId) return;
     const unsub = navigation.addListener('beforeRemove', () => {
       // W286 (R3-67): a departure ends the ENGINE SESSION too — clear the durable holder first so
       // neither the headless task nor the heartbeat re-assert can re-engage this ride.
       clearPersistedActiveRide();
+      // W292: on a RIDE-END teardown clear the in-memory holder too - a Saved ride has nothing to
+      // depart from, so a later sign-out must not find it and "depart" (nulling last_* and stamping
+      // departed_at on a Saved ride). Mid-ride the in-memory holder deliberately SURVIVES this
+      // unmount so a sign-out from Home still departs the live ride (D87).
+      if (endedRef.current) clearActiveRide();
       // W287 (R3-70): on a RIDE-END teardown the 'departed' broadcast still goes out, but my
       // last-known is NOT nulled — on a Saved ride it persists to the T+4h purge.
       void broadcastDeparture(rideId, myRiderId, { clearLastKnown: !endedRef.current });

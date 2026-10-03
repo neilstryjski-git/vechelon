@@ -110,13 +110,58 @@ export async function sendDormantPing(args: {
 // goes out (harmless; clears my marker on any peer not yet torn down) but last_lat / last_long /
 // last_ping are NOT nulled: on a Saved ride they persist to the T+4h Hard Purge. Default true
 // (a Leave Ride mid-ride is a real departure and clears them as before).
+// W292 (C3 item 7, R3-65/68/70): the SAME own-row update now also stamps `departed_at` — the
+// DURABLE departed mark a viewer who fetches later reads to tell "left" from "never pinged", and the
+// sender-clock instant the fleet compares live pings against (departure beats seed, never rejoin —
+// fleetCompose.ts). One statement, so the mark and the null-out land or fail together (a PGRST204
+// on a staging without the migration fails BOTH — see the migration's DEPLOY ORDER). Ride-end
+// teardown skips the whole branch, so a Saved ride never marks anyone departed (R3-70).
+// W292 (review r1): the departure issued from beforeRemove is fire-and-forget and lands departed_at
+// only after restBroadcast + getSession + the UPDATE round-trip, while a quick re-open's join effect
+// SELECTs departed_at on mount. If that SELECT read NULL before the UPDATE committed, the rejoin
+// branch would be skipped and the mark would land on a rider who is present and pinging — with
+// nothing left to clear it (roster 'Left ride' for a live rider; peers drop them instead of Dark).
+// So every departure registers its in-flight promise per ride, and the join path awaits it
+// (bounded) before reading the row. Module-level, like the D77 caches: it must outlive the screen.
+const inFlightDepartures = new Map<string, Promise<void>>();
+export const DEPARTURE_SETTLE_MAX_WAIT_MS = 3000;
+
+// Resolves when the pending departure for `rideId` has settled (or after `maxWaitMs`, whichever is
+// first). Never rejects; no pending departure → resolves immediately.
+export function awaitPendingDeparture(rideId: string, maxWaitMs = DEPARTURE_SETTLE_MAX_WAIT_MS): Promise<void> {
+  const pending = inFlightDepartures.get(rideId);
+  if (!pending) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    void pending.finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 export async function broadcastDeparture(
   rideId: string,
   riderId: string,
   opts: { clearLastKnown?: boolean } = {},
 ): Promise<void> {
+  const run = departureBody(rideId, riderId, opts);
+  inFlightDepartures.set(rideId, run);
+  try {
+    await run;
+  } finally {
+    if (inFlightDepartures.get(rideId) === run) inFlightDepartures.delete(rideId);
+  }
+}
+
+async function departureBody(
+  rideId: string,
+  riderId: string,
+  opts: { clearLastKnown?: boolean },
+): Promise<void> {
   const sent = await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
   let cleared = false;
+  let departedAt: string | null = null; // W292: the durable mark actually written (a timestamp, not a coordinate)
   try {
     const { data } = await supabase.auth.getSession();
     const uid = data.session?.user?.id;
@@ -125,13 +170,17 @@ export async function broadcastDeparture(
     // window for this call, so it can outlive the session: with no session there is no uid and
     // nothing is written; after an account swap uid is B's and this must not null B's row.
     if (opts.clearLastKnown !== false && uid && uid === riderId) {
+      departedAt = new Date().toISOString();
       const { error } = await supabase
         .from('ride_participants')
-        .update({ last_lat: null, last_long: null, last_ping: null })
+        .update({ last_lat: null, last_long: null, last_ping: null, departed_at: departedAt })
         .eq('ride_id', rideId)
         .eq('account_id', uid);
       cleared = !error;
-      if (error) console.warn('[Rail3] departure clear rejected', error.message);
+      if (error) {
+        departedAt = null;
+        console.warn('[Rail3] departure clear rejected', error.message);
+      }
     }
   } catch (e) {
     console.warn('[Rail3] departure clear failed', e);
@@ -142,6 +191,6 @@ export async function broadcastDeparture(
   void logMeasurement({
     rideId,
     kind: 'app_state_change',
-    payload: { event: 'departed_sent', riderId, sent, cleared },
+    payload: { event: 'departed_sent', riderId, sent, cleared, departedAt },
   });
 }

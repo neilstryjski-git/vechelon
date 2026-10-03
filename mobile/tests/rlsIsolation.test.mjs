@@ -574,3 +574,49 @@ test('W291: a member cannot end the ride; a tenant-B user cannot; a Captain cann
     await setRoleA2('member'); await setRideA(before);
   }
 });
+
+// ── W292: the durable departed mark (ride_participants.departed_at) ─────────────────────────────
+// Skip-guarded on the COLUMN (migration 20260918000000). The app's exact statement shapes: the
+// departure is ONE own-row UPDATE (mark + last_* null-out together); the rejoin clears the mark and
+// refreshes rail3_joined_at guarded on `departed_at IS NOT NULL`. The negative uses a MEMBER actor
+// (participant_update_policy's captain/support branch would allow a Captain; the app never does that).
+
+test('W292: a member marks their OWN row departed (one statement with the null-out); another member\'s row is untouchable (0 rows); rejoin clears it once', async (t) => {
+  const probe = await admin.from('ride_participants').select('departed_at').limit(1);
+  if (probe.error) return t.skip('W292 departed_at column not applied');
+  const iso = new Date().toISOString();
+  const depart = (client, accountId) => client
+    .from('ride_participants')
+    .update({ departed_at: iso, last_lat: null, last_long: null, last_ping: null })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', accountId)
+    .select('account_id, departed_at');
+  const rejoin = (client, accountId) => client
+    .from('ride_participants')
+    .update({ departed_at: null, rail3_joined_at: new Date().toISOString() })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', accountId)
+    .not('departed_at', 'is', null)
+    .select('account_id, departed_at, rail3_joined_at');
+  try {
+    const own = await depart(fx.userA.client, fx.userA.id);
+    assert.ifError(own.error);
+    assert.equal(own.data.length, 1);
+    assert.equal(new Date(own.data[0].departed_at).toISOString(), iso);
+    const other = await depart(fx.userA.client, fx.userA2.id);
+    assert.ifError(other.error);
+    assert.deepEqual(other.data, [], 'a member cannot mark another rider departed');
+    const { data: untouched } = await admin.from('ride_participants').select('departed_at').eq('ride_id', fx.rideA.id).eq('account_id', fx.userA2.id).single();
+    assert.equal(untouched.departed_at, null);
+    const back = await rejoin(fx.userA.client, fx.userA.id);
+    assert.ifError(back.error);
+    assert.equal(back.data.length, 1, 'rejoin clears the mark');
+    assert.equal(back.data[0].departed_at, null);
+    assert.ok(back.data[0].rail3_joined_at, 'rejoin refreshes the app-tracked stamp');
+    const again = await rejoin(fx.userA.client, fx.userA.id);
+    assert.ifError(again.error);
+    assert.deepEqual(again.data, [], 'a plain re-open (no departure) matches 0 rows — W288 first-open rule intact');
+  } finally {
+    await admin.from('ride_participants').update({ departed_at: null }).eq('ride_id', fx.rideA.id).in('account_id', [fx.userA.id, fx.userA2.id]);
+  }
+});
