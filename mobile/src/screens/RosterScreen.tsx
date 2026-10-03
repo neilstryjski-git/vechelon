@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -25,6 +25,7 @@ import {
 } from '../lib/rosterLogic';
 import { fetchRideStatus } from '../lib/rideStatus';
 import { useResume } from '../hooks/useResume';
+import { readRosterCache, writeRosterCache, type RosterSlot, type CachedRow } from '../lib/rosterCache';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 // Ride roster (W250; W288 slate 17 / §4.1 ROSTER / R3-74). The COMPLETE participant record for
@@ -67,6 +68,23 @@ const roleRank: Record<RideRole, number> = { captain: 0, support: 1, member: 2, 
 // The ride row's own name/phone is the fallback — used for guests with no account.
 const acctOf = (r: Row): AccountEmbed | null =>
   (Array.isArray(r.accounts) ? r.accounts[0] : r.accounts) ?? null;
+// W289: the seven roster fields the cache slot carries (contact fields included; nothing positional).
+const toCachedRow = (r: Row): CachedRow => ({
+  id: r.id,
+  account_id: r.account_id,
+  display_name: r.display_name,
+  phone: r.phone,
+  role: r.role,
+  rail3_joined_at: r.rail3_joined_at,
+  accounts: acctOf(r),
+});
+const timeAgo = (iso: string): string => {
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+};
 const nameOf = (r: Row): string =>
   acctOf(r)?.name?.trim() || r.display_name?.trim() || 'Unnamed rider';
 const phoneOf = (r: Row): string | null =>
@@ -82,10 +100,19 @@ const RosterScreen: React.FC = () => {
 
   // Viewer's role for THIS ride (server-derived, fail-closed to 'member').
   const { ride } = useRideDetails(rideId);
-  const myRole: RideRole = ride?.myRole ?? 'member';
+  // W289: offline the ride row is unavailable and useRideDetails cannot say the role; the cached slot
+  // carries the last role seen. Live wins whenever it exists.
+  const [cached, setCached] = useState<RosterSlot | null>(null);
+  const myRole: RideRole = ride?.myRole ?? cached?.myRole ?? 'member';
+  // Refs so `load` stays stable (deps [rideId, myUserId]): re-creating it on every status/role
+  // change re-fired the mount effect (spinner flash) and re-registered the focus effect.
+  const liveRoleRef = useRef<RideRole | null>(ride?.myRole ?? null);
+  liveRoleRef.current = ride?.myRole ?? null;
 
   const [rows, setRows] = useState<Row[]>([]);
   const [rideStatus, setRideStatus] = useState<string | null>(null);
+  const rideStatusRef = useRef<string | null>(null);
+  rideStatusRef.current = rideStatus;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,18 +125,44 @@ const RosterScreen: React.FC = () => {
         .select('id, account_id, display_name, phone, role, rail3_joined_at, accounts(name, phone)')
         .eq('ride_id', rideId);
       if (pErr) throw pErr;
-      setRows((data ?? []) as Row[]);
+      const live = (data ?? []) as Row[];
+      setRows(live);
+      setCached(null);
       // Slate 11: re-read the persisted status on every load (useRideDetails reads once) so the
       // surface closes at ride end even if this screen outlives the map.
+      let status: string | null = null;
       try {
-        setRideStatus(await fetchRideStatus(rideId));
+        status = await fetchRideStatus(rideId);
+        setRideStatus(status);
       } catch {
         // keep the previous status; a failed read never closes the roster
       }
+      // W289 write-through (slate 11): the single slot follows the ride being viewed — a load for
+      // another ride overwrites it (supersession). Contact fields go encrypted; no position data
+      // exists in these rows by construction. Fire-and-forget; never blocks the render.
+      if (myUserId) {
+        void writeRosterCache({
+          rideId,
+          userId: myUserId,
+          lastStatus: status ?? rideStatusRef.current,
+          myRole: liveRoleRef.current ?? 'member',
+          rows: live.map(toCachedRow),
+        });
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the roster.');
+      // W289 read path: offline or failed → the last-known slot for THIS ride and THIS user, marked
+      // as such (A3 honesty). No slot → the existing error + Retry state.
+      const slot = myUserId ? await readRosterCache(rideId, myUserId) : null;
+      if (slot) {
+        setRows(slot.rows as Row[]);
+        setCached(slot);
+        if (slot.lastStatus !== null) setRideStatus((prev) => prev ?? slot.lastStatus);
+        setError(null);
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not load the roster.');
+      }
     }
-  }, [rideId]);
+  }, [rideId, myUserId]);
 
   useEffect(() => {
     (async () => {
@@ -225,6 +278,14 @@ const RosterScreen: React.FC = () => {
       <Text style={styles.subnote}>
         Everyone on the ride, tracked or not. Leaders' numbers are always shown.
       </Text>
+      {cached && (
+        // W289 / A3 honesty register: a cached roster is LAST-KNOWN, never live — say so, and when.
+        <View style={styles.cacheBanner}>
+          <Text style={styles.cacheBannerText}>
+            Last-known roster — saved {timeAgo(cached.savedAt)}. Not live; pull down to retry.
+          </Text>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -292,6 +353,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   youChip: { color: '#9A9A9A', borderColor: '#9A9A9A' },
+  cacheBanner: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3A3A40',
+    backgroundColor: '#15151A',
+  },
+  cacheBannerText: { color: '#A0A0A6', fontSize: 12, lineHeight: 17 },
   stateChip: {
     fontSize: 9,
     fontWeight: '700',
