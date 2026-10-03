@@ -1204,3 +1204,62 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - Field validation (rider view: all rows, leaders' numbers only, own YOU row; Captain/SAG view: all numbers; closed
   at ride end; a web-RSVP'd member flips to App tracked on first open) pending on the next field build — needs THIS
   migration on staging first. FIELD RUN: _pending_.
+
+## W289 — Single-slot encrypted offline roster cache (slate 11, D1, §9.2 #2, item 13; R3-57/58) (2026-10-03)
+- Pre-flight vs code (rail3-integration bda0d55): the W281 hook was a sync no-op `clearRosterCache(): void` called from
+  `runIdentityTransition` AFTER the departure (signature kept; the real clear is fire-and-forget inside); expo-secure-store
+  was NOT installed (nor mmkv); expo-crypto offers digest/random only; Hermes has no Web Crypto (D52) and does not
+  guarantee TextDecoder; no AES helper existed; "the most recent ride this device joined" is NOT the durable active-ride
+  holder (engine-start-set, cleared on Leave/sign-out) — the cache has its own lifetime; offline the live status is
+  null and `myRole` defaults to 'member'; A3 commits no roster-specific last-known copy.
+- STORAGE LLD (cost stated to the Senior PM 2026-10-03): AES-256-GCM via `@noble/ciphers` 2.4.0 (pure JS, Hermes-safe,
+  never its webcrypto wrapper) with a per-install 256-bit key held in `expo-secure-store` ~14.0.1 (Android Keystore-backed)
+  under `rail3.roster-cache-key` — the KEY, not the roster, lives there because SecureStore values are limited to ~2 KB;
+  the ciphertext envelope base64(nonce‖ct), fresh 12-byte nonce per write, lives in AsyncStorage `rail3:roster-cache`.
+  expo-secure-store is a NEW NATIVE MODULE: a binary that lacks it (the current field build — `runtimeVersion` is fixed,
+  so an OTA carrying this code reaches it) runs the cache INERT — fail closed, nothing persisted, one console note,
+  the roster behaves exactly as before; it activates in the next build that includes the module. No extra EAS build is
+  spent; the Senior PM decides whether the imminent build waits for W289 (default: no — W289 rides the sprint-end build).
+  Android needs no config-plugin entry (the plugin only sets iOS faceIDPermission). Rejected: a pure-JS key in
+  AsyncStorage beside the ciphertext (not "encrypted device storage" in any honest sense); mmkv (native too, and a
+  second storage API).
+- LLD: `src/lib/rosterCachePure.ts` = the whole core with every side effect INJECTED (storage, keystore, AEAD, random
+  bytes, the coordinate guard, clock, log) so node tests cover write/read/clear/status end to end — `hasCoordinateKeys`
+  is injected rather than imported because node's strip-types needs full specifiers for runtime imports between pure
+  modules; hand-rolled base64 / UTF-8 helpers (no Buffer, btoa, TextDecoder). Slot `{v:1, rideId, userId, savedAt,
+  lastStatus, myRole, rows[7 fields]}`; `parseSlot` fails closed; `slotReadableBy` requires BOTH the writing user and
+  the ride being viewed (R3-57 belt-and-braces); a corrupt / tampered / foreign slot is removed on read; position data
+  (any coordinate key at any depth) refuses the write. `src/lib/rosterCache.ts` binds AsyncStorage / expo-crypto /
+  @noble statically (launch-safe JS — AuthContext imports it at launch) and `expo-secure-store` LAZILY in try/catch
+  (`isAvailableAsync` guarded); `clearRosterCache(reason = 'auth_transition')` stays sync by contract with a bounded
+  retry (0 / 500 ms / 2 s); reads are tombstoned until an auth-transition clear lands.
+- Clear contract: 'supersession' (the write-through for another ride simply overwrites the slot — the single trigger;
+  no join-time clear added) and 'auth_transition' (AuthContext → runIdentityTransition on a user-id delta, after the
+  departure by construction, R3-58 — ALSO rotates the key, so even a failed removeItem leaves rider A's ciphertext
+  unreadable to rider B). Nothing else: departure does NOT clear (§9.2 #2) — `grep -rn clearRosterCache mobile/src`
+  lists only AuthContext.tsx and rosterCache.ts; no TTL, no sweep.
+- RosterScreen: write-through on every successful load (rows → 7 cached fields, `lastStatus`, live `myRole`); on a
+  failed load the slot for THIS ride and THIS user renders with a "Last-known roster — saved N min ago. Not live; pull
+  down to retry." banner (A3 honesty; copy is the Hands' — none is committed), `rideStatus` falls back to the slot's
+  `lastStatus` so an ended ride CLOSES offline (slate 11: bytes persist, surface closes), and `myRole` falls back to the
+  slot's role ONLY when the ride row is unavailable (live always wins) so a Captain keeps non-leader numbers offline;
+  the §4.1 gates (rowVisibleTo / phoneVisibleTo) apply to cached rows at render exactly as to live ones.
+- Tests: tests/rosterCache.test.mjs (14: round-trip + ciphertext opacity, supersession, no departure API, auth-transition
+  clear + key rotation, user/ride mismatch unreadable, corrupt/tampered/mis-shaped → null + removed, position refused,
+  saved/role round-trip, inert without keystore, REAL AES-GCM round-trip + tamper detection, base64/utf8 incl. 4-byte
+  code points). W281's signOutSequence tests unchanged (injected mocks). `npm test` 148 tests, 146 pass (same 2 stack
+  files); tsc: only the 2 pre-existing deepLinkAuth errors.
+- Review round 1 (stride:task-reviewer, 1 important + 2 minor, all taken): `load` had gained `rideStatus` / `ride?.myRole`
+  deps, so every status or role change re-created it, re-fired the mount effect (spinner flash) and re-registered the
+  focus effect — a 2–3-fetch cascade per open → both now read through refs and `load` is back to `[rideId, myUserId]`;
+  `clear('auth_transition')` treated an UNRESOLVABLE keystore (the current build) as a clear failure and would have
+  logged `FAILED` three times per sign-out → resolution failure now marks inert ("nothing to rotate", ok), only a
+  resolved keystore whose delete rejects fails; `getKey` did not memoise its in-flight promise, so two first-install
+  writes on one tick could mint two keys and lose the first cached roster → in-flight promise memoised (+2 tests).
+- Review round 2 (approved; 1 minor taken): a write whose key resolution was in flight across an auth-transition clear
+  could land rider A's roster after rider B's transition → a `generation` counter bumped by every auth-transition clear
+  fences the write (checked after the key resolves and again before setItem); +1 test.
+- Field validation (on a build that includes expo-secure-store: open the roster online, then airplane mode → re-open →
+  last-known banner with the rows; Leave Ride and re-open → still cached; sign-out → sign in as another rider → no
+  cached roster; ride ended while offline → closed state) pending; on the CURRENT field build expect the inert console
+  note and unchanged behaviour. FIELD RUN: _pending_.
