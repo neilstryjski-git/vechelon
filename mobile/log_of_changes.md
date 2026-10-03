@@ -1413,3 +1413,75 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   round-trips, v:2 rejected); rlsIsolation +1 stack test (own-row departure shape 1 row; another member's row 0 rows;
   rejoin clears once, second call 0 rows). `npm test` 163 / 161 (the 2 "fails" = the stack-gated files, no local Docker —
   identical on base); `npm run typecheck` = 2 pre-existing deepLinkAuth errors.
+
+## W290 — Breadcrumb honesty: Captain-departure cue, stopped trace, visible capture gaps (slate 9 / slate 10 / item 17 / C1; R3-72) (2026-10-03)
+
+- Pre-flight vs code (rail3-integration b87de6f): breadcrumbTrail.ts had only capTrail + appendTrailPoint over a flat
+  LatLng[], NO test imported it, and it cannot be imported under node (bare './geo'); rail3_breadcrumb.path is a flat
+  unconstrained jsonb LatLng[] and the leader's 60 s upsert wrote the WHOLE session path → rejoin truncation confirmed;
+  the reader adopted on element count and ignored ping ts; one Polyline. No admin/web consumer of `path`. The only
+  route source is `rides.gpx_path` (a storage file consumed by admin only).
+- **jsonb shape decision: FLAT array + break sentinel `{brk:1}`** (no migration — column unconstrained). Not an array of
+  segments: a sentinel appears only on a ride where a gap was actually captured, so pre-W290 installs are exposed only
+  on those rides, whereas a segments shape changes the top-level type on EVERY write. The sentinel carries nothing else
+  (no identity, no timestamp — club artifact, purge-exempt). Old-build exposure: a pre-W290 reader maps a sentinel to
+  `{latitude: undefined}` on one Polyline, on rides whose leader runs W290 AND rejoined / had a ≥ Dark-threshold gap —
+  the field app is the staging preview APK: **update all handsets before the field run**. The new reader's
+  `normalisePath` is defensive, so the exposure is one-directional.
+- **Pure `lib/breadcrumbSegments.ts`** (erasable TS, `import type { LatLng }` only, distance INJECTED like fleetCompose /
+  beaconLogic; `capTrail` + `BREADCRUMB_MAX_POINTS` MOVED here, re-exported by breadcrumbTrail.ts — no `.ts`-extension
+  imports, tsconfig has no allowImportingTsExtensions): `normalisePath` (garbage/old shapes tolerated; consecutive breaks
+  collapse; no leading/trailing break), `pointCount` (sentinels excluded), `splitSegments` (never joins across a break),
+  `appendBreak` (idempotent — same ref on empty or after a break), `capSegments` (per segment, breaks preserved),
+  `appendTipPoint` (decimated; appends unconditionally right after a break; never reads the sentinel as a point),
+  `mergePriorAndSession` (prior ++ [break] ++ session; prior never removed/reordered; empties pass by reference),
+  `adoptIfLonger` (W234 rule on POINT count; ties adopt — the table is authoritative on segmentation), `isGapBreak`,
+  `deriveBreadcrumbLiveness` ('departed' | 'stale' | 'live' — a LIVENESS, not a TacticalState, A3).
+- **Writer rule (honest, cause-agnostic):** the table path is the concatenation of capture SESSIONS separated by breaks;
+  a break is appended on engine-effect (re)start iff the fetched prior path is non-empty — regardless of cause (Leave
+  Ride, D77 remount, backgroundReady flip: a remount without a real gap yields a zero-length break that renders as a
+  continuous line); a within-session fix gap ≥ `thresholds.darkMinutes` (fix.ts vs fix.ts) is also a break; consecutive
+  breaks collapse; the path never starts/ends with a break; prior elements are never removed or reordered. The seed fetch
+  starts lazily on the first fix where the leader gate passes (ref, not dep — D80/D91); **writes are HELD until the seed
+  resolves** (`prior === null`), FAIL CLOSED on a fetch error with a 10 s retry, and a late seed after the effect re-ran
+  is discarded (`cancelled`). `session` keeps accumulating while held, so nothing is lost; a leader who departs before
+  the first upsert gets no leading break. `breadcrumb_upsert` gains `segs` + `priorPts`; new `fetch_result` target
+  `breadcrumb_seed`. Accepted: per-segment cap of 1500 means N segments can exceed 1500 points total (bounded by
+  segment count, a few per ride).
+- **Reader rule:** second `channel.on(DEPARTED_EVENT)` filtered to the LEADER (a non-leader Captain leaving — W291
+  allows any Captain to end a ride — is not Captain-departure news) and ignoring `rideEnd` payloads (W287's ride-end
+  teardown still broadcasts 'depart'; `broadcastDeparture` now flags it `rideEnd: true` when `clearLastKnown === false`
+  — useFleetPositions ignores the key, the marker drop is unchanged; sign-out = a true departure → cue). Resume: a leader
+  `pos` ping extends the trail only if `pingBeatsDeparture(p.ts, mark)` (a pre-departure echo never extends a frozen
+  trail — the handler used to ignore `p.ts`); on resume the reader inserts a LOCAL break so the returned tip is not
+  joined to the frozen tail before the writer's next table shape lands (the next fetch replaces local on point count ≥);
+  a passive gap ≥ Dark threshold between leader pings is also a local break. Catch-up: `fetchLeaderDeparture` reads the
+  leader's W292 `departed_at` beside `fetchRoute` (open, leader change, resume), merged with the live mark via
+  `mergeDepartedMarks` (fleetCompose) — a viewer who missed the broadcast still gets the cue; a rejoin's cleared column
+  drops a stale local mark. New `fetch_result` target `leaderDeparture`; `app_state_change` events `breadcrumb_stopped`
+  {source: broadcast | departed_at} / `breadcrumb_resumed` (ids/counts only).
+- **Passive-loss rule (acceptance line 3, "the Captain's device stops producing the trace"):** liveness = 'stale' when
+  no leader ping within `thresholds.darkMinutes` (or never heard from) — the SAME constant that turns the Captain's
+  MARKER Dark (`deriveRenderState`), so the breadcrumb is exactly as live as the marker; re-derived on a 15 s tick.
+  Styled stopped, NO cue (the cue is Captain-departure news only).
+- **Renderer:** one `Polyline` per segment (`bc-${i}` keys — segments only append or are replaced whole; per-segment
+  memoised coords); stopped = `lineDashPattern [14,10]` + dimmed `#4F46E580` — the dash prop exists in react-native-maps
+  1.18.0 for Android but its rendering is DEVICE-UNVERIFIED, the dim is the fallback that cannot fail. Cue banner
+  "Captain has left the ride / Their trail is frozen where they left it." (**placeholder copy — Voice & Tone pending**),
+  shown while `leaderDeparted` and the ride is not 'saved', dismissable per departure instant (a later departure
+  re-shows it), auto-clears when the Captain's pings resume. The W278 toggle (`showBreadcrumb`) is untouched.
+- **Feature 6 dependency limit (route overlay NOT built):** `rides.gpx_path` is a storage file with no mobile consumer,
+  no GPX/XML parser on Hermes (no DOMParser) and unverified storage RLS for riders — a "minimal fallback" is three
+  unverified subsystems. Deliverable = cue + frozen stopped breadcrumb, which the ticket names as the no-route behaviour.
+  Recorded as a Feature 6 dependency, not a Pillar change.
+- Residue: W291's `commandState(rows, departedIds)` still has no caller; useBreadcrumb's channel effect still binds
+  without cleanup (pre-existing; a second handler keeps parity, not fixed in scope).
+- Tests: NEW tests/breadcrumbSegments.test.mjs (11: sentinel shape, normalise, split/count, idempotent break, cap moved
+  unchanged, per-segment cap keeps breaks, tip append after a break with no synthesised point, merge never truncates +
+  empties by reference + one break, adopt on point count, gap boundary, liveness table incl. tenant override).
+  `npm test` 174 / 172 (the 2 "fails" = the stack-gated files, no local Docker — identical on base); `npm run typecheck`
+  = 2 pre-existing deepLinkAuth errors.
+- "Fixed means built AND validated" → **FIELD RUN: pending** (leader Leave Ride mid-ride → viewers see the cue + dashed
+  frozen trace; rejoin after 300 m → ONE breadcrumb, visible gap, no straight line; leader pocketed > Dark → dashed, no
+  cue; non-leader Captain leaves → no cue; End Ride → no cue; Management API: one row, earlier segments preserved,
+  `{brk:1}` present, coordinates only).

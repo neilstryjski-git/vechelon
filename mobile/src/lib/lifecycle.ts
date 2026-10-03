@@ -147,7 +147,7 @@ export function logChannelStatus(
 // morning breadcrumb unexplained.
 export function logFetchResult(
   rideId: string | null,
-  target: 'breadcrumb' | 'lastKnown' | 'beacon',
+  target: 'breadcrumb' | 'breadcrumb_seed' | 'leaderDeparture' | 'lastKnown' | 'beacon', // W290: + writer seed, leader departed_at catch-up
   detail: Record<string, unknown>,
 ): void {
   if (!rideId) return;

@@ -159,7 +159,15 @@ async function departureBody(
   riderId: string,
   opts: { clearLastKnown?: boolean },
 ): Promise<void> {
-  const sent = await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
+  // W290: a RIDE-END teardown still broadcasts 'depart' (W287 — clears my marker on peers not yet
+  // torn down) but it is NOT Captain-departure news: flag it so the breadcrumb reader does not show
+  // the "Captain has left" cue for a ride that just ended. useFleetPositions ignores the extra key
+  // (the marker drop is unchanged). No identity in the flag.
+  const sent = await restBroadcast(
+    rideId,
+    { riderId, ts: Date.now(), ...(opts.clearLastKnown === false ? { rideEnd: true } : {}) },
+    DEPARTED_EVENT,
+  );
   let cleared = false;
   let departedAt: string | null = null; // W292: the durable mark actually written (a timestamp, not a coordinate)
   try {

@@ -116,20 +116,30 @@ const RideMapScreen: React.FC = () => {
   //
   // D80: the leader is the account that STARTED the ride (ride.leaderId ← rides.started_by), read
   // from the ride row — NOT the first captain-roled row in the roster, which elected a phantom.
-  const { trail: breadcrumbTrail } = useBreadcrumb(
+  // W290 (R3-72 / slate 9 / C1): segments (one polyline each, never joined across a capture gap),
+  // liveness (live / stale / departed) and the departure instant for the cue.
+  const {
+    segments: breadcrumbSegments,
+    live: breadcrumbLive,
+    leaderDeparted,
+    departedAtMs: leaderDepartedAtMs,
+  } = useBreadcrumb(
     rideId,
     channel,
     ride?.leaderId ?? null,
     ride?.leaderSource ?? 'ride.created_by_fallback',
+    ride?.thresholds,
   );
+  // Cue dismissal is keyed to ONE departure instant: a later departure re-shows the banner.
+  const [cueDismissedAt, setCueDismissedAt] = useState<number | null>(null);
   const [showBreadcrumb, setShowBreadcrumb] = useState(true);
   // Map the trail to Polyline coords ONCE per trail change, not on every render.
   // RideMapScreen re-renders on each fleet ping (~5s); without this memo the up-to-
   // 1500-point trail was re-mapped (and the array thrown away) every time. Keyed on
   // breadcrumbTrail so it only rebuilds when a new point is actually kept.
-  const breadcrumbCoords = useMemo(
-    () => breadcrumbTrail.map((c) => ({ latitude: c.lat, longitude: c.lng })),
-    [breadcrumbTrail],
+  const breadcrumbSegmentCoords = useMemo(
+    () => breadcrumbSegments.map((seg) => seg.map((c) => ({ latitude: c.lat, longitude: c.lng }))),
+    [breadcrumbSegments],
   );
 
   // One build-stamped row per ride-open, so we can determine which build a device
@@ -517,15 +527,26 @@ const RideMapScreen: React.FC = () => {
         {/* W212 — ride-leader breadcrumb. Rendered FIRST so it sits BELOW the rider
             markers (z-order = JSX order). Provisional colour/width — a Feature-6-style
             design pass (legible in sunlight, must not occlude rider icons) is pending. */}
-        {showBreadcrumb && breadcrumbTrail.length > 1 ? (
-          <Polyline
-            coordinates={breadcrumbCoords}
-            strokeColor="#4F46E5"
-            strokeWidth={5}
-            lineCap="round"
-            lineJoin="round"
-          />
-        ) : null}
+        {/* W290 (R3-72, C1): ONE Polyline per segment — a capture gap is a visible break, never a
+            straight line across it. A stopped trace (leader departed, or no leader ping within
+            the Dark threshold) is dashed AND dimmed: lineDashPattern exists in react-native-maps
+            1.18.0 for Android but its rendering is device-unverified, so the dim is the fallback
+            that cannot fail. Index keys are stable: segments only append or are replaced whole. */}
+        {showBreadcrumb
+          ? breadcrumbSegmentCoords.map((coords, i) =>
+              coords.length > 1 ? (
+                <Polyline
+                  key={`bc-${i}`}
+                  coordinates={coords}
+                  strokeColor={breadcrumbLive ? '#4F46E5' : '#4F46E580'}
+                  strokeWidth={5}
+                  lineDashPattern={breadcrumbLive ? undefined : [14, 10]}
+                  lineCap="round"
+                  lineJoin="round"
+                />
+              ) : null,
+            )
+          : null}
         {/* W244 start-pin fallback: until the FIRST position arrives (seeded
             last-known OR first live fix) there is no OS blue dot — e.g. a cold
             first-ride rider who hasn't yet granted foreground location. Drop a
@@ -585,6 +606,25 @@ const RideMapScreen: React.FC = () => {
       </MapView>
 
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}
+      {/* W290 (slate 9): Captain-departure NEWS — never silent. Only for the leader's OWN
+          departure (not a ride end, not a non-leader Captain), only while the ride is live;
+          auto-clears when the Captain's pings resume, re-shows on a later departure. Copy is a
+          placeholder — Voice & Tone pending. No route overlay: Feature 6 is not built (recorded). */}
+      {leaderDeparted && leaderDepartedAtMs !== cueDismissedAt && ride?.status !== 'saved' ? (
+        <View style={styles.captainLeftBanner} pointerEvents="box-none">
+          <View style={styles.captainLeftText}>
+            <Text style={styles.captainLeftTitle}>Captain has left the ride</Text>
+            <Text style={styles.captainLeftBody}>Their trail is frozen where they left it.</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setCueDismissedAt(leaderDepartedAtMs)}
+            accessibilityLabel="Dismiss"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.chipText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <View style={styles.topBar} pointerEvents="box-none">
         <TouchableOpacity style={styles.backChip} onPress={() => navigation.goBack()}>
           <Text style={styles.chipText}>‹ {ride?.name ?? 'Ride'}</Text>
@@ -753,6 +793,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  // W290: Captain-departure cue — amber edge (news, not alarm); sits below the top bar.
+  captainLeftBanner: {
+    position: 'absolute',
+    top: 110,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0E0E10E6',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  captainLeftText: { flex: 1, marginRight: 12 },
+  captainLeftTitle: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  captainLeftBody: { color: '#C8C8C8', fontSize: 12, marginTop: 2 },
   centreButton: {
     position: 'absolute',
     right: 18,
