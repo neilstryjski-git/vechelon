@@ -1474,6 +1474,14 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   no GPX/XML parser on Hermes (no DOMParser) and unverified storage RLS for riders — a "minimal fallback" is three
   unverified subsystems. Deliverable = cue + frozen stopped breadcrumb, which the ticket names as the no-route behaviour.
   Recorded as a Feature 6 dependency, not a Pillar change.
+- Review round 1 (stride:task-reviewer: APPROVED 11/11, 1 minor — taken): the throttled upsert was never FLUSHED on
+  the engine-effect cleanup, so Leave Ride could lose up to one 60 s window of the leader's tail (the stored gap
+  started earlier than the real departure) and a D77/backgroundReady remount could seed from a path an in-flight
+  upsert was about to replace (the next write momentarily shorter than the table). Fix: breadcrumb writes are
+  serialised PER RIDE at module level (`inFlightBreadcrumbWrites`, the awaitPendingDeparture precedent); `upsertPath`
+  is the one writer (queued behind the previous write, never rejects); the cleanup flushes the dirty tail ignoring the
+  throttle (`reason: 'flush'` in the sink); `seedPrior` waits for any in-flight write before its SELECT. Throttle writes
+  are skipped when nothing new was captured (`dirty`).
 - Residue: W291's `commandState(rows, departedIds)` still has no caller; useBreadcrumb's channel effect still binds
   without cleanup (pre-existing; a second handler keeps parity, not fixed in scope).
 - Tests: NEW tests/breadcrumbSegments.test.mjs (11: sentinel shape, normalise, split/count, idempotent break, cap moved
