@@ -67,8 +67,24 @@ let currentHandler: ((fix: BgFix) => void) | null = null;
 let currentMotionHandler: ((isMoving: boolean, fix: BgFix | null) => void) | null = null;
 let currentHeartbeatHandler: ((info: HeartbeatCheckInfo) => void) | null = null;
 let currentFirstFixHandler: ((info: EngineFirstFixInfo) => void) | null = null;
+// W284 — engine lifecycle for the always-on telemetry tier (slate 6, R3-45). bgGeo stays
+// ride-agnostic: the caller (useFleetPositions, which owns rideId) receives the event and
+// records the counter. `reason` splits plugin-disabled from location-services-off (F-7).
+export interface EngineEventInfo {
+  kind: 'engine_started' | 'engine_died';
+  reason: 'start_resolved' | 'enabled_false' | 'provider_disabled';
+  detail?: Record<string, unknown>;
+}
+let currentEngineEventHandler: ((info: EngineEventInfo) => void) | null = null;
 let configured = false;
 let listenerBound = false;
+// W284 guards: our OWN stopBgGeo() disables the plugin, which fires onEnabledChange(false) —
+// that is a clean teardown, never an engine death. `engineRunning` ignores a stale
+// enabledchange from a not-awaited previous stop() (warm restart), `diedReported` makes the
+// death a one-shot per run.
+let stopping = false;
+let engineRunning = false;
+let diedReported = false;
 
 // W279 (wTBD2) — engine start → first fix bookkeeping for the Saver-at-start measurement.
 // Pure tracker (engineFirstFix.ts); one report per engine run, surfaced to the caller the
@@ -83,6 +99,14 @@ function reportFirstFix(info: EngineFirstFixInfo | null): void {
     currentFirstFixHandler?.(info);
   } catch (e) {
     console.warn('[Rail3][bgGeo] first-fix report failed', e);
+  }
+}
+
+function reportEngineEvent(info: EngineEventInfo): void {
+  try {
+    currentEngineEventHandler?.(info);
+  } catch (e) {
+    console.warn('[Rail3][bgGeo] engine-event report failed', e);
   }
 }
 
@@ -111,11 +135,16 @@ export async function startBgGeo(
   onMotionChange?: (isMoving: boolean, fix: BgFix | null) => void,
   onHeartbeatCheck?: (info: HeartbeatCheckInfo) => void,
   onEngineFirstFix?: (info: EngineFirstFixInfo) => void,
+  onEngineEvent?: (info: EngineEventInfo) => void,
 ): Promise<void> {
   currentHandler = handler;
   currentMotionHandler = onMotionChange ?? null;
   currentHeartbeatHandler = onHeartbeatCheck ?? null;
   currentFirstFixHandler = onEngineFirstFix ?? null;
+  currentEngineEventHandler = onEngineEvent ?? null;
+  stopping = false;
+  engineRunning = false;
+  diedReported = false;
   // W279: cold = ready() has never run in this process; anything after is a warm re-start.
   const coldStart = !configured;
   // W279: kick off the (bounded, never-rejecting) Battery Saver read NOW so it overlaps the
@@ -226,6 +255,25 @@ export async function startBgGeo(
         currentHeartbeatHandler?.({ engineMoving: false, sampled: true, movedM, reengaged });
       })();
     });
+    // W284 — engine death, detectable while the process lives. Bound ONCE like the others and
+    // routed through the swappable handler ref. BOUNDARY (same as the heartbeat's): an OEM
+    // that kills the process outright runs no JS, so nothing fires — that silence is the F-7
+    // ambiguity the counters cannot resolve, recorded as such.
+    BG.onEnabledChange((enabled: boolean) => {
+      if (enabled || stopping || !engineRunning || diedReported) return;
+      engineRunning = false;
+      diedReported = true;
+      reportEngineEvent({ kind: 'engine_died', reason: 'enabled_false' });
+    });
+    BG.onProviderChange((event: { enabled: boolean; gps?: boolean; network?: boolean; status?: number }) => {
+      if (event.enabled || stopping || !engineRunning || diedReported) return;
+      diedReported = true;
+      reportEngineEvent({
+        kind: 'engine_died',
+        reason: 'provider_disabled',
+        detail: { gps: event.gps ?? null, network: event.network ?? null, status: event.status ?? null },
+      });
+    });
     listenerBound = true;
   }
   if (!configured) {
@@ -298,6 +346,14 @@ export async function startBgGeo(
   firstFixTracker.begin({ startTs: Date.now(), coldStart, saverOn });
   await BG.start();
   firstFixTracker.markStarted(Date.now());
+  // W284 — engine_started counter (always-on floor). Reported AFTER start() resolves and never
+  // awaited: the caller's write is fire-and-forget by contract.
+  engineRunning = true;
+  reportEngineEvent({
+    kind: 'engine_started',
+    reason: 'start_resolved',
+    detail: { cold_start: coldStart, saver_on: saverOn },
+  });
   // D90 — FORCE the moving state at ride join. Per Transistorsoft's Philosophy of Operation,
   // start() leaves the engine STATIONARY with location-services OFF; it only begins tracking once
   // its Motion-Activity API detects movement OR the device exits a ~200m stationary geofence. TS
@@ -339,6 +395,10 @@ export async function nudgeBgGeo(): Promise<void> {
 }
 
 export async function stopBgGeo(): Promise<void> {
+  // W284: our own stop is a clean teardown — mark it BEFORE stop() so the onEnabledChange(false)
+  // it provokes is never counted as an engine death.
+  stopping = true;
+  engineRunning = false;
   // W279: a run that ends without ever producing a fix is a first-class measurement (how long
   // it ran), reported BEFORE the handler refs are dropped so the caller can still log it.
   reportFirstFix(firstFixTracker.onStop(Date.now()));
@@ -346,10 +406,16 @@ export async function stopBgGeo(): Promise<void> {
   currentMotionHandler = null;
   currentHeartbeatHandler = null;
   currentFirstFixHandler = null;
-  if (!BackgroundGeolocation) return; // never started (e.g. expo-only build) — nothing to stop
+  currentEngineEventHandler = null;
+  if (!BackgroundGeolocation) {
+    stopping = false;
+    return; // never started (e.g. expo-only build) — nothing to stop
+  }
   try {
     await BackgroundGeolocation.stop();
   } catch (e) {
     console.warn('[Rail3][bgGeo] stop failed', e);
+  } finally {
+    stopping = false;
   }
 }

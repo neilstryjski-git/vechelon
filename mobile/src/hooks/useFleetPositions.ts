@@ -10,6 +10,7 @@ import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo } from '../lib/bgGeo';
 import { setActiveRide } from '../lib/activeRide';
 import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown';
+import { recordCounter, fullCaptureEvent, loadOperatorConfig } from '../lib/telemetry';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
 import { appendTrailPoint } from '../lib/breadcrumbTrail';
@@ -430,6 +431,9 @@ export function useFleetPositions(
     // W266: separate throttle for the every-device last-known write (distinct from the
     // captain-only breadcrumb upsert above).
     let lastLastKnownMs = 0;
+    // W284: operator config (full-capture flag + slate 4 clocks) loaded once per ride open and
+    // cached; offline keeps the previous cache. Counters never depend on it.
+    void loadOperatorConfig();
     void startBgGeo((fix) => {
       const coords = { lat: fix.lat, lng: fix.lng };
       setMyCoords(coords);
@@ -512,6 +516,9 @@ export function useFleetPositions(
       // of movement and our self-check caught it. Zero heartbeat_check rows during a
       // backgrounded stop = the OS killed the FGS → captain-side detection territory.
       void logMeasurement({ rideId, kind: 'app_state_change', payload: { event: 'heartbeat_check', ...hb } });
+      // W284 full-capture tier: engine self-check outcomes (no coordinates — movedM is a
+      // distance) when the operator flag names THIS ride; no-op otherwise.
+      fullCaptureEvent(rideId, 'heartbeat_check', { ...hb });
     }, (ff) => {
       // W279 (wTBD2) — engine start → first fix, one row per engine run (or a no_fix row with the
       // run's duration). Ids and deltas only; device/OS/build fields ride on every measurement.
@@ -526,6 +533,17 @@ export function useFleetPositions(
           engine_start_client_ts: ff.engine_start_ts,
         },
       });
+      fullCaptureEvent(rideId, 'engine_first_fix', {
+        outcome: ff.outcome, delta_ms: ff.delta_ms, saver_on: ff.saver_on, cold_start: ff.cold_start,
+      });
+    }, (ev) => {
+      // W284 — always-on tier (slate 6, R3-45): engine_started on start() resolve, engine_died
+      // when the plugin or location services go off while the process lives. warning_fired is
+      // W285's (self-health) via the same recordCounter API. Fire-and-forget, ids only.
+      recordCounter(rideId, ev.kind, { reason: ev.reason, ...(ev.detail ?? {}) });
+      // Mirrored into full capture so a flagged ride's engine lifecycle is observable in that
+      // tier too (the toggle has something to show); no-op unless the flag names this ride.
+      fullCaptureEvent(rideId, ev.kind, { reason: ev.reason, ...(ev.detail ?? {}) });
     });
     // D89: D86's watchBatterySaverCleared (a foreground-only Saver ON->OFF listener) is REMOVED —
     // it missed the backgrounded toggle (field-confirmed to never fire) and is superseded by the
