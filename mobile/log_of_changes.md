@@ -1146,3 +1146,61 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - Field validation (pocketed + airplane → connectivity resumes; backgrounded → focus; Captain Leave does NOT tear
   down; SOS cleared on end; inactivity auto-close converges without RIDE_ENDED; FGS notification clears silently)
   pending on the next field build (W284 migration on staging first). FIELD RUN: _pending_.
+
+## W288 — Roster participation state, non-app mark, leaders-to-all phone rule, ride-scoped roster (slate 17 / items 15+23) (2026-10-03)
+- Pre-flight vs code (rail3-integration 5eb4261): RosterScreen runs its OWN query (not useRideRoster) and hid every
+  non-command row from riders at a client filter; no participation state existed; `rail3_joined_at` did not exist on
+  staging (15 columns); the existing NOT NULL `joined_at` is stamped by every insert path incl. web and is NOT an app
+  signal; selfRsvpWithIdentity never UPDATEs and RideMapScreen skips the insert when a row exists, so admin-added /
+  web-RSVP / rejoin rows needed a separate stamp; web-linked guests (D42 auto-link) carry account_id with role
+  'member' → correctly roster-only until they open the app; the engine-start holder (setActiveRide) sits in a
+  background-permission-gated effect and would mis-read a permission-denier as roster-only → not the signal.
+- Migration `supabase/migrations/20260916000000_rail3_participant_joined_at.sql`: additive nullable
+  `ride_participants.rail3_joined_at timestamptz` + COMMENT; no backfill (no historical signal separates app openers
+  from web rows — a backfill would invert slate 17); no policy/grant change (participant_update_policy's own-row
+  branch covers the write; supabase-patterns Pattern 5 only, no recursion surface). **DEPLOY ORDER: the self-RSVP
+  INSERT now names this column — the migration must be on staging BEFORE the next field build or every in-app join
+  fails (PGRST204, the D83 class).**
+- LLD: `src/lib/rosterLogic.ts` (pure, node-tested): `participationState` = account_id null OR rail3_joined_at null ⇒
+  roster_only (the input type carries NO ping field — slate 17's "never from current ping state" is enforced by
+  construction); `participationLabel` = 'App tracked' / 'Roster only' (item 23: the mark's wording is the Hands' —
+  neutral, never a failure framing, R3-74); `rowVisibleTo` always true (§4.1: complete record for every role; kept
+  as a function so the envelope has one home); `phoneVisibleTo` = command sees everyone (CO-CAPTAINS INCLUDED — a
+  call sheet; a deliberate divergence from the map's canSeePhone which hides captain↔captain on the bottom sheet),
+  everyone sees leaders' (slate 8, non-negotiable), rider↔rider parked (O-07); `rosterOpenFor` = participant AND
+  status ∈ {created, active} ('created' is open to participants — the pre-start roster IS the call sheet; 'saved' =
+  closed, slate 11).
+- Join signal: `selfRsvpWithIdentity` stamps `rail3_joined_at` on the in-app insert; new `markRail3Joined(rideId,
+  accountId)` UPDATE (own row, `.is('rail3_joined_at', null)` — idempotent, first-open timestamp never moves) called
+  from RideMapScreen's existing-row branch and AdHocCreator's duplicate-as-success branch. Web / edge-function
+  inserts leave it NULL by construction.
+- RosterScreen: selects `rail3_joined_at`; the rider filter is GONE (every returned row renders for every role); the
+  SELF row is now shown (decision: slate 17's point is seeing your own state; §4.1 says complete record) with a
+  YOU chip and no phone line / Call button; per-row state chip (neutral grey, never red); phone per phoneVisibleTo;
+  re-reads `rides.status` on every load (useRideDetails reads once) and renders a plain CLOSED state on Saved or
+  when the viewer is not on the ride — not a silent pop, because popping the map from under this screen leaves it
+  mounted (native-stack POP with source removes only the map). Header comment rewritten to the §4.1 rule.
+- RLS honesty (recorded, not papered over): participant_tactical_select returns ALL rows incl. phone to affiliated
+  riders (D50 / RP-16 — the UI gate is the only gate there; the server-side column fix remains the security lane),
+  and only command rows + own row to NON-affiliated riders — so "all rows for every role" holds to the extent the
+  server hands rows over; the client no longer filters rows by role. A rider-wide read for non-affiliated tenants is
+  a server change → TPM.
+- **R3-66 residue for the TPM (flagged, NOT absorbed):** R3-66's parenthetical — "a rider cannot see other riders on
+  the roster page any more than on the map" — contradicts Pillar II §4.1 ROSTER v1.1.1 and R3-74; Ledger F-12 ruled
+  for the committed §4.1 text. Built to §4.1 / R3-74; the R3-66 wording awaits the TPM's reconciliation. R3-74's "a
+  rider does not [see contact]" vs slate 8's leaders-to-all is moot: a roster-only leader does not occur.
+- Pre-existing, out of scope (noted): selfRsvpWithIdentity does not lowercase email although the dedupe index
+  comment assumes joinRide does.
+- Tests: tests/rosterLogic.test.mjs (6: state matrix incl. no-ping-input by construction, neutral labels, rowVisibleTo
+  4×4, phone 4×4, open rule). `npm test` 134 tests, 132 pass (same 2 stack files); tsc: only the 2 pre-existing
+  deepLinkAuth errors.
+- Review round 1 (stride:task-reviewer, approved; 3 minor, all taken; recursion check: column + COMMENT only, no policy):
+  stack-backed test added to rlsIsolation.test.mjs (own-row stamp once; second mark matches 0 rows and the first-open
+  timestamp stands; another rider's row untouchable) — skip-guarded on the column, runs on the staging/CI pass;
+  AdHocCreator's markRail3Joined now logs a failure like RideMapScreen; RosterScreen re-reads roster + status on
+  every focus (useFocusEffect) and every resume signal, so a roster left open across ride end closes without a manual
+  refresh. The listed integration test "rejoin refreshes it" is read as first-open semantics (the timestamp never moves)
+  — accepted by the reviewer, recorded here.
+- Field validation (rider view: all rows, leaders' numbers only, own YOU row; Captain/SAG view: all numbers; closed
+  at ride end; a web-RSVP'd member flips to App tracked on first open) pending on the next field build — needs THIS
+  migration on staging first. FIELD RUN: _pending_.

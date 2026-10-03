@@ -7,7 +7,7 @@ import * as Crypto from 'expo-crypto';
 import QRCode from 'react-native-qrcode-svg';
 
 import { supabase } from '../lib/supabase';
-import { selfRsvpWithIdentity } from '../lib/rideJoin';
+import { selfRsvpWithIdentity, markRail3Joined } from '../lib/rideJoin';
 import { TENANT_SLUG } from '../lib/env';
 import { useTheme } from '../theme/ThemeProvider';
 import {
@@ -204,6 +204,10 @@ const AdHocCreator: React.FC = () => {
         const msg = (error as { message?: string })?.message ?? '';
         if (code === '23505' || /duplicate|already exists|unique/i.test(msg)) {
           partErr = null; // the captain row is already present — treat as success
+          // W288: ensure the app-tracked signal is set on the existing row (best-effort, logged).
+          void markRail3Joined(rideId, userId).then(({ error: markErr }) => {
+            if (markErr) console.warn('[Rail3] markRail3Joined failed', markErr);
+          });
           break;
         }
         if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));

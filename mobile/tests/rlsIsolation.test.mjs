@@ -477,3 +477,30 @@ test('W284: purge strips identity from always_on rows and deletes full_capture r
   const second = await run();
   assert.deepEqual(second, { deleted: 0, stripped: 0 });
 });
+
+// ── W288: the app-tracked join signal (ride_participants.rail3_joined_at) ───────────────────
+// Skip-guarded on the COLUMN (migration 20260916000000), independent of the Rail 3 table probe.
+
+test('W288: a rider stamps rail3_joined_at on their OWN row once; a second mark matches 0 rows; another rider\'s row is untouchable', async (t) => {
+  const probe = await admin.from('ride_participants').select('rail3_joined_at').limit(1);
+  if (probe.error) return t.skip('W288 rail3_joined_at column not applied');
+  const stamp = (client, accountId) => client
+    .from('ride_participants')
+    .update({ rail3_joined_at: new Date().toISOString() })
+    .eq('ride_id', fx.rideA.id)
+    .eq('account_id', accountId)
+    .is('rail3_joined_at', null)
+    .select('account_id, rail3_joined_at');
+  const first = await stamp(fx.userA.client, fx.userA.id);
+  assert.ifError(first.error);
+  assert.equal(first.data.length, 1, 'first open stamps the row');
+  const ts = first.data[0].rail3_joined_at;
+  const second = await stamp(fx.userA.client, fx.userA.id);
+  assert.ifError(second.error);
+  assert.deepEqual(second.data, [], 'rejoin leaves the first-open timestamp alone');
+  const { data: still } = await admin.from('ride_participants').select('rail3_joined_at').eq('ride_id', fx.rideA.id).eq('account_id', fx.userA.id).single();
+  assert.equal(still.rail3_joined_at, ts);
+  const other = await stamp(fx.userA.client, fx.userA2.id);
+  assert.ifError(other.error);
+  assert.deepEqual(other.data, [], 'participant_update_policy: a member cannot stamp another rider\'s row');
+});
