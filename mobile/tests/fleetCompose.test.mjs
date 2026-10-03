@@ -10,6 +10,7 @@ import {
   pingBeatsDeparture,
   lastKnownFromRows,
   mergeDepartedMarks,
+  DEPARTED_MERGE_GRACE_MS,
 } from '../src/lib/fleetCompose.ts';
 
 const identity = (s) => s;
@@ -112,14 +113,23 @@ test('lastKnownFromRows: an unparsable departed_at is ignored (fails open to tod
 
 // --- mergeDepartedMarks: fetch authoritative, except marks learned after the fetch started ----------
 
-test('mergeDepartedMarks: the fetch result wins, a broadcast mark learned AFTER the fetch started survives, one learned before it is dropped when the fetch says present', () => {
+test('mergeDepartedMarks: fetch wins; a mark learned AFTER the fetch started or within the grace BEFORE it survives; an older stale mark is dropped when the fetch says present', () => {
   const fetchStartedAt = T;
   const fetched = { r1: { atMs: T - 500, seenAtMs: T + 200 } };
   const local = {
     r2: { atMs: T + 50, seenAtMs: T + 60 }, // departed while the fetch was in flight → keep
-    r3: { atMs: T - 900, seenAtMs: T - 800 }, // stale local mark, fetch says not departed → rejoin cleared it
+    r4: { atMs: T - 1_100, seenAtMs: T - 1_000 }, // broadcast landed 1 s BEFORE the fetch, its UPDATE may still trail our SELECT → keep (grace)
+    r3: { atMs: T - 60_000, seenAtMs: T - 59_000 }, // stale local mark well outside the grace, fetch says not departed → rejoin cleared it → drop
     r1: { atMs: T - 400, seenAtMs: T + 10 }, // also in fetched → fetched wins
   };
   const merged = mergeDepartedMarks(fetched, local, fetchStartedAt);
-  assert.deepEqual(merged, { r1: { atMs: T - 500, seenAtMs: T + 200 }, r2: { atMs: T + 50, seenAtMs: T + 60 } });
+  assert.deepEqual(merged, {
+    r1: { atMs: T - 500, seenAtMs: T + 200 },
+    r2: { atMs: T + 50, seenAtMs: T + 60 },
+    r4: { atMs: T - 1_100, seenAtMs: T - 1_000 },
+  });
+  // The grace boundary is exclusive at exactly -GRACE and the default is the exported constant.
+  assert.deepEqual(mergeDepartedMarks({}, { x: { atMs: 0, seenAtMs: T - DEPARTED_MERGE_GRACE_MS } }, T), {});
+  assert.deepEqual(mergeDepartedMarks({}, { x: { atMs: 0, seenAtMs: T - DEPARTED_MERGE_GRACE_MS + 1 } }, T), { x: { atMs: 0, seenAtMs: T - DEPARTED_MERGE_GRACE_MS + 1 } });
+  assert.deepEqual(mergeDepartedMarks({}, { x: { atMs: 0, seenAtMs: T - 1 } }, T, 0), {}, 'grace 0 = the strict rule');
 });

@@ -175,18 +175,25 @@ export function lastKnownFromRows(
   return { lastKnown, departed, usable, departedCount };
 }
 
-// The fetch result is authoritative — EXCEPT a mark learned by broadcast AFTER the fetch STARTED
-// survives (receiver clock vs receiver clock). Closes the pre-existing D87 race where a slow fetch
-// that read the row before the departure landed re-materialised a just-departed rider, and lets a
-// rejoin (fetch says "not departed", mark older than the fetch) drop the local mark.
+// The fetch result is authoritative — EXCEPT a mark learned by broadcast AFTER the fetch STARTED,
+// or within DEPARTED_MERGE_GRACE_MS BEFORE it, survives (receiver clock vs receiver clock). Closes
+// the pre-existing D87 race where a slow fetch that read the row before the departure landed
+// re-materialised a just-departed rider. The grace (review r1) covers the sibling window: the depart
+// BROADCAST is sent before the departing device's UPDATE, so a mark received just before our fetch
+// started can still precede the row write our SELECT read. A rejoin is unaffected: the fetch says
+// "not departed" and pingBeatsDeparture renders any newer live ping regardless; a stale local mark
+// older than the grace is dropped.
+export const DEPARTED_MERGE_GRACE_MS = 5000;
+
 export function mergeDepartedMarks(
   fetched: Record<string, DepartedMark>,
   local: Record<string, DepartedMark>,
   fetchStartedAtMs: number,
+  graceMs = DEPARTED_MERGE_GRACE_MS,
 ): Record<string, DepartedMark> {
   const next: Record<string, DepartedMark> = { ...fetched };
   for (const [id, mark] of Object.entries(local)) {
-    if (mark.seenAtMs > fetchStartedAtMs && !(id in next)) next[id] = mark;
+    if (mark.seenAtMs > fetchStartedAtMs - graceMs && !(id in next)) next[id] = mark;
   }
   return next;
 }

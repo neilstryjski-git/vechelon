@@ -116,10 +116,48 @@ export async function sendDormantPing(args: {
 // fleetCompose.ts). One statement, so the mark and the null-out land or fail together (a PGRST204
 // on a staging without the migration fails BOTH — see the migration's DEPLOY ORDER). Ride-end
 // teardown skips the whole branch, so a Saved ride never marks anyone departed (R3-70).
+// W292 (review r1): the departure issued from beforeRemove is fire-and-forget and lands departed_at
+// only after restBroadcast + getSession + the UPDATE round-trip, while a quick re-open's join effect
+// SELECTs departed_at on mount. If that SELECT read NULL before the UPDATE committed, the rejoin
+// branch would be skipped and the mark would land on a rider who is present and pinging — with
+// nothing left to clear it (roster 'Left ride' for a live rider; peers drop them instead of Dark).
+// So every departure registers its in-flight promise per ride, and the join path awaits it
+// (bounded) before reading the row. Module-level, like the D77 caches: it must outlive the screen.
+const inFlightDepartures = new Map<string, Promise<void>>();
+export const DEPARTURE_SETTLE_MAX_WAIT_MS = 3000;
+
+// Resolves when the pending departure for `rideId` has settled (or after `maxWaitMs`, whichever is
+// first). Never rejects; no pending departure → resolves immediately.
+export function awaitPendingDeparture(rideId: string, maxWaitMs = DEPARTURE_SETTLE_MAX_WAIT_MS): Promise<void> {
+  const pending = inFlightDepartures.get(rideId);
+  if (!pending) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    void pending.finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 export async function broadcastDeparture(
   rideId: string,
   riderId: string,
   opts: { clearLastKnown?: boolean } = {},
+): Promise<void> {
+  const run = departureBody(rideId, riderId, opts);
+  inFlightDepartures.set(rideId, run);
+  try {
+    await run;
+  } finally {
+    if (inFlightDepartures.get(rideId) === run) inFlightDepartures.delete(rideId);
+  }
+}
+
+async function departureBody(
+  rideId: string,
+  riderId: string,
+  opts: { clearLastKnown?: boolean },
 ): Promise<void> {
   const sent = await restBroadcast(rideId, { riderId, ts: Date.now() }, DEPARTED_EVENT);
   let cleared = false;

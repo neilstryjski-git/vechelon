@@ -20,7 +20,7 @@ import FirstRideExplainer from '../components/FirstRideExplainer';
 import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
-import { broadcastDeparture } from '../lib/backgroundLocation';
+import { broadcastDeparture, awaitPendingDeparture } from '../lib/backgroundLocation';
 import { clearActiveRide, clearPersistedActiveRide } from '../lib/activeRide';
 import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
@@ -152,6 +152,11 @@ const RideMapScreen: React.FC = () => {
     if (!myRiderId || !rideId) return;
     let cancelled = false;
     void (async () => {
+      // W292: a quick leave → re-open must read the row AFTER the departure's UPDATE has landed, or
+      // the mark would be stamped on a present rider with nothing left to clear it. Bounded wait;
+      // no pending departure resolves immediately.
+      await awaitPendingDeparture(rideId);
+      if (cancelled) return;
       const { data: existing } = await supabase
         .from('ride_participants')
         .select('account_id, rail3_joined_at, departed_at')

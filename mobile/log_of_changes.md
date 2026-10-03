@@ -1392,6 +1392,19 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   marks departed, the fetch race, the late-write re-seed. "Fixed means built AND validated" → **FIELD RUN: pending** on
   the batched staging build (rider leaves while the Captain is pocketed; Dark rider side by side; rejoin → one entry, no
   ghost). D87 is closed in Stride only on that evidence.
+- Review round 1 (stride:task-reviewer, 2 important + 1 minor; both code findings taken, recursion check nil/passed):
+  (a) IMPORTANT — leave-then-quick-rejoin ordering gap: the beforeRemove departure is fire-and-forget and lands
+  `departed_at` only after broadcast + getSession + UPDATE, while a quick re-open's join effect SELECTs on mount; a NULL
+  read there would skip the rejoin branch and the mark would then land on a PRESENT rider with nothing to clear it
+  (roster 'Left ride' for a live rider; peers drop them instead of rendering Dark — exactly the left-vs-lost confusion
+  R3-65 targets). Fix: `broadcastDeparture` registers its in-flight promise per ride (module-level, outlives the screen,
+  like the D77 caches); the join effect `await awaitPendingDeparture(rideId)` (bounded 3 s, never rejects, resolves
+  immediately when nothing is pending) before its SELECT. (b) MINOR — `mergeDepartedMarks` now keeps a broadcast mark
+  seen within `DEPARTED_MERGE_GRACE_MS` (5 s) BEFORE the fetch started too: the depart broadcast precedes the departing
+  device's UPDATE, so a mark that arrived just before our fetch can still precede the row write our SELECT read; a rejoin
+  is unaffected (fetch says present + pingBeatsDeparture renders newer pings). (c) IMPORTANT, acceptance — criterion 32
+  "closed by on-device evidence" is NOT met until the field run; recorded, not a code defect; the ticket stays
+  in_progress (this is the sprint's "Fixed means built AND validated" gate).
 - Residue: W291's `commandState(rows, departedIds)` still has no caller (W290/B2 consumer); `useRideRoster` does not
   select `departed_at` (not needed: departed riders are not in the fleet, so RiderBottomSheet is unaffected).
 - Tests: NEW tests/fleetCompose.test.mjs (10: regression with no marks, >= tie, seed suppressed, rejoin renders live,
