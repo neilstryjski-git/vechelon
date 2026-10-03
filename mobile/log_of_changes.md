@@ -1016,3 +1016,75 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   analytics_events). Field validation (counters on a healthy ride; engine_died on a force-stopped FGS while the
   app lives; full-capture toggle per ride) pending on the next field build, batched with W279–W282 — this also
   needs the migration pushed to staging first. FIELD RUN: _pending_.
+
+## W286 — Device-side recovery chain: heartbeat engine re-assert + Android headless re-assert (B1 device-side) (2026-10-03)
+- Pre-flight vs code (rail3-integration 2ecfc6b): onHeartbeat never read `getState().enabled` and its `engineMoving`
+  early-return (stale-true after a death) preceded any place a check could go; readyConfig had no `enableHeadless`
+  and nothing registered a headless task (index.ts was just registerRootComponent); R3-67 HOLE — nothing cleared
+  the active-ride holder on Leave Ride (RideMapScreen beforeRemove only broadcast the departure; clears existed only
+  at sign-out and on a user-id delta), so a durable holder would have re-engaged a departed session; fullCaptureEvent
+  is a no-op on a cold config cache (a headless JS context starts cold). SDK v5.2.0: `registerHeadlessTask` is typed
+  in @transistorsoft/background-geolocation-types; `enableHeadless` defaults false; Android heartbeat floor 60 s.
+- LLD: `src/lib/headlessLogic.ts` (pure, node-tested) — durable-holder (de)serialisation that fails CLOSED,
+  `decideHeadlessAction` (no ride → noop = R3-67 "de-registered", since AppRegistry registration is permanent; Saved
+  or purged ride → noop; terminate → A4 last-known write (+ re-assert if disabled); heartbeat/providerchange →
+  re-assert only when disabled), `decideForegroundHeartbeat` (stopping wins), `buildWakeAttemptPayload` (device
+  state only, err truncated, never a coordinate key).
+- LLD: durable holder in AsyncStorage `rail3:active-ride` written by `setActiveRide` beside the in-memory one;
+  `clearActiveRide` clears both (sign-out / identity delta, unchanged call sites); NEW `clearPersistedActiveRide` on
+  the Leave path (RideMapScreen beforeRemove, issued before the departure broadcast — covers back chip, D57
+  auto-leave, End Ride goBack); `readPersistedActiveRide` for non-React callers. The engine effect's cleanup does
+  NOT clear it (a D77 remount / backgroundReady flip is not a departure); the in-memory holder still survives
+  unmount for the D87 sign-out departure. D91 deps `[backgroundReady, rideId, myRiderId]` untouched; R3-39 onResume
+  nudge untouched (the fallback).
+- LLD: bgGeo `reassertEngine` — start() + changePace(true) DIRECTLY (not startBgGeo, which would overwrite handler
+  refs and re-open the first-fix run); sets engineRunning/engineMoving, resets diedReported so a later second death
+  reports; `stopping` wins; reports `engine_started{reason:'heartbeat_reassert'}` (an always-on counter) and
+  `wake_attempt` (full-capture only — `useFleetPositions` never counts it). onHeartbeat now reads `getState()` FIRST
+  and re-asserts on enabled:false, else runs the D88 self-check as before. `enableHeadless: true` added to
+  readyConfig (requires stopOnTerminate:false, already set; JS-only, OTA-able).
+- LLD: `src/lib/headlessTask.ts` is import-light (react-native + types at bundle eval; the SDK required ONCE at
+  registration in try/catch — the one eager addition to the launch path, unavoidable for registerHeadlessTask;
+  supabase / telemetry / lastKnown / activeRide / headlessLogic `require`d inside the task — the D87 OTA-rollback
+  launch-safety rule), registered from index.ts BEFORE registerRootComponent, Android only. Per event:
+  `isRecoveryEvent` gate FIRST (heartbeat / terminate / providerchange only — every other SDK event exits before
+  any read or write) → durable ride (none → silent return) → session gate (`getSession()`; none or a different uid
+  than the holder's rider → return, no write — D77; the headless context is the only live refresher while it runs
+  and the writers' further getSession calls are lock-serialised in-context) → `rides.status` via
+  REST (unknown → accept) → `getState()` → decide → `loadOperatorConfig()` (cold cache) → re-assert
+  (start + changePace + awaited `engine_started{headless_reassert}` counter) and/or A4 last-known via
+  `getCurrentPosition({samples:1, persist:false, timeout:30})` + `persistLastKnown(..., 'headless')` → awaited
+  `wake_attempt` row (incl. `skipped_saved` / `noop` evidence). Every write AWAITED because the SDK finishes the task
+  when our promise resolves → `telemetry.ts` gained awaitable `writeCounter` / `writeFullCaptureEvent` (the
+  fire-and-forget wrappers delegate to them). No Alert/notification: a completed self-heal is silent (R3-48).
+- Mechanism facts (NOT a ratified recovery window — R3-42's source note is "UNTRACED — Brain-session item" and §12.2
+  carries no value): Android heartbeat floor 60 s → effective device-side window ≈ heartbeat interval + start()
+  latency; the headless task fires only while the FGS lives (heartbeat / terminate / providerchange under
+  stopOnTerminate:false + enableHeadless:true); in-process `enabled:false` heartbeats are rare (heartbeats ride the
+  FGS), so the headless path is the primary R3-42 mechanism and the foreground one is the cheap guard; an OEM that
+  kills the FGS outright runs no JS → NON-RECOVERABLE device-side (captain-side silence detection now; server-side
+  staleness detector + FCM wake explicitly deferred behind B2's scheduler, Ledger B1). autoSync stays excluded.
+- Review round 1 (stride:task-reviewer, 1 important + 3 minor, all taken): non-recovery events reached the
+  decision only after the whole I/O prelude and then wrote a `noop` wake_attempt row per fix → `isRecoveryEvent`
+  gate before any I/O; `reassertEngine` set engineRunning/diedReported only after BOTH start() and changePace()
+  → set right after start() resolves (a pace failure is now its own outcome `ok_no_pace`, the engine state is
+  never mis-stated); a heartbeat whose getState() was in flight during our own stop() could re-assert the engine
+  we just stopped once `stopping` reset in finally → new `engineSession` flag (set after start(), cleared at the top
+  of stopBgGeo, never reset) is a required input of `decideForegroundHeartbeat`; launch-safety and session
+  narratives corrected (the SDK IS required once at registration; the headless context is the only live refresher
+  and in-context getSession calls are lock-serialised).
+- Review round 2 (approved; 1 minor taken): the headless re-assert now mirrors the foreground split — start() alone
+  decides success, the `engine_started{headless_reassert}` counter is written as soon as it resolves, and
+  changePace(true) is its own step reported as `ok` / `ok_no_pace` — so both paths agree on the same condition.
+- Residue / notes: `enableHeadless` also delivers `location` events headless — they exit before any read or write
+  (noted as a future A4 carrier, not built); a stale durable holder after a crash is mitigated by the `rides.status` check (Saved → noop);
+  REST failure → accept the re-assert. supabase.ts:33's comment still mentions a TaskManager path that no longer
+  exists (left as is).
+- Tests: tests/headlessTask.test.mjs (10: holder round-trip + fail-closed parsing, recovery-event predicate, decision
+  matrix incl. Saved/purged and unknown events, foreground decision incl. the engine-session guard, wake payload
+  w/o coordinates). `npm test` 122 tests, 120 pass (same 2
+  stack files); tsc: only the 2 pre-existing deepLinkAuth errors.
+- Field validation (active ride → swipe-away → expect `wake_attempt` / `engine_started{headless_reassert}` rows and a
+  `last_position_write{trigger:headless}`; Leave Ride → swipe-away → ZERO rows; service disabled while the process
+  lives; FGS killed by OEM = documented non-recoverable) pending on the next field build (needs the W284 migration on
+  staging). FIELD RUN: _pending_.

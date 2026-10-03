@@ -114,20 +114,28 @@ async function writeEvent(rideId: string, kind: string, tier: TelemetryTier, pay
   }
 }
 
+// Awaitable variants (W286): the Android headless task must finish its writes before the SDK
+// closes the task, so it awaits these. Foreground callers use the fire-and-forget wrappers.
+export async function writeCounter(rideId: string, kind: TelemetryCounterKind, payload?: Record<string, unknown>): Promise<void> {
+  await writeEvent(rideId, kind, 'always_on', payload ?? {});
+}
+
+export async function writeFullCaptureEvent(rideId: string, event: string, payload?: Record<string, unknown>): Promise<void> {
+  try {
+    if (configInFlight) await configInFlight; // settle the first load; never throws
+  } catch {
+    // loadOperatorConfig swallows its own errors; nothing to do
+  }
+  if (!isFullCaptureEnabled(configCache, rideId)) return;
+  await writeEvent(rideId, event, 'full_capture', payload ?? {});
+}
+
 // Always-on tier: the three counters, the permanent floor. Fire-and-forget.
 export function recordCounter(rideId: string, kind: TelemetryCounterKind, payload?: Record<string, unknown>): void {
-  void writeEvent(rideId, kind, 'always_on', payload ?? {});
+  void writeCounter(rideId, kind, payload);
 }
 
 // Full-capture tier: no-op unless the operator flag names THIS ride. Fire-and-forget.
 export function fullCaptureEvent(rideId: string, event: string, payload?: Record<string, unknown>): void {
-  void (async () => {
-    try {
-      if (configInFlight) await configInFlight; // settle the first load; never throws
-    } catch {
-      // loadOperatorConfig swallows its own errors; nothing to do
-    }
-    if (!isFullCaptureEnabled(configCache, rideId)) return;
-    await writeEvent(rideId, event, 'full_capture', payload ?? {});
-  })();
+  void writeFullCaptureEvent(rideId, event, payload);
 }

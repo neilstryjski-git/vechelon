@@ -21,6 +21,7 @@ import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
 import { broadcastDeparture } from '../lib/backgroundLocation';
+import { clearPersistedActiveRide } from '../lib/activeRide';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
 import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
@@ -301,6 +302,9 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     if (!rideId || !myRiderId) return;
     const unsub = navigation.addListener('beforeRemove', () => {
+      // W286 (R3-67): a departure ends the ENGINE SESSION too — clear the durable holder first so
+      // neither the headless task nor the heartbeat re-assert can re-engage this ride.
+      clearPersistedActiveRide();
       void broadcastDeparture(rideId, myRiderId);
     });
     return unsub;

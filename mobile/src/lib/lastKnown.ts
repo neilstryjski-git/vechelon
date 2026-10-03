@@ -21,7 +21,7 @@
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
 
-export type LastKnownTrigger = 'stop' | 'throttle' | 'beacon';
+export type LastKnownTrigger = 'stop' | 'throttle' | 'beacon' | 'headless';
 
 // A4 CADENCE BOUND — declared HERE and nowhere else (W283, Ledger A4 / §14 item 21).
 // How often EVERY device overwrites its last-known position while actively riding (W266). The
