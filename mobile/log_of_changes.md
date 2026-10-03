@@ -933,8 +933,8 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - Tests: no new node test — lastKnown.ts imports the supabase client (react-native-url-polyfill) and cannot load
   under node; verification is `grep -rn LAST_KNOWN_WRITE_INTERVAL_MS mobile/src` (one declaration, one import,
   one use) + tsc. `npm test` 104 tests, 102 pass (same 2 stack files); tsc only the 2 pre-existing deepLinkAuth.
-- Remaining: Senior PM confirms the value (verification step 3); Management API single-row check after the next
-  field ride (step 1). The code half needs no device.
+- CONFIRMED by the Senior PM 2026-10-03: 60 s within [30 s, 120 s] (brief §6 ticked). Remaining for the TPM: the §12.2
+  row (text proposed in the brief). Management API single-row check rides along with the next field ride.
 
 ## W284 — Always-on telemetry tier + operator-level config (slate 6, §8.5, items 20/22, F-7) (2026-09-30)
 - Pre-flight vs code (rail3-integration 2963104): no `rail3_telemetry*` / `rail3_operator_config` object existed in

@@ -2,7 +2,7 @@
 
 **Ticket:** W283 (Stride board 116, goal G34). **Hands item:** Pillar IV §14 item 21.
 **Bedrock trace:** Rail 3 Ledger v1.1.3 §8.2 A4 (named exception; cadence stated as a shape — a ceiling for privacy, a floor for fallback quality — with no number), §12.1 (30 s seed-to-live design target, not a gate), §12.2 "A4 cadence bound — pending"; Pillar II v1.1.1 §2 last-known exception and retention model; Pillar III v1.1.1 R3-62, R3-36.
-**Status:** VALUE PROPOSED — source is the running build plus the committed timing constants; no field measurement is required, but the field build's sink rows (`last_position_write`) will confirm the write rate in practice.
+**Status:** VALUE CONFIRMED by the Senior PM 2026-10-03 (60 000 ms within [30 s, 120 s]); the TPM records it in Pillar IV §12.2. The field build's sink rows (`last_position_write`) will confirm the write rate in practice.
 **Authority:** the Hands propose, the Senior PM confirms, the TPM records the confirmed value in Pillar IV §12.2. Nothing here enters a Pillar by the Hands' edit.
 
 ---
@@ -48,6 +48,6 @@ As of W283 the constant is declared once, in `lib/lastKnown.ts`, and imported by
 
 ## 6. Senior PM confirmation
 
-- [ ] A4 cadence confirmed: ______ ms (proposed 60 000), on ______ (date), by Neil Stryjski
-- [ ] Bound confirmed: [30 s, 120 s] — noting the 30 s ceiling is anchored to the SD-015 PoC validation target — or amended to ______
-- [ ] TPM records the confirmed value in Pillar IV §12.2 (the Hands do not edit the Pillar)
+- [x] A4 cadence confirmed: 60 000 ms, on 2026-10-03, by Neil Stryjski
+- [x] Bound confirmed: [30 s, 120 s] — noting the 30 s ceiling is anchored to the SD-015 PoC validation target (confirmed as proposed, 2026-10-03)
+- [ ] TPM records the confirmed value in Pillar IV §12.2 (the Hands do not edit the Pillar) — proposed row text: `| A4 cadence bound | 60 s (LAST_KNOWN_WRITE_INTERVAL_MS = 60 000), bound [30 s, 120 s] | Confirmed 2026-10-03 (Senior PM). Ceiling = SD-015 30 s Stopped/Inactive ping interval (PoC validation target); floor = 2-min Stopped threshold. Brief: docs/rail3/decision_briefs/a4_last_known_cadence_decision_brief.md (W283). |`
