@@ -6,6 +6,8 @@ import { Platform } from 'react-native';
 import { createFirstFixTracker, withTimeout, type EngineFirstFixInfo } from './engineFirstFix';
 import { haversineDistanceM } from './geo';
 import { loadTrackingPingFlag, playTrackingPing } from './trackingPing';
+import { readPersistedActiveRide } from './activeRide';
+import { buildWakeAttemptPayload, decideForegroundHeartbeat } from './headlessLogic';
 
 export type { EngineFirstFixInfo } from './engineFirstFix';
 
@@ -71,8 +73,10 @@ let currentFirstFixHandler: ((info: EngineFirstFixInfo) => void) | null = null;
 // ride-agnostic: the caller (useFleetPositions, which owns rideId) receives the event and
 // records the counter. `reason` splits plugin-disabled from location-services-off (F-7).
 export interface EngineEventInfo {
-  kind: 'engine_started' | 'engine_died';
-  reason: 'start_resolved' | 'enabled_false' | 'provider_disabled';
+  // W286 adds 'wake_attempt' (full-capture only — the caller must not count it) and the
+  // 'heartbeat_reassert' reason for an engine_started produced by the in-process re-assert.
+  kind: 'engine_started' | 'engine_died' | 'wake_attempt';
+  reason: 'start_resolved' | 'enabled_false' | 'provider_disabled' | 'heartbeat_reassert';
   detail?: Record<string, unknown>;
 }
 let currentEngineEventHandler: ((info: EngineEventInfo) => void) | null = null;
@@ -85,6 +89,11 @@ let listenerBound = false;
 let stopping = false;
 let engineRunning = false;
 let diedReported = false;
+// W286: "we started this engine and have not stopped it". Set after start() resolves (startBgGeo
+// and the heartbeat re-assert), cleared at the TOP of stopBgGeo and NEVER reset by its finally —
+// unlike `stopping`, which is transient. A heartbeat whose getState() was in flight when we
+// stopped therefore cannot re-assert the engine we just stopped.
+let engineSession = false;
 
 // W279 (wTBD2) — engine start → first fix bookkeeping for the Saver-at-start measurement.
 // Pure tracker (engineFirstFix.ts); one report per engine run, surfaced to the caller the
@@ -107,6 +116,55 @@ function reportEngineEvent(info: EngineEventInfo): void {
     currentEngineEventHandler?.(info);
   } catch (e) {
     console.warn('[Rail3][bgGeo] engine-event report failed', e);
+  }
+}
+
+// W286 (B1 device-side, R3-42): re-engage a DISABLED engine from the in-process heartbeat while
+// a durable active ride exists. Calls start() + changePace(true) directly — NOT startBgGeo(),
+// which would overwrite the handler refs and re-open the first-fix run. Our own teardown in
+// flight (`stopping`) wins. The onEnabledChange(true) this provokes is ignored by the death
+// listener; resetting `diedReported` makes a later second death reportable again. Silent on
+// success (R3-48: a completed self-heal is silent); the wake_attempt row is the evidence.
+async function reassertEngine(BG: typeof BackgroundGeolocationType, event: 'heartbeat'): Promise<void> {
+  const wake = (
+    outcome: 'ok' | 'ok_no_pace' | 'failed' | 'skipped_no_ride' | 'skipped_stopping' | 'skipped_no_session',
+    err?: string,
+  ) =>
+    reportEngineEvent({
+      kind: 'wake_attempt',
+      reason: 'heartbeat_reassert',
+      detail: buildWakeAttemptPayload({ outcome, reason: 'enabled_false', event, engineEnabledBefore: false, context: 'foreground', err }),
+    });
+  let ride: Awaited<ReturnType<typeof readPersistedActiveRide>> = null;
+  try {
+    ride = await readPersistedActiveRide();
+  } catch {
+    ride = null;
+  }
+  const decision = decideForegroundHeartbeat({ engineEnabled: false, persistedRide: ride, stopping, engineSession });
+  if (decision !== 'reassert') {
+    if (decision !== 'proceed') wake(decision);
+    return;
+  }
+  try {
+    await BG.start();
+  } catch (e) {
+    wake('failed', e instanceof Error ? e.message : String(e));
+    return;
+  }
+  // The engine IS running from here on — record that before anything else can fail, so a later
+  // second death is reportable (mirrors startBgGeo).
+  engineRunning = true;
+  engineSession = true;
+  diedReported = false;
+  reportEngineEvent({ kind: 'engine_started', reason: 'heartbeat_reassert' });
+  try {
+    await BG.changePace(true);
+    engineMoving = true;
+    wake('ok');
+  } catch (e) {
+    // Started but not forced moving: the SDK's own motion detection governs; say so distinctly.
+    wake('ok_no_pace', e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -223,12 +281,25 @@ export async function startBgGeo(
     // the heartbeat won't fire either; that class is covered by the captain-side silence
     // detection (D88 layer 2), NOT here.
     BG.onHeartbeat(() => {
-      // A moving engine already streams via onLocation — nothing to re-engage.
-      if (engineMoving) {
-        currentHeartbeatHandler?.({ engineMoving: true, sampled: false, movedM: null, reengaged: false });
-        return;
-      }
       void (async () => {
+        // W286: engine STATE first — `engineMoving` can be stale-true after a death, so it must
+        // not short-circuit this check. A disabled engine during a persisted ride is re-asserted
+        // and the D88 self-check is skipped for this beat. In-process heartbeats ride the FGS, so
+        // an enabled:false here is rare; the headless task is the primary R3-42 path.
+        try {
+          const st = await BG.getState();
+          if (!st.enabled) {
+            await reassertEngine(BG, 'heartbeat');
+            return;
+          }
+        } catch (e) {
+          console.warn('[Rail3][bgGeo] heartbeat getState failed', e);
+        }
+        // A moving engine already streams via onLocation — nothing to re-engage.
+        if (engineMoving) {
+          currentHeartbeatHandler?.({ engineMoving: true, sampled: false, movedM: null, reengaged: false });
+          return;
+        }
         let movedM: number | null = null;
         let reengaged = false;
         try {
@@ -303,6 +374,11 @@ export async function startBgGeo(
       // (heavy battery) for no gain here. See the onHeartbeat handler above.
       heartbeatInterval: 60,
       stopOnTerminate: false,
+      // W286 (B1 device-side): keep the FGS alive after the user swipes the app away AND boot a
+      // headless JS context for heartbeat / terminate / providerchange (see headlessTask.ts,
+      // registered from index.ts). Android-only; requires stopOnTerminate:false; JS-only config
+      // (OTA-able) — the native lib already supports it. Must be device-validated (swipe-away).
+      enableHeadless: true,
       startOnBoot: false,
       foregroundService: true,
       showsBackgroundLocationIndicator: true,
@@ -349,6 +425,7 @@ export async function startBgGeo(
   // W284 — engine_started counter (always-on floor). Reported AFTER start() resolves and never
   // awaited: the caller's write is fire-and-forget by contract.
   engineRunning = true;
+  engineSession = true;
   reportEngineEvent({
     kind: 'engine_started',
     reason: 'start_resolved',
@@ -396,9 +473,11 @@ export async function nudgeBgGeo(): Promise<void> {
 
 export async function stopBgGeo(): Promise<void> {
   // W284: our own stop is a clean teardown — mark it BEFORE stop() so the onEnabledChange(false)
-  // it provokes is never counted as an engine death.
+  // it provokes is never counted as an engine death. W286: end the engine session here too, and
+  // for good (no finally reset) — see `engineSession`.
   stopping = true;
   engineRunning = false;
+  engineSession = false;
   // W279: a run that ends without ever producing a fix is a first-class measurement (how long
   // it ran), reported BEFORE the handler refs are dropped so the caller can still log it.
   reportFirstFix(firstFixTracker.onStop(Date.now()));

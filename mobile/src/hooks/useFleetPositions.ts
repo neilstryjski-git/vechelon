@@ -540,7 +540,9 @@ export function useFleetPositions(
       // W284 — always-on tier (slate 6, R3-45): engine_started on start() resolve, engine_died
       // when the plugin or location services go off while the process lives. warning_fired is
       // W285's (self-health) via the same recordCounter API. Fire-and-forget, ids only.
-      recordCounter(rideId, ev.kind, { reason: ev.reason, ...(ev.detail ?? {}) });
+      // W286: 'wake_attempt' is full-capture ONLY — the always-on floor carries exactly three
+      // counters. An engine_started with reason 'heartbeat_reassert' IS a counter.
+      if (ev.kind !== 'wake_attempt') recordCounter(rideId, ev.kind, { reason: ev.reason, ...(ev.detail ?? {}) });
       // Mirrored into full capture so a flagged ride's engine lifecycle is observable in that
       // tier too (the toggle has something to show); no-op unless the flag names this ride.
       fullCaptureEvent(rideId, ev.kind, { reason: ev.reason, ...(ev.detail ?? {}) });
