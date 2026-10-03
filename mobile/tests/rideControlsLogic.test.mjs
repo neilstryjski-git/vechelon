@@ -110,3 +110,28 @@ test('D80 leader rule: role on the roster is irrelevant — a phantom captain ca
   // Deterministic: same input, same answer, every call, on every surface.
   assert.equal(rideLeaderId(ride), rideLeaderId(ride));
 });
+
+// --- W291: multi-Captain command model (Ledger B2 / slate 9; R3-71) -------------------------------
+
+import { canEndRide, commandState } from '../src/lib/rideControlsLogic.ts';
+
+test('W291 canEndRide: any Captain, and nobody else (SAG never ends a ride)', () => {
+  assert.equal(canEndRide('captain'), true);
+  for (const r of ['support', 'member', 'guest']) assert.equal(canEndRide(r), false, r);
+});
+
+test('W291 commandState: 0 captains → captainless; 1 or 2 → captained; a departed captain does not count', () => {
+  const rows = (...roles) => roles.map((role, i) => ({ role, account_id: `acct-${i}` }));
+  assert.equal(commandState(rows('member', 'support')), 'captainless');
+  assert.equal(commandState(rows('captain', 'member')), 'captained');
+  assert.equal(commandState(rows('captain', 'captain', 'member')), 'captained');
+  const two = rows('captain', 'captain', 'member');
+  assert.equal(commandState(two, new Set(['acct-0'])), 'captained', 'one captain left');
+  assert.equal(commandState(two, new Set(['acct-0', 'acct-1'])), 'captainless', 'both departed');
+  assert.equal(commandState([]), 'captainless');
+});
+
+test('W291 commandState: a captain row with no account cannot hold command; only roster rows are consulted (never started_by)', () => {
+  assert.equal(commandState([{ role: 'captain', account_id: null }]), 'captainless');
+  assert.equal(commandState([{ role: 'captain', account_id: null }, { role: 'captain', account_id: 'acct-9' }]), 'captained');
+});

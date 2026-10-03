@@ -3,6 +3,7 @@
 // Erasable-syntax TS only.
 
 import type { LatLng } from './geo';
+import type { RideRole } from './roleVisibility';
 
 // The ride join URL — SAME shape the web mints (admin/src/lib/portalBase.ts
 // buildRideUrl with source 'ridecard'): the QR encodes the Rails 1/2 join URL,
@@ -144,4 +145,32 @@ export function adHocRideRow(args: {
     started_by: args.createdBy,
     actual_start: args.at.toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// W291 — multi-Captain command model (Ledger B2 / slate 9 / §14 item 3; R3-71).
+// ---------------------------------------------------------------------------------------------
+
+// End Ride is available to EVERY Captain on the ride — and to nobody else. SAG (support) never
+// ends a ride; the organiser's web path is a separate, pre-existing policy (ride_admin_modify).
+export function canEndRide(myRole: RideRole): boolean {
+  return myRole === 'captain';
+}
+
+export type CommandState = 'captained' | 'captainless';
+
+// Slate 9: "degraded means nobody holds Captain powers, not that surfaces vanish." Derived from the
+// PRESENT, NON-DEPARTED captain-roled participant rows — never from started_by / created_by (that is
+// the breadcrumb owner, not the command holder; rideLeaderId above stays untouched). `departedIds` is
+// the set of departed account ids (W292 will feed departed_at; empty today). No role transfer, no
+// promotion, no ceremony: a captainless ride continues under existing envelopes until End Ride or the
+// inactivity backstop, and a returning Captain restores everything simply by being present again.
+export function commandState(
+  rows: ReadonlyArray<{ role: RideRole; account_id: string | null }>,
+  departedIds: ReadonlySet<string> = new Set<string>(),
+): CommandState {
+  // A captain row without an account cannot hold command (nobody can act through it), so it does
+  // not count; departure is by account id.
+  const present = rows.some((r) => r.role === 'captain' && r.account_id !== null && !departedIds.has(r.account_id));
+  return present ? 'captained' : 'captainless';
 }

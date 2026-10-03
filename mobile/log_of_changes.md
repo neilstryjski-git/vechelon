@@ -1263,3 +1263,62 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   last-known banner with the rows; Leave Ride and re-open → still cached; sign-out → sign in as another rider → no
   cached roster; ride ended while offline → closed state) pending; on the CURRENT field build expect the inert console
   note and unchanged behaviour. FIELD RUN: _pending_.
+
+## W291 — End Ride for any Captain + captainless-degraded command model (B2, slate 9, item 3; R3-71/25/26) (2026-10-03)
+- Pre-flight vs code (rail3-integration 8808f2a): the ONLY UPDATE-capable rides policy was `ride_admin_modify` (ALL;
+  is_tenant_admin OR created_by), so a co-Captain who neither created the ride nor is a tenant admin could not End Ride;
+  no RESTRICTIVE policies exist (permissive policies OR); `is_rail3_ride_captain` (SECURITY DEFINER, STABLE, search_path
+  pinned, nothing else uses it) reads ride_participants with RLS bypassed — which matters because ride_participants'
+  own policies read `rides`, so an inline subquery would have formed a rides→ride_participants→rides chain;
+  `is_captain_or_support` covers SAG and must NOT gate End Ride. TWO defects beyond the ticket: a denied rides UPDATE
+  is 0 rows with NO error and RideControls only errored on `updErr`, so a non-permitted co-Captain got a SILENT FALSE
+  SUCCESS (RIDE_ENDED broadcast, map left, ride still active); and RideMapScreen bound the RIDE_ENDED listener for
+  non-captains only, so a second Captain's map never reacted to the first Captain's End. D83 (Stride 5167): the fix
+  13c1f96 IS on the base but the defect is still in_progress in Stride — referenced, not claimed closed.
+- Migration `supabase/migrations/20260917000000_rail3_any_captain_end_ride.sql`: ONE narrow additive policy
+  `rides_rail3_captain_end FOR UPDATE TO authenticated USING (is_rail3_ride_captain(id) AND status = 'active')
+  WITH CHECK (status = 'saved')`; `ride_admin_modify` untouched. NARROWER than the ticket text on purpose: the
+  `status = 'active'` clause means a Captain can close an active ride only — never flip a 'created' ride straight to
+  saved, never edit a saved ride. supabase-patterns 1 (SECURITY DEFINER predicate cuts the chain) and 5 (DROP POLICY
+  IF EXISTS); no new table, grants unchanged. Must reach staging before a field build exercises a co-Captain End Ride.
+- LLD: `rideControlsLogic.canEndRide(myRole)` = captain only; `commandState(rows, departedIds = ∅)` → 'captained' |
+  'captainless' from PRESENT, NON-DEPARTED captain-roled roster rows WITH an account (an account-less captain row
+  cannot hold command) — never from started_by/created_by (that is the
+  breadcrumb owner, `rideLeaderId`, untouched). W292 will feed `departedIds` from departed_at. No transfer, no
+  promotion, no ceremony anywhere (slate 9: degraded = nobody holds Captain powers, surfaces do not vanish).
+- RideControls: the End Ride chip mounts via `canEndRide(myRole)`; after the UPDATE, 0 rows now RE-READS
+  `rides.status` (fetchRideStatus): 'saved' → the existing already-saved path; anything else → a clear message
+  ("End Ride wasn't accepted for your account — another Captain or the organiser can end it", or a connection
+  message on a failed read) and NO RIDE_ENDED broadcast, no onRideEnded, no goBack — the ride is still live.
+  RideMapScreen binds the RIDE_ENDED listener for EVERY role (the ending Captain's own echo is a no-op through the
+  W287 watch's endedRef). The watch is now called with `iAmCaptain: false`: the ending Captain never reaches the
+  decision (markEnded first), so the captain mute only ever silenced CO-Captains — they are told like anyone else;
+  a Captain opening an already-Saved ride sees the same "already ended" notice as a rider (acceptable).
+- Captainless verification (no code): no surface hides, throws or returns early without a captain row — the fleet,
+  beacon, roster and SAG map have no captain-presence logic; breadcrumb leadership is `rideLeaderId` (started_by,
+  else created_by) and a departed leader simply stops capturing per C1 (resume-on-return and the departure cue are
+  W290's). The only gap was the RIDE_ENDED gate above.
+- Tests: tests/rideControlsLogic.test.mjs +3 (canEndRide matrix; commandState 0/1/2 captains + departed exclusion;
+  roster-only derivation); tests/rlsIsolation.test.mjs +3 stack-backed (co-Captain neither creator nor admin ends an
+  ACTIVE ride → 1 row + status saved; member / tenant-B user / Captain-on-a-CREATED-ride → 0 rows, status unchanged;
+  fixtures restored). `npm test` 151 tests, 149 pass (same 2 stack files; the 2 new RLS cases live in the stack-only file); tsc: only the 2 pre-existing deepLinkAuth.
+- Review round 1 (stride:task-reviewer, 1 important security + 2 minor, all taken; recursion check passed): a policy's
+  WITH CHECK cannot see OLD, so `rides_rail3_captain_end` pinned the status transition but not the PAYLOAD — a hostile
+  Captain issuing a crafted PostgREST UPDATE could set `created_by = auth.uid()` (or `tenant_id`) while closing and
+  inherit `ride_admin_modify` afterwards → new BEFORE UPDATE trigger `trg_rail3_guard_ride_ownership`
+  (SECURITY DEFINER, search_path pinned) rejects any change to tenant_id / created_by unless the caller is a tenant
+  admin, the creator, or the service role (auth.uid() IS NULL); started_by is deliberately not guarded (set by
+  trg_set_ride_started_by on → active; alphabetical trigger order would race it); +1 stack test (42501, creator
+  unchanged, status unchanged). The stack tests now capture and restore rideA's ORIGINAL status (the fixture's
+  default is 'created', not 'active'). The account-less-captain rule (cannot hold command) was already taken from the
+  planner before this round.
+- Review round 2: APPROVED (25/25 criteria met; recursion check passed on the policy AND the guard trigger). One minor
+  RECORDED, not fixed (round cap reached): with `broadcast: { self: true }` and the RIDE_ENDED listener now bound for
+  every role, the ending Captain's own echo reaches useRideEndWatch.checkNow before `onRideEnded()` flips endedRef, so
+  the no-op depends on the status read resolving after the send ack. Manifestation = "two Captains end simultaneously":
+  the watch tears down B's map (Alert + goBack) while B's confirmEndRide is still running, then B's goBack is a second,
+  unhandled GO_BACK on the root stack (dev warning) — a redundant Alert on B's device, idempotent on the server. Follow-up
+  if the field build shows it: call `onRideEnded()` BEFORE the RIDE_ENDED send (or ignore self-echoes in the listener).
+- Field validation (co-Captain who did not create the ride ends it from the chip; the creator's map reacts in real
+  time; a member sees no chip; a SAG sees no chip) pending on a build + staging push that include this migration.
+  FIELD RUN: _pending_.

@@ -504,3 +504,73 @@ test('W288: a rider stamps rail3_joined_at on their OWN row once; a second mark 
   assert.ifError(other.error);
   assert.deepEqual(other.data, [], 'participant_update_policy: a member cannot stamp another rider\'s row');
 });
+
+// ── W291: any Captain on the ride can End Ride (rides_rail3_captain_end) ──────────────────────
+// userA created ride A (so userA takes the ride_admin_modify path); userA2 is neither creator nor
+// tenant admin — exactly the co-Captain the new policy exists for. Denial under RLS is 0 rows, not
+// an error, so every negative asserts on the row count AND re-reads status as admin.
+
+const endRideAs = (client) => client
+  .from('rides')
+  .update({ status: 'saved', actual_end: new Date().toISOString() })
+  .eq('id', fx.rideA.id)
+  .eq('status', 'active')
+  .select('id');
+const rideAStatus = async () => (await admin.from('rides').select('status').eq('id', fx.rideA.id).single()).data.status;
+const setRideA = async (status) => assert.ifError((await admin.from('rides').update({ status, actual_end: null }).eq('id', fx.rideA.id)).error);
+const setRoleA2 = async (role) => assert.ifError((await admin.from('ride_participants').update({ role }).eq('ride_id', fx.rideA.id).eq('account_id', fx.userA2.id)).error);
+
+test('W291: a co-Captain who is neither creator nor tenant admin CAN end an ACTIVE ride (1 row → saved)', async (t) => {
+  const probe = await admin.from('ride_participants').select('rail3_joined_at').limit(1);
+  if (probe.error) return t.skip('Rail 3 migrations not applied');
+  const before = await rideAStatus(); // fixture inserts rideA with the DEFAULT 'created'
+  await setRideA('active'); await setRoleA2('captain');
+  try {
+    const { data, error } = await endRideAs(fx.userA2.client);
+    assert.ifError(error);
+    assert.equal(data.length, 1);
+    assert.equal(await rideAStatus(), 'saved');
+  } finally {
+    await setRoleA2('member'); await setRideA(before);
+  }
+});
+
+test('W291: a Captain closing a ride cannot reassign created_by or tenant_id in the same statement (ownership guard, 42501)', async (t) => {
+  const probe = await admin.from('ride_participants').select('rail3_joined_at').limit(1);
+  if (probe.error) return t.skip('Rail 3 migrations not applied');
+  const before = await rideAStatus();
+  await setRideA('active'); await setRoleA2('captain');
+  try {
+    const { error } = await fx.userA2.client
+      .from('rides')
+      .update({ status: 'saved', actual_end: new Date().toISOString(), created_by: fx.userA2.id })
+      .eq('id', fx.rideA.id)
+      .eq('status', 'active')
+      .select('id');
+    assert.ok(error, 'the ownership guard must reject the statement');
+    assert.equal(error.code, '42501');
+    assert.equal(await rideAStatus(), 'active');
+    const { data: row } = await admin.from('rides').select('created_by').eq('id', fx.rideA.id).single();
+    assert.equal(row.created_by, fx.userA.id, 'creator unchanged');
+  } finally {
+    await setRoleA2('member'); await setRideA(before);
+  }
+});
+
+test('W291: a member cannot end the ride; a tenant-B user cannot; a Captain cannot flip a CREATED ride (0 rows each)', async (t) => {
+  const probe = await admin.from('ride_participants').select('rail3_joined_at').limit(1);
+  if (probe.error) return t.skip('Rail 3 migrations not applied');
+  const before = await rideAStatus();
+  await setRideA('active');
+  const member = await endRideAs(fx.userA2.client);
+  assert.ifError(member.error); assert.deepEqual(member.data, []); assert.equal(await rideAStatus(), 'active');
+  const foreign = await endRideAs(fx.userB.client);
+  assert.ifError(foreign.error); assert.deepEqual(foreign.data, []); assert.equal(await rideAStatus(), 'active');
+  await setRideA('created'); await setRoleA2('captain');
+  try {
+    const { data, error } = await fx.userA2.client.from('rides').update({ status: 'saved', actual_end: new Date().toISOString() }).eq('id', fx.rideA.id).select('id');
+    assert.ifError(error); assert.deepEqual(data, []); assert.equal(await rideAStatus(), 'created');
+  } finally {
+    await setRoleA2('member'); await setRideA(before);
+  }
+});
