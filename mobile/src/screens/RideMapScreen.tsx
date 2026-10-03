@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
-import { selfRsvpWithIdentity } from '../lib/rideJoin';
+import { selfRsvpWithIdentity, markRail3Joined } from '../lib/rideJoin';
 import {
   promptOemExclusionOnFirstJoin,
   promptIfBatterySaverOn,
@@ -153,11 +153,20 @@ const RideMapScreen: React.FC = () => {
     void (async () => {
       const { data: existing } = await supabase
         .from('ride_participants')
-        .select('account_id')
+        .select('account_id, rail3_joined_at')
         .eq('ride_id', rideId)
         .eq('account_id', myRiderId)
         .maybeSingle();
-      if (cancelled || existing) return;
+      if (cancelled) return;
+      if (existing) {
+        // W288 (slate 17): an existing row (admin-added, web RSVP, rejoin) becomes app-tracked
+        // the first time the ride is opened in the app. Best-effort; never blocks the open.
+        if (!existing.rail3_joined_at) {
+          const { error: markErr } = await markRail3Joined(rideId, myRiderId);
+          if (markErr) console.warn('[Rail3] markRail3Joined failed', markErr);
+        }
+        return;
+      }
       // W195: hydrate display_name/email from accounts so the captain + web Race
       // Control see a real name, not the 'Rider' fallback.
       const { error: rsvpErr } = await selfRsvpWithIdentity({
