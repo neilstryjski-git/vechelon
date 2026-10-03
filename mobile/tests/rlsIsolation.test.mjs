@@ -52,6 +52,7 @@ const RUN = `w182-${Date.now()}`;
 // Fixture state populated in before()
 const fx = {
   rail3SchemaPresent: false,
+  telemetrySchemaPresent: false, // W284 tables (20260915000000_rail3_telemetry)
   tenantA: null,
   tenantB: null,
   userA: null, // { id, email, client }  — member of tenant A only
@@ -102,6 +103,13 @@ before(async () => {
       process.exit(1);
     }
     if (error) console.log(`beacon_alerts not reachable (${error.code ?? error.message}) — Rail 3 assertions will SKIP.`);
+  }
+  {
+    // W284: the telemetry migration is a separate file; probe it separately so the matrix
+    // skips (never fails) on a branch that carries W169/W170 but not W284.
+    const { error } = await admin.from('rail3_telemetry_events').select('id').limit(1);
+    fx.telemetrySchemaPresent = !error;
+    if (error) console.log(`rail3_telemetry_events not reachable (${error.code ?? error.message}) — W284 assertions will SKIP.`);
   }
 
   // Two tenants
@@ -185,6 +193,12 @@ after(async () => {
       await admin.from('rider_states').delete().in('tenant_id', [fx.tenantA.id, fx.tenantB.id]);
       await admin.from('beacon_alerts').delete().in('tenant_id', [fx.tenantA.id, fx.tenantB.id]);
     }
+    if (fx.telemetrySchemaPresent) {
+      await admin.from('rail3_telemetry_events').delete().in('tenant_id', [fx.tenantA.id, fx.tenantB.id]);
+    }
+    // W284: flipping ride B to 'saved' in the purge replica fires trg_ride_closed, which writes an
+    // analytics_events row (tenant FK, no ON DELETE) — remove it or the tenants delete below fails.
+    await admin.from('analytics_events').delete().in('tenant_id', [fx.tenantA.id, fx.tenantB.id]);
     await admin.from('ride_participants').delete().eq('ride_id', fx.rideA?.id ?? '');
     await admin.from('rides').delete().in('id', [fx.rideA?.id, fx.rideB?.id].filter(Boolean));
     for (const u of [fx.userA, fx.userA2, fx.userB]) {
@@ -355,4 +369,111 @@ test('W282: a captain CAN clear beacon_active on a rider\'s row in their ride (1
   } finally {
     await admin.from('ride_participants').update({ role: 'member' }).eq('ride_id', fx.rideA.id).eq('account_id', fx.userA.id);
   }
+});
+
+// ── W284: always-on telemetry tier + operator config (DoD-12 extension) ─────────────────────
+// Row counts / error codes only. Reads of rail3_telemetry_events are service_role ONLY: with no
+// SELECT grant for authenticated, PostgREST answers 42501 (not an empty set) — asserted on purpose.
+
+const telemetryRow = (tenantId, rideId, accountId, extra = {}) => ({
+  tenant_id: tenantId, ride_id: rideId, account_id: accountId,
+  platform: 'android', device_class: 'test/device', kind: 'engine_started', tier: 'always_on',
+  client_ts: new Date().toISOString(), payload: { reason: 'start_resolved' }, ...extra,
+});
+
+test('W284: same-tenant always_on INSERT as the writer succeeds (bare insert, no select)', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userB.client.from('rail3_telemetry_events').insert(telemetryRow(fx.tenantB.id, fx.rideB.id, fx.userB.id));
+  assert.ifError(error);
+  const { data } = await admin.from('rail3_telemetry_events').select('id, account_id').eq('ride_id', fx.rideB.id);
+  assert.equal(data.length, 1);
+  assert.equal(data[0].account_id, fx.userB.id);
+});
+
+test('W284: cross-tenant INSERT is denied (42501)', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userA.client.from('rail3_telemetry_events').insert(telemetryRow(fx.tenantB.id, fx.rideB.id, fx.userA.id));
+  assert.ok(error, 'expected an RLS rejection');
+  assert.equal(error.code, '42501');
+});
+
+test('W284: INSERT under another account_id in my own tenant is denied (42501) — identity pinned', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userA.client.from('rail3_telemetry_events').insert(telemetryRow(fx.tenantA.id, fx.rideA.id, fx.userA2.id));
+  assert.ok(error);
+  assert.equal(error.code, '42501');
+});
+
+test('W284: authenticated cannot READ telemetry at all (no SELECT grant → 42501)', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userB.client.from('rail3_telemetry_events').select('id').eq('ride_id', fx.rideB.id);
+  assert.ok(error);
+  assert.equal(error.code, '42501');
+});
+
+test('W284: a payload carrying a coordinate key is rejected at the schema (23514)', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userB.client.from('rail3_telemetry_events').insert(
+    telemetryRow(fx.tenantB.id, fx.rideB.id, fx.userB.id, { payload: { lat: 1 } }),
+  );
+  assert.ok(error);
+  assert.equal(error.code, '23514');
+});
+
+test('W284: authenticated can READ the operator config (android + ios rows present)', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { data, error } = await fx.userA.client.from('rail3_operator_config').select('platform');
+  assert.ifError(error);
+  assert.deepEqual(data.map((r) => r.platform).sort(), ['android', 'ios']);
+});
+
+test('W284: authenticated cannot WRITE the operator config (42501) — operator-level by ruling', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const { error } = await fx.userA.client.from('rail3_operator_config').update({ full_capture_ride_id: fx.rideA.id }).eq('platform', 'android');
+  assert.ok(error);
+  assert.equal(error.code, '42501');
+});
+
+test('W284: INSERT against a ride that belongs to another tenant is denied (42501) — ride-scoped', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  // tenant_id is MY tenant (passes the tenant clause) but ride_id is a tenant-B ride.
+  const { error } = await fx.userA.client.from('rail3_telemetry_events').insert(telemetryRow(fx.tenantA.id, fx.rideB.id, fx.userA.id));
+  assert.ok(error);
+  assert.equal(error.code, '42501');
+});
+
+// Replicates hard-purge-location's three telemetry statements as service_role (the function
+// itself needs deno + the local stack; its SQL is what matters). LAST in the file: it marks
+// ride B 'saved' with an old actual_end, which the earlier channel tests must not see.
+test('W284: purge strips identity from always_on rows and deletes full_capture rows past T+4h; a second run is a no-op', async (t) => {
+  if (!fx.telemetrySchemaPresent) return t.skip('W284 telemetry schema not applied');
+  const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
+  assert.ifError((await admin.from('rides').update({ status: 'saved', actual_end: fiveHoursAgo }).eq('id', fx.rideB.id)).error);
+  assert.ifError((await admin.from('rail3_telemetry_events').insert([
+    telemetryRow(fx.tenantB.id, fx.rideB.id, fx.userB.id),
+    telemetryRow(fx.tenantB.id, fx.rideB.id, fx.userB.id, { tier: 'full_capture', kind: 'heartbeat_check' }),
+  ])).error);
+  assert.ifError((await admin.from('rail3_operator_config').update({ full_capture_ride_id: fx.rideB.id }).eq('platform', 'android')).error);
+
+  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const run = async () => {
+    const { data: rides } = await admin.from('rides').select('id').eq('status', 'saved').lt('actual_end', fourHoursAgo).eq('id', fx.rideB.id);
+    const ids = rides.map((r) => r.id);
+    const { data: deleted, error: e1 } = await admin.from('rail3_telemetry_events').delete().in('ride_id', ids).eq('tier', 'full_capture').select('id');
+    assert.ifError(e1);
+    const { data: stripped, error: e2 } = await admin.from('rail3_telemetry_events').update({ account_id: null }).in('ride_id', ids).eq('tier', 'always_on').not('account_id', 'is', null).select('id');
+    assert.ifError(e2);
+    const { error: e3 } = await admin.from('rail3_operator_config').update({ full_capture_ride_id: null }).in('full_capture_ride_id', ids);
+    assert.ifError(e3);
+    return { deleted: deleted.length, stripped: stripped.length };
+  };
+  const first = await run();
+  assert.ok(first.deleted >= 1, 'full_capture row deleted');
+  assert.ok(first.stripped >= 1, 'always_on identity stripped');
+  const { data: rows } = await admin.from('rail3_telemetry_events').select('tier, account_id').eq('ride_id', fx.rideB.id);
+  assert.ok(rows.every((r) => r.tier === 'always_on' && r.account_id === null));
+  const { data: cfg } = await admin.from('rail3_operator_config').select('full_capture_ride_id').eq('platform', 'android').single();
+  assert.equal(cfg.full_capture_ride_id, null);
+  const second = await run();
+  assert.deepEqual(second, { deleted: 0, stripped: 0 });
 });

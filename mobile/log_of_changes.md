@@ -935,3 +935,84 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   one use) + tsc. `npm test` 104 tests, 102 pass (same 2 stack files); tsc only the 2 pre-existing deepLinkAuth.
 - Remaining: Senior PM confirms the value (verification step 3); Management API single-row check after the next
   field ride (step 1). The code half needs no device.
+
+## W284 — Always-on telemetry tier + operator-level config (slate 6, §8.5, items 20/22, F-7) (2026-09-30)
+- Pre-flight vs code (rail3-integration 2963104): no `rail3_telemetry*` / `rail3_operator_config` object existed in
+  the repo or on staging; bgGeo bound onLocation/onMotionChange/onHeartbeat ONLY (the ticket's onEnabledChange /
+  onProviderChange were not bound); bgGeo is ride-agnostic (no rideId/tenant); our own `stopBgGeo()` disables the
+  plugin, so a naive onEnabledChange(false) would have counted every clean ride end as an engine death; the purge
+  function selects `status='saved' AND actual_end < now-4h` and re-selects those rides on every run, so its new
+  steps must be idempotent. Staging drift noted: `rail3_sag_allowlist` exists on staging in no migration.
+- Migration `supabase/migrations/20260915000000_rail3_telemetry.sql` (HELD off the prod push with the rest of the
+  Rail 3 set): `rail3_telemetry_events` (tenant_id, ride_id, account_id NULLABLE for the T+4h strip, platform,
+  device_class, kind, tier, client_ts, payload jsonb, created_at) with named inline CHECKs — platform ∈
+  {android, ios}, tier ∈ {always_on, full_capture}, always_on kind ∈ exactly the three counters (full_capture may
+  carry other lifecycle names), payload must be an object, and a schema-level scope boundary
+  `NOT (payload ?| ARRAY['lat','lng','long','latitude','longitude','coords','path'])`; RLS: ONE policy, INSERT for
+  authenticated `WITH CHECK (tenant_id = get_my_tenant_id() AND account_id = auth.uid())` (identity pinned — the
+  D77 lesson from analytics_events); NO select/update/delete for authenticated (reads are service_role only, no
+  rider-facing surface); grants INSERT→authenticated, full CRUD→service_role. `rail3_operator_config` keyed by
+  platform with `full_capture_ride_id` (FK rides, ON DELETE SET NULL) and the reserved nullable slate 4 clocks
+  (`startup_ceiling_s`, `steady_state_threshold_s`, populated by W285); SELECT USING(true) + SELECT grant for
+  authenticated, writes service_role only; android + ios rows seeded (ios empty). supabase-patterns: Pattern 1 —
+  the only predicate is the SECURITY DEFINER `get_my_tenant_id()` over account_tenants, no policy reads its own
+  table or ride_participants (no recursion surface); Pattern 5 — IF NOT EXISTS / DROP POLICY IF EXISTS /
+  ON CONFLICT DO NOTHING; Pattern 7 — explicit role-matched grants.
+- LLD: pure/IO split so the guard is node-tested — `src/lib/telemetryPure.ts` (COORDINATE_KEYS, recursive
+  `hasCoordinateKeys` / `sanitizePayload` (never throws; non-objects → {}), `isFullCaptureEnabled` (per ride,
+  never fleet-wide), `classifyEngineRun`, `deviceClass` = "<manufacturer>/<model>" lowercased, whitespace → '-',
+  never a device id) and `src/lib/telemetry.ts` (`loadOperatorConfig()` once per ride open, cached, offline keeps
+  the previous cache; `recordCounter(rideId, kind, payload?)` always_on; `fullCaptureEvent(rideId, event,
+  payload?)` no-op unless the flag names THIS ride; `resetTelemetryIdentity` on a user-id delta, wired beside
+  resetMeasureIdentity in AuthContext). Bare `.insert()` (return=minimal) because authenticated has no SELECT.
+  NOT the analytics_events 'query_timeout' carrier (staging-only, stripped for prod).
+- LLD: bgGeo gains a 5th optional `onEngineEvent` callback (W279 precedent; bgGeo stays ride-agnostic — the
+  caller useFleetPositions owns rideId and records the counter). `engine_started` reported after `BG.start()`
+  resolves (detail: cold_start, saver_on). `onEnabledChange(false)` / `onProviderChange(!enabled)` bound ONCE in
+  the listenerBound block → `engine_died` with `reason` = enabled_false | provider_disabled (F-7 split), guarded by
+  `stopping` (set before our own stop(), cleared in finally), `engineRunning` (ignores a stale enabledchange from a
+  not-awaited previous stop on warm restart) and `diedReported` (one-shot per run). Never awaited, never gates
+  start/beacon/teardown. `warning_fired` is W285's via `recordCounter`; API only here.
+- hard-purge-location: after the participant purge, DELETE full_capture rows and `account_id = NULL` on
+  always_on rows for the selected rides (both filtered so re-runs are no-ops), and clear
+  `rail3_operator_config.full_capture_ride_id` for purged rides; errors logged, not thrown (a 42P01 before the
+  migration is pushed must never revert the participant purge). Response carries a `telemetry` block. No pg_cron
+  (deferred D2 set). NOT type-checked locally — deno is not installed on this machine; review by reading.
+- F-7 outcome (RECORDED, no fourth counter): the three counters distinguish never_engaged ({}), torn_down
+  ({started, died}; reason splits plugin-disabled from location-services-off) and {started} without died. The
+  last bucket is `suspended_or_healthy`: an OEM-killed process runs no JS (nothing is emitted), so an OEM
+  suspension, a healthy run and a started-but-no-fix run are INDISTINGUISHABLE from the floor alone — the fix
+  signal lives only in the staging-only sink (engine_first_fix). R3-45's third clause is therefore NOT satisfied
+  by the always-on floor by itself → returns to the Brain per F-7. Observation for the Brain (not built): W285's
+  `warning_fired` payload could carry `fixes_seen` (a count, never coords) to split never-engaged (0) from
+  suspended (>0) without a new counter.
+- Tests: tests/telemetry.test.mjs (8: guard top-level/case-insensitive/nested/arrays/non-objects/cyclic, classifier
+  incl. the F-7 equivalence, gating, device class); tests/rlsIsolation.test.mjs +9 schema-guarded (same-tenant
+  insert ok; cross-tenant insert 42501; foreign account_id 42501; foreign-tenant ride 42501; authenticated read
+  42501 by design; coordinate payload 23514; config readable by authenticated; config write 42501; purge
+  retention replica incl. no-op second run); supabase/tests/rail3_rls_isolation.test.sql
+  gate lists both tables. `npm test` 112 tests, 110 pass (same 2 stack files — Docker down; the W284 DB cases run
+  on the staging/CI pass). tsc: only the 2 pre-existing deepLinkAuth errors.
+- Review round 1 (stride:task-reviewer, 3 important + 4 minor; recursion check passed): the two important
+  acceptance findings are the F-7 return (R3-45 third clause, R3-54 last clause) and the pending field run — no
+  code change, recorded. Taken: (a) INSERT policy is now ride-scoped too — new SECURITY DEFINER
+  `rail3_ride_tenant_id(uuid)` over rides (STABLE, search_path pinned, EXECUTE to authenticated/service_role) and
+  `AND tenant_id = rail3_ride_tenant_id(ride_id)` in WITH CHECK, so a tenant-A member cannot file rows against a
+  tenant-B ride uuid (+1 RLS case); (b) the purge retention step now has a skip-guarded integration test that
+  replicates the function's three statements as service_role and asserts delete / strip / config clear and a
+  no-op second run; (c) `fullCaptureEvent` now has call sites — engine lifecycle, engine_first_fix (ids/deltas)
+  and heartbeat_check (movedM is a distance) are mirrored into the full-capture tier when the flag names the ride,
+  so the toggle is observable; (d) the purge's config-clear statement surfaces its error into the same
+  logged-not-thrown catch; (e) the stray `supabase/.temp/cli-latest` CLI marker dropped from the diff (consider
+  gitignoring `supabase/.temp/` in housekeeping).
+- Review round 2 (2 important = the F-7 / field-run acceptance items, unchanged by design; 2 minor FIXED after the
+  two-round cap without a third agent round — stated here and on the PR): the purge replica's status flip fires
+  `trg_ride_closed`, whose analytics_events row (tenant FK) blocked the fixture's tenants delete → after() now
+  removes those rows first; `fullCaptureEvent` awaited nothing, so the first mirror on a flagged ride raced the
+  config REST round-trip → the full-capture path now awaits the in-flight `loadOperatorConfig` promise before
+  gating (counters and the engine still never wait).
+- Residue: the config read exposes the full-capture ride uuid to any signed-in rider (no position data; noted);
+  `get_my_tenant_id()` is LIMIT 1 without ORDER BY (pre-existing single-tenant assumption, same as
+  analytics_events). Field validation (counters on a healthy ride; engine_died on a force-stopped FGS while the
+  app lives; full-capture toggle per ride) pending on the next field build, batched with W279–W282 — this also
+  needs the migration pushed to staging first. FIELD RUN: _pending_.

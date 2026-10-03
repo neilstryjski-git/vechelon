@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { resetMeasureIdentity } from '../lib/measure';
+import { resetTelemetryIdentity } from '../lib/telemetry';
 import { isIdentityChange } from '../lib/identityDelta';
 import { TENANT_SLUG } from '../lib/env';
 import { getActiveRide, clearActiveRide } from '../lib/activeRide';
@@ -123,7 +124,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // as B, server-side expiry): A's JWT is gone by then, so no departure can be sent for it.
       // Never on TOKEN_REFRESHED — same id, `userChanged` is false, nothing clears.
       runIdentityTransition(userChanged, {
-        resetMeasure: resetMeasureIdentity,
+        resetMeasure: (changed) => {
+          resetMeasureIdentity(changed);
+          resetTelemetryIdentity(changed); // W284: same D77 discipline for the telemetry caches
+        },
         clearActive: clearActiveRide,
         clearRosterCache,
       });

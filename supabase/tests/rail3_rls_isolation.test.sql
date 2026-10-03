@@ -26,7 +26,8 @@ DECLARE
   rls boolean;
   tenant_scoped text[] := ARRAY[
     'tenants','accounts','account_tenants','rides','ride_participants',
-    'beacon_alerts','rider_states'
+    'beacon_alerts','rider_states',
+    'rail3_telemetry_events','rail3_operator_config'  -- W284
   ];
 BEGIN
   FOREACH tbl IN ARRAY tenant_scoped LOOP
