@@ -13,7 +13,18 @@ import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown
 import { recordCounter, fullCaptureEvent, loadOperatorConfig } from '../lib/telemetry';
 import type { RideChannelStatus } from './useRideChannel';
 import { haversineDistanceM, LatLng } from '../lib/geo';
-import { appendTrailPoint } from '../lib/breadcrumbTrail';
+import { BREADCRUMB_MIN_GAP_M } from '../lib/breadcrumbTrail';
+import {
+  appendTipPoint,
+  appendBreak,
+  mergePriorAndSession,
+  capSegments,
+  pointCount,
+  splitSegments,
+  normalisePath,
+  isGapBreak,
+} from '../lib/breadcrumbSegments';
+import type { TrailPath } from '../lib/breadcrumbSegments';
 import type { FleetParticipant, RideRole, TacticalState } from '../lib/roleVisibility';
 import { composeFleet, lastKnownFromRows, mergeDepartedMarks } from '../lib/fleetCompose';
 import type { DepartedMark } from '../lib/fleetCompose';
@@ -124,6 +135,13 @@ const STATE_TICK_MS = 15000;
 // W234: how often the captain upserts its route to rail3_breadcrumb (throttled — not per
 // fix, to keep writes cheap; receivers fetch on open/resume and extend live in between).
 const BREADCRUMB_UPSERT_INTERVAL_MS = 60000;
+// W290 (review r1): the leader's breadcrumb writes are serialised PER RIDE at module level (the
+// awaitPendingDeparture precedent) so (a) the effect cleanup can FLUSH the throttled tail on Leave
+// Ride without losing up to one throttle window, and (b) a remount's seed read waits for any write
+// still in flight from the previous engine session — the seed never reads a stale path, so the next
+// write can never be shorter than what the table holds. Module-level because the new effect instance
+// cannot see the old instance's locals.
+const inFlightBreadcrumbWrites = new Map<string, Promise<void>>();
 // W282/W283: persistLastKnown and the A4 cadence constant LAST_KNOWN_WRITE_INTERVAL_MS live in
 // ../lib/lastKnown — the ONE place the cadence is declared (Ledger A4, §14 item 21; Decision
 // Brief docs/rail3/decision_briefs/a4_last_known_cadence_decision_brief.md).
@@ -441,8 +459,89 @@ export function useFleetPositions(
     // route (full, capped) and UPSERTS it to rail3_breadcrumb on a ~60s throttle, so any
     // device can FETCH the complete route on open — lock-independent for ANY duration. The
     // broadcast is back to a single point; the table carries history, not the broadcast.
-    let myPath: LatLng[] = [];
+    // W290 (slate 10 / C1): ONE breadcrumb per ride. `session` is THIS engine session's capture
+    // only; `prior` is what the table already held when this session seeded (null = not yet
+    // seeded → writes are HELD, never a shorter path than the table). The upsert payload is
+    // prior ++ [break] ++ session (mergePriorAndSession), so a rejoin never truncates the earlier
+    // route — the gap renders as a visible break. A within-session fix gap ≥ the tenant Dark
+    // threshold is also a break (the same constant that turns the marker Dark and the reader's
+    // trace stale). The seed fetch starts lazily on the first fix where the leader gate passes
+    // (leaderIdRef is a ref, not a dep — D80/D91); fail CLOSED on error and retry in 10 s.
+    let session: TrailPath = [];
+    let lastFixTs: number | null = null;
+    let prior: TrailPath | null = null;
+    let seeding = false;
+    let nextSeedAttemptMs = 0;
+    let cancelled = false;
+    let dirty = false; // session points not yet written
+    const SEED_RETRY_MS = 10_000;
+    const seedPrior = () => {
+      if (seeding || Date.now() < nextSeedAttemptMs) return;
+      seeding = true;
+      // Wait for any write still in flight from the previous engine session (remount), then read.
+      // D69: .then() so the request actually fires.
+      void Promise.resolve(inFlightBreadcrumbWrites.get(rideId))
+        .then(() => supabase.from('rail3_breadcrumb').select('path').eq('ride_id', rideId).maybeSingle())
+        .then(({ data, error }) => {
+          seeding = false;
+          if (cancelled) return; // a late result after the effect re-ran → discard
+          if (error) {
+            nextSeedAttemptMs = Date.now() + SEED_RETRY_MS;
+            logFetchResult(rideId, 'breadcrumb_seed', { found: false, err: error.message });
+            return; // FAIL CLOSED: prior stays null, nothing is written
+          }
+          prior = normalisePath(data?.path);
+          logFetchResult(rideId, 'breadcrumb_seed', {
+            found: !!data,
+            priorPts: pointCount(prior),
+            priorSegs: splitSegments(prior).length,
+          });
+        });
+    };
     let lastUpsertMs = 0;
+    // The ONE writer: prior ++ [break] ++ session, capped per segment, queued behind the previous
+    // write for this ride. `reason` is evidence only ('throttle' = the 60 s cadence, 'flush' =
+    // the effect cleanup persisting the tail on Leave Ride / remount).
+    const upsertPath = (reason: 'throttle' | 'flush') => {
+      if (prior === null) return;
+      const path = capSegments(mergePriorAndSession(prior, session));
+      const priorPts = pointCount(prior);
+      dirty = false;
+      // D69 ROOT CAUSE: this was `void supabase.from(...).upsert(...)`. supabase-js v2
+      // query builders are LAZY thenables — the HTTP request only fires on await/.then().
+      // A bare `void <builder>` builds the query but NEVER executes it, so rail3_breadcrumb
+      // was never written for ANY ride (0 client writes in pg_stat_statements; no error,
+      // because the request was never sent). Every other DB call here is awaited; this lone
+      // bare-void was the bug. Fix: chain .then() so the request actually fires, and log the
+      // result (no longer fire-and-forget) so a silent failure can never hide again and the
+      // validation walk can confirm the write landed.
+      const run: Promise<void> = Promise.resolve(inFlightBreadcrumbWrites.get(rideId))
+        .then(() =>
+          supabase
+            .from('rail3_breadcrumb')
+            .upsert({ ride_id: rideId, path, updated_at: new Date().toISOString() }, { onConflict: 'ride_id' }),
+        )
+        .then(({ error }) => {
+          void logMeasurement({
+            rideId,
+            kind: 'breadcrumb_upsert',
+            // counts only — never coordinates (Pillar II §2)
+            payload: {
+              ok: !error,
+              reason,
+              pts: pointCount(path),
+              segs: splitSegments(path).length,
+              priorPts,
+              ...(error ? { err: error.message } : {}),
+            },
+          });
+        })
+        .catch(() => undefined); // never rejects: the chain must stay usable for the next write
+      inFlightBreadcrumbWrites.set(rideId, run);
+      void run.finally(() => {
+        if (inFlightBreadcrumbWrites.get(rideId) === run) inFlightBreadcrumbWrites.delete(rideId);
+      });
+    };
     // W266: separate throttle for the every-device last-known write (distinct from the
     // captain-only breadcrumb upsert above).
     let lastLastKnownMs = 0;
@@ -480,32 +579,24 @@ export function useFleetPositions(
       // Fails CLOSED — while leaderId is still null (ride row in flight) nobody writes, which is
       // correct: a write from a non-leader is worse than a slightly late first write, and the
       // path is accumulated regardless so nothing is lost by waiting.
-      myPath = appendTrailPoint(myPath, coords);
+      // W290: an in-session capture gap ≥ the Dark threshold is a break (fix.ts vs fix.ts — the
+      // sender's own clock); consecutive breaks collapse inside appendBreak.
+      if (isGapBreak(lastFixTs, fix.ts, thresholdsRef.current.darkMinutes * 60_000)) session = appendBreak(session);
+      lastFixTs = fix.ts;
+      const grown = appendTipPoint(session, coords, BREADCRUMB_MIN_GAP_M, haversineDistanceM);
+      if (grown !== session) {
+        session = grown;
+        dirty = true;
+      }
       if (leaderIdRef.current && myRiderId === leaderIdRef.current) {
-        const now = Date.now();
-        if (now - lastUpsertMs >= BREADCRUMB_UPSERT_INTERVAL_MS) {
-          lastUpsertMs = now;
-          // D69 ROOT CAUSE: this was `void supabase.from(...).upsert(...)`. supabase-js v2
-          // query builders are LAZY thenables — the HTTP request only fires on await/.then().
-          // A bare `void <builder>` builds the query but NEVER executes it, so rail3_breadcrumb
-          // was never written for ANY ride (0 client writes in pg_stat_statements; no error,
-          // because the request was never sent). Every other DB call here is awaited; this lone
-          // bare-void was the bug. Fix: chain .then() so the request actually fires, and log the
-          // result (no longer fire-and-forget) so a silent failure can never hide again and the
-          // validation walk can confirm the write landed.
-          void supabase
-            .from('rail3_breadcrumb')
-            .upsert(
-              { ride_id: rideId, path: myPath, updated_at: new Date().toISOString() },
-              { onConflict: 'ride_id' },
-            )
-            .then(({ error }) => {
-              void logMeasurement({
-                rideId,
-                kind: 'breadcrumb_upsert',
-                payload: { ok: !error, pts: myPath.length, ...(error ? { err: error.message } : {}) },
-              });
-            });
+        if (prior === null) {
+          seedPrior(); // hold the write; `session` keeps accumulating, so nothing is lost
+        } else {
+          const now = Date.now();
+          if (dirty && now - lastUpsertMs >= BREADCRUMB_UPSERT_INTERVAL_MS) {
+            lastUpsertMs = now;
+            upsertPath('throttle');
+          }
         }
       }
     }, (isMoving, motionFix) => {
@@ -567,6 +658,10 @@ export function useFleetPositions(
     // unified resume-nudge in onResume above, which re-asserts the engine on every unlock
     // regardless of cause (Saver, OEM-suspend, warm-up strand).
     return () => {
+      cancelled = true; // W290: a late seed result must not land on the next session's state
+      // W290 (review r1): persist the throttled tail — Leave Ride must not lose up to 60 s of the
+      // leader's route, and a remount's seed waits for this write (serialised per ride above).
+      if (dirty && prior !== null && leaderIdRef.current && myRiderId === leaderIdRef.current) upsertPath('flush');
       void stopBgGeo();
     };
     // D91: thresholds REMOVED from deps — the engine starts/stops on ride identity + permission
