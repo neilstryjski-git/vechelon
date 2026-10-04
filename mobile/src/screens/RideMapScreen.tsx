@@ -32,6 +32,8 @@ import { deriveRenderState } from '../state/riderState';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
 import RiderMarker from '../components/RiderMarker';
+import SelfHealthBadge from '../components/SelfHealthBadge';
+import { useSelfHealth, isSelfHealthPromptActiveNow } from '../hooks/useSelfHealth';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
 import SupportBeacon from '../components/SupportBeacon';
@@ -116,6 +118,35 @@ const RideMapScreen: React.FC = () => {
   //
   // D80: the leader is the account that STARTED the ride (ride.leaderId ← rides.started_by), read
   // from the ride row — NOT the first captain-roled row in the roster, which elected a phantom.
+  // W285 (R3-40 / A3): the self-health clocks — inert until the operator config rows carry W279's
+  // measured values; never a tenant threshold; advisory only.
+  const selfHealth = useSelfHealth(rideId);
+  // W285 review r1 (CRITICAL — one position, ever): while not reaching there are by definition no
+  // fresh ENGINE fixes, so `myCoords` is frozen at the last one, but the OS blue dot is drawn live by
+  // the Maps SDK. Anchoring the badge to myCoords would show a moving rider a frozen glyph beside
+  // their moving dot — a second self position (D79). So the badge rides the OS dot's own coordinate
+  // (MapView onUserLocationChange). Memory-only: never stored, broadcast or logged (Pillar II §2).
+  // Kept in a ref always; copied into state ONLY while the badge is showing, so a healthy ride does
+  // not re-render on every OS location tick.
+  const osCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [osCoords, setOsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const badgeShowingRef = useRef(false);
+  badgeShowingRef.current = selfHealth.notReaching;
+  useEffect(() => {
+    if (selfHealth.notReaching) setOsCoords(osCoordsRef.current);
+  }, [selfHealth.notReaching]);
+  const selfHealthAnchor = myBeacon && myCoords ? myCoords : osCoords;
+  const onUserLocationChange = useCallback(
+    (e: { nativeEvent: { coordinate?: { latitude: number; longitude: number } } }) => {
+      const c = e.nativeEvent.coordinate;
+      if (!c) return;
+      const next = { lat: c.latitude, lng: c.longitude };
+      osCoordsRef.current = next;
+      if (badgeShowingRef.current) setOsCoords(next);
+    },
+    [],
+  );
+
   // W290 (R3-72 / slate 9 / C1): segments (one polyline each, never joined across a capture gap),
   // liveness (live / stale / departed) and the departure instant for the cue.
   const {
@@ -282,11 +313,13 @@ const RideMapScreen: React.FC = () => {
   // Subscribed once tracking is engaged (backgroundReady) and unsubscribed on leave/unmount —
   // the effect's cleanup IS the unsubscribe, so there is exactly one listener per ride and
   // never a stacked one. Advisory only: it is never a precondition for anything (R3-49).
-  // The §5.1 collision-gate input is a stub until the R3-40 self-health overlay (W285)
-  // connects the real signal.
+  // W285 (R3-40, §5.1 collision rule): the self-health signal is a MODULE-LEVEL function computed
+  // synchronously from the engine signal store + operator config at the unlock edge, so this
+  // effect's deps stay exactly [backgroundReady] (one subscription per ride) and the Saver watcher
+  // reads the right answer ~1.2 s before the debounced self-health prompt itself would fire.
   useEffect(() => {
     if (!backgroundReady) return;
-    return watchBatterySaverOnScreenLock({ isSelfHealthPromptActive: () => false });
+    return watchBatterySaverOnScreenLock({ isSelfHealthPromptActive: isSelfHealthPromptActiveNow });
   }, [backgroundReady]);
 
   const mapRef = useRef<RNMapView | null>(null);
@@ -497,6 +530,7 @@ const RideMapScreen: React.FC = () => {
         provider={PROVIDER_GOOGLE}
         initialRegion={FALLBACK_REGION}
         onRegionChangeComplete={setRegion}
+        onUserLocationChange={onUserLocationChange}
         // D56: a manual pan disengages dot-follow (programmatic animateToRegion does NOT
         // fire onPanDrag, so following only stops on a real user gesture).
         onPanDrag={() => setFollowing(false)}
@@ -603,6 +637,16 @@ const RideMapScreen: React.FC = () => {
             onPress={() => {}}
           />
         ) : null}
+        {/* W285 (R3-40, A3, D-G33-A3-01): BINARY self-health overlay on the own position — present only
+            while not reaching, on the SAME coordinate as the OS dot / own-beacon marker (one position,
+            ever); above the beacon pulse; not gated on role, beacon or backgroundReady (the hook is
+            inert on its own when there is no engine or no config). */}
+        {/* Anchor MIRRORS showsUserLocation exactly (review r2): when the red beacon marker replaces the
+            OS dot (myBeacon && myCoords) the badge sits on that marker; otherwise it sits ONLY on the
+            live OS dot's own coordinate. No myCoords fallback — myCoords is frozen exactly while the
+            badge shows, so a fallback would itself be a stale self display. No OS location yet → no
+            badge (the unlock prompt still covers the rider). */}
+        {selfHealth.notReaching && selfHealthAnchor ? <SelfHealthBadge coordinate={selfHealthAnchor} /> : null}
       </MapView>
 
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}

@@ -1526,3 +1526,116 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
 - "Fixed means built AND validated" → FIELD RUN: pending (two devices, one on the previous build: rider without background
   permission pockets the phone → both viewers render the calm violet Sleeping, no Dark escalation; old build interoperates
   via the receive shim on the new one).
+
+## W285 — R3-40 self-health overlay: binary badge, two operator clocks, unlock-and-focus prompt (A3, slate 4, item 22) (2026-10-04)
+
+- Pre-flight vs code (rail3-integration 76b13e8): the config plumbing was already most of the way there — `rail3_operator_config`
+  carries nullable `startup_ceiling_s` / `steady_state_threshold_s` (W284 reserved them; both platform rows are seeded NULL)
+  and telemetry.ts `loadOperatorConfig()` selects them into `OperatorConfig` with `getCachedOperatorConfig()`;
+  `'warning_fired'` was already a TelemetryCounterKind with no dedupe; advisoryPolicy already takes
+  `selfHealthPromptActive` and RideMapScreen passed the W280 stub `() => false`; the engine effect in useFleetPositions
+  already has the five startBgGeo callbacks (fix / motion / heartbeat / first-fix / engine-event) but exported no fix or
+  engine-start getter; the own position is the OS blue dot (no child), suppressed during an own SOS by the beacon marker;
+  react-native-map-clustering counts every Marker child whose `cluster` prop !== false as a point.
+- **LLD — four pieces, no engine dep change (D91):** (1) pure module-level store `lib/selfHealthSignals.ts`
+  ({engineStartedAtMs, lastFixAtMs, lastEngineSignalAtMs, engineMoving, engineDied, fixesSinceStart}; activeRide /
+  useResume-singleton pattern) fed by one-line `note*()` calls at the head of each startBgGeo callback and reset in the
+  effect cleanup — `git diff` of useFleetPositions is insertions only, deps line byte-identical; (2) pure clocks
+  `lib/selfHealth.ts` (`evaluateSelfHealth`, `nextEpisode`, `STARTUP_MARGIN_S`); (3) `hooks/useSelfHealth.ts` — 5 s tick +
+  store subscription, React state only on a verdict change, `warning_fired` once per episode, the unlock prompt via its own
+  `useResume` consumer `'self_health'` (lifecycle.ts union); plus the MODULE-LEVEL `isSelfHealthPromptActiveNow()` for the
+  Saver watcher; (4) `components/SelfHealthBadge.tsx` rendered in RideMapScreen only while not reaching.
+- **The rules (first match wins):** no usable config (either value null / ≤ 0; the iOS row by ruling; Android until W279's
+  values are populated) → INERT, never not-reaching · engine never started → INERT (see deviation) · `engine_died` →
+  NOT reaching at once in either phase ("service termination detectable while the process lives" IS the failure; cleared
+  only by the next engine_started) · no fix since engine start → STARTUP: reaching inside `ceiling + margin`, not reaching
+  at/after (R3-43 window silence; no stationary exemption — D90 forces moving at start, a stationary engine in startup IS
+  the Saver-at-start failure) · STEADY: reaching while the last fix is fresher than the threshold; else the stationary
+  exemption applies ONLY while the engine is ALIVE (reported stationary AND any engine signal — fix, motion change,
+  heartbeat — within the threshold; a stationary engine heartbeats every 60 s, so one silent for a whole threshold is dead,
+  not parked — closes the R3-48 hole where a dead FGS whose last word was "stationary" would be exempt forever) · else
+  not reaching. Boundaries inclusive on the failing side. **No tenant threshold is reachable from this path (item 22).**
+- **The stated margin:** `STARTUP_MARGIN_S = 30` is OURS — it covers the 5 s evaluation tick, the start()-resolve →
+  engine_started receipt gap and Activity-Recognition latency after `changePace(true)`; small against a multi-minute
+  ceiling. The ceiling and the steady threshold come ONLY from `rail3_operator_config`, populated from the Ledger-confirmed
+  wTBD2 brief (W279) — never hardcoded. Assumption for W279's value pick: steady threshold > the 60 s heartbeat interval,
+  or the liveness check flaps.
+- **Startup clock restarts on EVERY engine_started** (a heartbeat_reassert is a fresh BG.start(), same acquisition window;
+  and it is what clears `engineDied` after a successful self-heal so the badge cannot stick — silence follows repair).
+  The W287 heartbeat ride-end teardown calls stopBgGeo() directly (not via the effect cleanup), so the hook treats
+  `isEngineSessionActive() === false` as inert.
+- **Badge (D-G33-A3-01, chosen values):** `HEALTH_INK #111111` + `HEALTH_RING #FFFFFF` 2 dp, **16 dp** (half the 26 dp dot
+  rounded UP to the legibility floor), centre offset **(+12, −12) dp = 1:30 o'clock**, 17 dp radial → non-concentric with
+  the dot (r 13) and the 44 dp beacon ring; `zIndex 10` (above the own-beacon marker, which sets none); non-flat Marker →
+  screen-anchored; no animation; no useTheme (SOS_RED pattern). Colour rationale: distinct from rider green / SOS red /
+  sleep violet / beacon amber / Dark grey / cluster red / OS blue, highest sunlight contrast, and no ladder swatch is black so
+  it cannot read as a fifth state. `cluster={false}` is LOAD-BEARING (the own-beacon marker sits at the identical
+  coordinate — without it a Captain/SAG viewer's clustering would collapse the two into a red "2"). The badge carries NO
+  position of its own: `coordinate = myCoords`, the same value feeding the OS dot / own-beacon marker (D79 one-self-dot);
+  rendered during an own SOS too. "Suppressed while clustered" is vacuous on the normal path (the OS dot is SDK-drawn and
+  never clusters); residual edge: during an own SOS the beacon marker may cluster with a neighbour while the badge stays.
+- **Prompt:** `Alert` at resume (after the 1.2 s debounce — i.e. after useFleetPositions' resume nudge has had its chance,
+  so a self-heal inside that window is silent by construction), only while the condition persists AND the app is active;
+  re-issued on each unlock while it persists (R3-48 "no unrepaired failure stays silent" — a persistence gate, not a once
+  gate); never stacked (`promptOpenRef`); never on repair; not on the 'stale' source (a channel-liveness sweep, not a
+  focus event). Copy is a **placeholder — Voice & Tone pending**: "Your position isn't reaching the group / Vechelon hasn't
+  had a GPS fix for a while, so your Captain can't see where you are. Keep Vechelon open and on screen for a moment so
+  tracking can recover. If this keeps happening, check that Location is on and Battery Saver is off." [OK | Open settings].
+  Advisory only: nothing here calls start/stop/nudge, gates join or blocks recovery (R3-49).
+- **§5.1 collision:** RideMapScreen passes `isSelfHealthPromptActiveNow` (module function, synchronous: store + config cache
+  + engine-session flag + clock, no React state) to the Saver watcher — its `[backgroundReady]` deps are untouched (one
+  subscription per ride). The Saver watcher reads it at the AppState 'active' edge, ~1.2 s BEFORE our debounced prompt, so
+  the gate gets the right answer; a self-heal inside those 1.2 s costs one missed Saver advisory (re-arms next lock).
+- **Deviation (recorded): permission-denied / never-started is INERT**, not "not-reaching after the ceiling with a Settings
+  prompt" as the ticket's edge case suggested. With `backgroundReady = false` the engine effect never runs, no engine
+  exists, and the app never claimed background tracking — R3-40 is gated on "the app's state says tracking should be
+  active", which is false; that rider is already told at join with a Settings link and the fleet sees them Sleeping
+  (violet), not Dark. A `'no_background_permission'` reason would fire for a rider who deliberately declined, every ride,
+  with no clock to bound it.
+- `warning_fired` payload `{phase, reason, threshold_s, since_s, fixes_seen}` — durations/counts only; `fixes_seen` is the
+  F-7 observation W284 asked for (engine produced then stopped vs never produced). Exactly one per episode by construction
+  (`nextEpisode`); repair emits nothing.
+- Residues: a carry-over fix after a warm restart counts by receipt clock (BgFix has no SDK timestamp) — bounded by the
+  steady threshold instead of the ceiling; the badge can appear up to 5 s after the exact boundary (`since_s` records the
+  real value); a start() rejection emits no engine_started → inert (F-7 `never_engaged` territory, not a clock).
+- Tests: NEW tests/selfHealth.test.mjs (7: inert matrix across 0/1 h/24 h, startup boundaries + margin override + no
+  stationary exemption, predating fix, steady boundary, stationary alive/dead/unknown, engine_died both phases, episode
+  table), NEW tests/selfHealthSignals.test.mjs (5), advisoryPolicy +1 (the LIVE verdict drives the §5.1 gate). `npm test`
+  190 / 188 (the 2 "fails" = stack-gated files, no local Docker — identical on base); `npm run typecheck` = 2 pre-existing
+  deepLinkAuth errors.
+- **Review round 1** (stride:task-reviewer: 1 critical + 2 important + 1 minor; the run was cut off by a usage limit
+  after writing its block/report files, which are complete — 28 criteria):
+  (a) CRITICAL, fixed — "one position, ever": the badge was anchored to `myCoords`, which is frozen at the last ENGINE fix
+  exactly while the badge shows, but the OS blue dot is drawn LIVE by the Maps SDK — a moving rider would have seen a frozen
+  '!' beside their moving dot (a second self position, D79). The earlier note above that myCoords "feeds the OS dot" was
+  WRONG (the OS dot is SDK-drawn). Fix: MapView `onUserLocationChange` → the OS dot's own coordinate, memory-only (never
+  stored, broadcast or logged), held in a ref and copied into state ONLY while the badge shows (no re-render on every OS
+  tick for a healthy ride); the badge rides that coordinate, and the red beacon marker's myCoords during an own SOS (OS dot
+  suppressed then); if the OS has no location either, myCoords is the only self glyph. Verification step 2 must be run
+  WHILE MOVING, or it cannot see this class of defect.
+  (b) IMPORTANT, fixed — criterion 6: a `start()` rejection (BG.ready/start throwing inside the voided startBgGeo) emitted
+  no engine_started and read as "never started" → inert forever, though backgroundReady was true and the rider expected
+  tracking. Fix: `noteEngineIntent()` at the head of the engine effect (after its early return, insertion only, deps
+  untouched); with intent but no engine_started the startup clock runs from the intent and fails as `'never_engaged'`.
+  Permission-denied stays inert (the effect never runs, no intent). A session that started and then ended (W287 direct
+  teardown) still reads inert.
+  (c) IMPORTANT (criterion 24) — same root cause as (a), fixed with it.
+  (d) MINOR, recorded — security consideration 3 ("fail closed to committed defaults, never to no warning") cannot hold
+  while pitfall 1 does: there ARE no committed defaults (wTBD2 pending; unmeasured numbers never enter the app), so a NULL
+  row / first-load failure is inert. What holds now: telemetry.ts keeps the previous cache on a later fetch failure, so a
+  transient error after a successful load never regresses to inert. Once W279's values are Ledger-confirmed, whether they
+  ALSO ship as committed first-load fallbacks is a Decision Brief question for the Brain, not a Hands change.
+- **Review round 2** (1 important + 1 minor; both r1 code fixes verified): the badge still fell back to `myCoords` when no OS
+  location had arrived yet (e.g. a remount mid-episode) — a stale self display, since myCoords is frozen while the badge
+  shows — and rendered nothing during an own SOS with myCoords null while the OS dot WAS shown. Fixed AFTER the two-round
+  cap without a third round (a mechanical change): the anchor now mirrors `showsUserLocation` exactly — `myBeacon &&
+  myCoords ? myCoords : osCoords`, no fallback; no OS location → no badge (the prompt still covers the rider). The minor
+  (security consideration 3 vs pitfall 1) stays recorded above for the Brain.
+- **STATUS: built, INERT until populated.** This ticket is NOT done until the Android row carries W279's confirmed values and
+  the overlay is validated on-device. Operator SQL (service_role, after the wTBD2 brief is Ledger-confirmed):
+  `UPDATE public.rail3_operator_config SET startup_ceiling_s = <wTBD2 ceiling>, steady_state_threshold_s = <wTBD2 steady>,
+  updated_at = now() WHERE platform = 'android';` (iOS row stays NULL by ruling). **FIELD RUN: _pending_** — badge appears
+  after ceiling + margin with the FGS force-stopped from Settings while the app stays open; next unlock shows the prompt;
+  recovery clears the badge silently with no message; join with Saver ON → no badge/prompt inside the window, Saver advisory
+  alone while healthy, suppressed when self-health fires; 6+ min stationary → no warning; exactly one `warning_fired` row per
+  episode in rail3_telemetry_events.
