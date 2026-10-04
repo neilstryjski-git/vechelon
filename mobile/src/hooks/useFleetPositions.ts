@@ -6,7 +6,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
-import { sendDormantPing, restBroadcast } from '../lib/backgroundLocation';
+import { sendSleepingPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo, isEngineSessionActive } from '../lib/bgGeo';
 import { setActiveRide } from '../lib/activeRide';
 import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown';
@@ -36,6 +36,7 @@ import {
   deriveRenderState,
   StateThresholds,
   DEFAULT_THRESHOLDS,
+  normaliseReportedState,
 } from '../state/riderState';
 
 // Broadcast event name for position pings on the rail3:ride:<id> channel.
@@ -53,6 +54,8 @@ export const DEPARTED_EVENT = 'depart';
 // whatever a client chooses to broadcast.
 interface PositionPayload {
   riderId: string;
+  // W293: the WIRE may still carry the legacy Sleeping value from a previous-build sender for one
+  // release; normaliseReportedState maps it at the one inbound entry (the POSITION handler).
   state: TacticalState;
   lat: number;
   lng: number;
@@ -189,7 +192,7 @@ export function useFleetPositions(
   const [pings, setPings] = useState<Record<string, PositionPayload & { receivedAtMs: number }>>({});
   const [myCoords, setMyCoords] = useState<LatLng | null>(null);
   // Live ref to the latest fix so the AppState handoff can attach a last-known
-  // position to the "going dormant" ping without re-binding on every GPS update.
+  // position to the "going to sleep" ping without re-binding on every GPS update.
   const myCoordsRef = useRef<LatLng | null>(null);
   myCoordsRef.current = myCoords;
   // Live refs so the broadcast receive handler (subscribed once, on [channel])
@@ -266,7 +269,7 @@ export function useFleetPositions(
     let cancelled = false;
     // Debounce the focus fetch: an Android/iOS active-state flap (or a quick app switch)
     // must not storm the DB. Mirrors ROSTER_REFETCH_DEBOUNCE_MS / the background-only gate on
-    // the dormant handler. Per-effect-run state (resets on rideId change → a new ride fetches
+    // the sleeping-ping handler. Per-effect-run state (resets on rideId change → a new ride fetches
     // fresh); the first call always runs since lastFetchMs starts at 0.
     let lastFetchMs = 0;
     // `resumeSource` marks the call as a recovery attempt and carries WHICH emitter detected it.
@@ -363,8 +366,10 @@ export function useFleetPositions(
       // W269: liveness evidence for the staleness sweep. Recorded BEFORE validation — a malformed
       // payload still proves the socket is carrying traffic, which is all the sweep asks.
       noteChannelActivity();
-      const p = payload as PositionPayload;
-      if (!p?.riderId || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+      const raw = payload as Omit<PositionPayload, 'state'> & { state?: unknown };
+      if (!raw?.riderId || typeof raw.lat !== 'number' || typeof raw.lng !== 'number') return;
+      // W293: the ONE place a wire state string enters the app — legacy 'dormant' → 'sleeping'.
+      const p: PositionPayload = { ...raw, state: normaliseReportedState(raw.state) };
       const receivedAtMs = Date.now();
       setPings((prev) => ({ ...prev, [p.riderId]: { ...p, receivedAtMs } }));
 
@@ -438,7 +443,7 @@ export function useFleetPositions(
   // starting it from the background), which the W176 explainer / D63 permission flow guarantees;
   // a returning rider (permission already granted) starts TS immediately on join. A rider who
   // declines "Allow all the time" never flips backgroundReady → TS doesn't start here, and the
-  // dormant-ping effect below covers their backgrounding.
+  // sleeping-ping effect below covers their backgrounding.
   //
   // CRITICAL (field-test fix, 2026-06-15): do NOT gate this on the realtime channel `status`. On
   // screen-lock the websocket drops (status leaves 'SUBSCRIBED' → "channel denied"); if this
@@ -677,7 +682,7 @@ export function useFleetPositions(
 
   // Sleeping signal for the NO-background-tracking path. A rider who declined "Allow all
   // the time" has no FGS, so on AppState settling into 'background' fire ONE reliable (REST,
-  // not the freeze-racing websocket) "dormant" ping with the last fix — the fleet sees them
+  // not the freeze-racing websocket) "sleeping" ping with the last fix — the fleet sees them
   // go to SLEEP on purpose (calm violet), not decay into the alarming Dark. backgroundReady
   // riders are already covered by the whole-ride FGS above, so they skip this. An OEM kill
   // never reaches this handler, so a true unexpected death still derives Dark (the wanted
@@ -694,10 +699,10 @@ export function useFleetPositions(
       void logMeasurement({
         rideId,
         kind: 'app_state_change',
-        payload: { event: 'handoff', branch: backgroundReady ? 'fgs' : 'dormant', backgroundReady, hadCoords: !!c },
+        payload: { event: 'handoff', branch: backgroundReady ? 'fgs' : 'sleeping', backgroundReady, hadCoords: !!c }, // W293: was 'dormant'
       });
       if (!backgroundReady && c) {
-        void sendDormantPing({ rideId, riderId: myRiderId, lat: c.lat, lng: c.lng });
+        void sendSleepingPing({ rideId, riderId: myRiderId, lat: c.lat, lng: c.lng });
       }
     });
     return () => {

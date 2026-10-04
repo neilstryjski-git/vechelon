@@ -250,7 +250,7 @@ const RosterScreen: React.FC = () => {
             {self && <Text style={[styles.roleChip, styles.youChip]}>YOU</Text>}
             {/* R3-74: roster-only is a declared structural state — neutral grey, never a warning. */}
             {/* W292 / R3-65: 'Left ride' is its own look — not the grey of roster-only, not the light of
-                tracked, not the map's dark/dormant palette — so left ≠ lost at a glance. */}
+                tracked, not the map's dark/sleeping palette — so left ≠ lost at a glance. */}
             <Text
               style={[
                 styles.stateChip,

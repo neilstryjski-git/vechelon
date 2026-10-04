@@ -513,9 +513,9 @@ export async function startBgGeo(
 }
 
 // D86: re-engage tracking after a condition that can leave the SDK's native motion-activity
-// detection dormant — notably ready()/start() running while Android Battery Saver was ON
+// detection stationary (motion detection idle) — notably ready()/start() running while Android Battery Saver was ON
 // (Saver throttles the motion-activity API the engine relies on, W261). One forced 'moving'
-// transition kicks the engine out of the dormant/stationary state; native detection resumes
+// transition kicks the engine out of the stationary (idle) state; native detection resumes
 // governing afterwards — we deliberately do NOT latch moving (that would regress W261's
 // un-force). No-op if tracking was never configured, so it is safe to call anytime.
 //
