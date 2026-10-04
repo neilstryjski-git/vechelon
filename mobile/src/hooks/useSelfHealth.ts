@@ -34,8 +34,13 @@ const SELF_HEALTH_TICK_MS = 5000;
 export function evaluateSelfHealthNow(): SelfHealthResult {
   const snap = getSelfHealthSnapshot();
   const cfg = getCachedOperatorConfig();
+  // A session that STARTED and is no longer active ended (ride-end teardown) → inert: neither the
+  // start nor the intent may run a clock. A session that never started keeps its intent (review r1:
+  // a start() rejection is a detectable failure, not "not tracking").
+  const sessionEnded = snap.engineStartedAtMs !== null && !isEngineSessionActive();
   return evaluateSelfHealth({
-    engineStartedAtMs: isEngineSessionActive() ? snap.engineStartedAtMs : null,
+    engineIntentAtMs: sessionEnded ? null : snap.engineIntentAtMs,
+    engineStartedAtMs: sessionEnded ? null : snap.engineStartedAtMs,
     lastFixAtMs: snap.lastFixAtMs,
     lastEngineSignalAtMs: snap.lastEngineSignalAtMs,
     engineMoving: snap.engineMoving,

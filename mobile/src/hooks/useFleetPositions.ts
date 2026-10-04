@@ -11,6 +11,7 @@ import { startBgGeo, stopBgGeo, nudgeBgGeo, isEngineSessionActive } from '../lib
 // W285: the self-health clocks read these engine signals from a module-level store, so the engine
 // effect below feeds it from its callbacks WITHOUT any dep change (D91).
 import {
+  noteEngineIntent,
   noteFix,
   noteMotion,
   noteHeartbeat,
@@ -462,6 +463,7 @@ export function useFleetPositions(
   // whole ride regardless of channel state; it stops only on leave / lost permission / unmount.
   useEffect(() => {
     if (!backgroundReady || !rideId || !myRiderId) return;
+    noteEngineIntent(Date.now()); // W285 review r1: tracking is intended from here — a start() that never resolves is detectable
     // D87: remember the ride we're tracking so AuthContext.signOut can broadcast a departure
     // for it even after this screen unmounts (sign-out happens from Home). Not cleared on
     // cleanup — it must survive Home → Sign Out; overwritten when the next ride starts.

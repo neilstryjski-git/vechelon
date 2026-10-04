@@ -118,3 +118,17 @@ test('nextEpisode: fires once on the transition, never while persisting, resets 
   assert.deepEqual(nextEpisode(INITIAL_EPISODE, true), { state: INITIAL_EPISODE, fireWarning: false });
   assert.deepEqual(nextEpisode({ notReaching: true, warned: true }, false), { state: { notReaching: true, warned: true }, fireWarning: false });
 });
+
+// ── review r1: tracking INTENDED but start() never resolved ───────────────────────────────────
+
+test('never_engaged: intent without engine_started runs the startup clock from the intent; no intent stays inert', () => {
+  const windowS = CFG.startup_ceiling_s + STARTUP_MARGIN_S;
+  const inside = evaluateSelfHealth(base({ engineStartedAtMs: null, engineIntentAtMs: T0, nowMs: T0 + windowS * S - 1 }));
+  assert.deepEqual([inside.phase, inside.reaching, inside.reason], ['startup', true, 'within_startup_window']);
+  const failed = evaluateSelfHealth(base({ engineStartedAtMs: null, engineIntentAtMs: T0, nowMs: T0 + windowS * S }));
+  assert.deepEqual([failed.phase, failed.reaching, failed.reason, failed.thresholdS], ['startup', false, 'never_engaged', windowS]);
+  // permission denied: the engine effect never ran → no intent → inert forever
+  assert.equal(evaluateSelfHealth(base({ engineStartedAtMs: null, engineIntentAtMs: null, nowMs: T0 + 24 * 3600 * S })).phase, 'inert');
+  // null config still wins over intent
+  assert.equal(evaluateSelfHealth(base({ engineStartedAtMs: null, engineIntentAtMs: T0, config: null, nowMs: T0 + windowS * S })).phase, 'inert');
+});

@@ -8,6 +8,11 @@
 // Every value here is a TIMESTAMP, a boolean or a count — never a coordinate (Pillar II §2).
 
 export interface SelfHealthSnapshot {
+  // W285 review r1: the moment the engine effect DECIDED to track (backgroundReady + ride + rider)
+  // and called startBgGeo — before start() resolves. A start() that rejects emits no engine_started,
+  // so without this a rider who expects tracking would read as "never started" (inert) forever.
+  // Permission-denied never sets it (the engine effect returns before this point).
+  engineIntentAtMs: number | null;
   // Receipt clock of the LAST engine_started event — start_resolved OR heartbeat_reassert (a
   // reassert is a fresh BG.start(): same acquisition window as a cold start, and it is what clears
   // engineDied after a successful self-heal so the badge cannot stick — "silence follows repair").
@@ -27,6 +32,7 @@ export interface SelfHealthSnapshot {
 }
 
 const EMPTY: SelfHealthSnapshot = Object.freeze({
+  engineIntentAtMs: null,
   engineStartedAtMs: null,
   lastFixAtMs: null,
   lastEngineSignalAtMs: null,
@@ -55,6 +61,10 @@ export function subscribeSelfHealth(listener: (s: SelfHealthSnapshot) => void): 
   return () => {
     listeners.delete(listener);
   };
+}
+
+export function noteEngineIntent(ts: number): void {
+  commit({ ...snapshot, engineIntentAtMs: ts });
 }
 
 export function noteEngineStarted(ts: number): void {

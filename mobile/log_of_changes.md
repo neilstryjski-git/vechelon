@@ -1603,6 +1603,28 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   table), NEW tests/selfHealthSignals.test.mjs (5), advisoryPolicy +1 (the LIVE verdict drives the §5.1 gate). `npm test`
   190 / 188 (the 2 "fails" = stack-gated files, no local Docker — identical on base); `npm run typecheck` = 2 pre-existing
   deepLinkAuth errors.
+- **Review round 1** (stride:task-reviewer: 1 critical + 2 important + 1 minor; the run was cut off by a usage limit
+  after writing its block/report files, which are complete — 28 criteria):
+  (a) CRITICAL, fixed — "one position, ever": the badge was anchored to `myCoords`, which is frozen at the last ENGINE fix
+  exactly while the badge shows, but the OS blue dot is drawn LIVE by the Maps SDK — a moving rider would have seen a frozen
+  '!' beside their moving dot (a second self position, D79). The earlier note above that myCoords "feeds the OS dot" was
+  WRONG (the OS dot is SDK-drawn). Fix: MapView `onUserLocationChange` → the OS dot's own coordinate, memory-only (never
+  stored, broadcast or logged), held in a ref and copied into state ONLY while the badge shows (no re-render on every OS
+  tick for a healthy ride); the badge rides that coordinate, and the red beacon marker's myCoords during an own SOS (OS dot
+  suppressed then); if the OS has no location either, myCoords is the only self glyph. Verification step 2 must be run
+  WHILE MOVING, or it cannot see this class of defect.
+  (b) IMPORTANT, fixed — criterion 6: a `start()` rejection (BG.ready/start throwing inside the voided startBgGeo) emitted
+  no engine_started and read as "never started" → inert forever, though backgroundReady was true and the rider expected
+  tracking. Fix: `noteEngineIntent()` at the head of the engine effect (after its early return, insertion only, deps
+  untouched); with intent but no engine_started the startup clock runs from the intent and fails as `'never_engaged'`.
+  Permission-denied stays inert (the effect never runs, no intent). A session that started and then ended (W287 direct
+  teardown) still reads inert.
+  (c) IMPORTANT (criterion 24) — same root cause as (a), fixed with it.
+  (d) MINOR, recorded — security consideration 3 ("fail closed to committed defaults, never to no warning") cannot hold
+  while pitfall 1 does: there ARE no committed defaults (wTBD2 pending; unmeasured numbers never enter the app), so a NULL
+  row / first-load failure is inert. What holds now: telemetry.ts keeps the previous cache on a later fetch failure, so a
+  transient error after a successful load never regresses to inert. Once W279's values are Ledger-confirmed, whether they
+  ALSO ship as committed first-load fallbacks is a Decision Brief question for the Brain, not a Hands change.
 - **STATUS: built, INERT until populated.** This ticket is NOT done until the Android row carries W279's confirmed values and
   the overlay is validated on-device. Operator SQL (service_role, after the wTBD2 brief is Ledger-confirmed):
   `UPDATE public.rail3_operator_config SET startup_ceiling_s = <wTBD2 ceiling>, steady_state_threshold_s = <wTBD2 steady>,

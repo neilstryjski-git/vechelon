@@ -1,10 +1,10 @@
 // W285 — the R3-40 self-health badge: a BINARY overlay on the rider's own position (Ledger A3,
 // D-G33-A3-01). Rendered ONLY in the not-reaching state (absent = reaching), so its existence is the
 // signal — no animation, no second state, no swatch in the ladder (overlays are presentations, not
-// rungs). It carries NO position of its own: `coordinate` is the same myCoords that feeds the OS
-// blue dot / the own-beacon marker, so the rider surface still renders exactly one position
-// (D79). Rendered during an own SOS too (the OS dot is suppressed then; the red beacon marker is the
-// one self indicator and this sits above it).
+// rungs). It carries NO position of its own: the caller passes the coordinate of the ONE self glyph
+// on screen — the live OS blue dot (via MapView onUserLocationChange, review r1: the engine's last
+// fix is frozen exactly while this badge shows) or, during an own SOS, the red beacon marker's
+// myCoords (the OS dot is suppressed then). One position, ever (D79).
 //
 // Geometry (D-G33-A3-01, chosen values logged in log_of_changes): static; badge centre at
 // (+12, −12) dp from the marker centre = 1:30 o'clock, 17 dp radial → non-concentric with the 26 dp

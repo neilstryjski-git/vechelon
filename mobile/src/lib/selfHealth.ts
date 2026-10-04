@@ -29,6 +29,7 @@ export type SelfHealthReason =
   | 'fresh_fix'
   | 'stationary_quiet' // reaching
   | 'engine_died'
+  | 'never_engaged' // review r1: tracking intended, start() never resolved
   | 'no_first_fix'
   | 'fix_gap'
   | 'stationary_silent'; // not reaching
@@ -39,6 +40,9 @@ export interface SelfHealthConfig {
 }
 
 export interface SelfHealthInput {
+  // When the engine effect decided to track (before start() resolves); null = no intent (e.g.
+  // permission denied — the effect never runs). Optional for callers that predate review r1.
+  engineIntentAtMs?: number | null;
   engineStartedAtMs: number | null;
   lastFixAtMs: number | null;
   lastEngineSignalAtMs: number | null;
@@ -63,9 +67,11 @@ const usable = (v: number | null | undefined): v is number => typeof v === 'numb
 
 // Evaluation order — first match wins:
 //  1. no usable config → inert.
-//  2. engine never started (permission denied / start() rejected) → inert: the app never claimed
-//     background tracking, so "tracking should be active" is false; the join-time advisory and the
-//     Sleeping ping cover that rider (recorded deviation from the ticket's edge case, see log).
+//  2. engine never started: with NO tracking intent (permission denied — the engine effect never
+//     runs) → inert: the app never claimed background tracking, so "tracking should be active" is
+//     false; the join-time advisory and the Sleeping ping cover that rider (recorded deviation, see
+//     log). WITH intent but no engine_started (start() rejected / hung) → the startup clock from the
+//     intent, failing as 'never_engaged' (review r1).
 //  3. engine_died → NOT reaching at once, whatever the clocks: "service termination detectable
 //     while the process lives" IS the failure. Cleared only by the next engine_started.
 //  4. no fix since engine start → STARTUP: reaching inside ceiling+margin, not reaching after.
@@ -80,11 +86,25 @@ export function evaluateSelfHealth(i: SelfHealthInput): SelfHealthResult {
   if (!cfg || !usable(cfg.startup_ceiling_s) || !usable(cfg.steady_state_threshold_s)) {
     return { phase: 'inert', reaching: true, reason: 'no_config', sinceS: null, thresholdS: null };
   }
-  if (i.engineStartedAtMs === null) {
-    return { phase: 'inert', reaching: true, reason: 'engine_not_started', sinceS: null, thresholdS: null };
-  }
   const marginS = i.startupMarginS ?? STARTUP_MARGIN_S;
   const windowS = cfg.startup_ceiling_s + marginS;
+  if (i.engineStartedAtMs === null) {
+    // Review r1: the app DID decide to track but start() never resolved (it rejected, or is hung) —
+    // "the app's state says tracking should be active" holds, so this is the startup clock measured
+    // from the intent, failing as 'never_engaged'. No intent at all (permission denied) stays inert.
+    const intent = i.engineIntentAtMs ?? null;
+    if (intent === null) {
+      return { phase: 'inert', reaching: true, reason: 'engine_not_started', sinceS: null, thresholdS: null };
+    }
+    const inWindow = i.nowMs - intent < windowS * 1000;
+    return {
+      phase: 'startup',
+      reaching: inWindow,
+      reason: inWindow ? 'within_startup_window' : 'never_engaged',
+      sinceS: Math.floor((i.nowMs - intent) / 1000),
+      thresholdS: windowS,
+    };
+  }
   const steadyS = cfg.steady_state_threshold_s;
   const hasFixSinceStart = i.lastFixAtMs !== null && i.lastFixAtMs >= i.engineStartedAtMs;
   const sinceStartS = Math.floor((i.nowMs - i.engineStartedAtMs) / 1000);

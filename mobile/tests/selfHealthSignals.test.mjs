@@ -7,6 +7,7 @@ import {
   getSelfHealthSnapshot,
   subscribeSelfHealth,
   noteEngineStarted,
+  noteEngineIntent,
   noteEngineDied,
   noteFix,
   noteMotion,
@@ -19,7 +20,7 @@ beforeEach(() => resetSelfHealthSignals());
 
 test('initial snapshot is empty and frozen; every note() yields a NEW frozen object', () => {
   const s0 = getSelfHealthSnapshot();
-  assert.deepEqual(s0, { engineStartedAtMs: null, lastFixAtMs: null, lastEngineSignalAtMs: null, engineMoving: null, engineDied: false, fixesSinceStart: 0 });
+  assert.deepEqual(s0, { engineIntentAtMs: null, engineStartedAtMs: null, lastFixAtMs: null, lastEngineSignalAtMs: null, engineMoving: null, engineDied: false, fixesSinceStart: 0 });
   assert.ok(Object.isFrozen(s0));
   noteEngineStarted(T0);
   const s1 = getSelfHealthSnapshot();
@@ -71,7 +72,7 @@ test('engineDied is one-shot until the next engine_started; reset clears everyth
   assert.equal(getSelfHealthSnapshot(), died, 'a repeated death does not re-emit');
   assert.notEqual(before, died);
   resetSelfHealthSignals();
-  assert.deepEqual(getSelfHealthSnapshot(), { engineStartedAtMs: null, lastFixAtMs: null, lastEngineSignalAtMs: null, engineMoving: null, engineDied: false, fixesSinceStart: 0 });
+  assert.deepEqual(getSelfHealthSnapshot(), { engineIntentAtMs: null, engineStartedAtMs: null, lastFixAtMs: null, lastEngineSignalAtMs: null, engineMoving: null, engineDied: false, fixesSinceStart: 0 });
 });
 
 test('subscribe fires once per note with the new snapshot; unsubscribe stops it; unsubscribing during emit is safe', () => {
@@ -88,4 +89,13 @@ test('subscribe fires once per note with the new snapshot; unsubscribe stops it;
   unsubA();
   noteFix(T0 + 2, true);
   assert.equal(seen.length, 3);
+});
+
+test('review r1: noteEngineIntent records the decision to track and survives engine_started; reset clears it', () => {
+  noteEngineIntent(T0);
+  assert.equal(getSelfHealthSnapshot().engineIntentAtMs, T0);
+  noteEngineStarted(T0 + 500);
+  assert.equal(getSelfHealthSnapshot().engineIntentAtMs, T0);
+  resetSelfHealthSignals();
+  assert.equal(getSelfHealthSnapshot().engineIntentAtMs, null);
 });
