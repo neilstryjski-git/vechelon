@@ -1515,6 +1515,9 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   now falls back to the active style for an unknown wire state (`?? STATE_STYLE.active`) so the NEW build never crashes on
   a newer sender, but an OLD receiver would have thrown on `style.fill` — bounded by the same rule W290 already imposes:
   all handsets on the new build before the field run.
+- Review round 1 (stride:task-reviewer: APPROVED 4/4; 1 minor pattern — taken): the sender's wire literal went through
+  restBroadcast's `Record<string, unknown>` payload, so tsc did not link it to the receiver's union; it is now
+  `'sleeping' satisfies RiderTacticalState` (type-only import, no runtime cycle) with a keep-in-sync note on both sides.
 - `grep -rn dormant mobile/src` after the change: only `LEGACY_SLEEPING_WIRE_VALUE = 'dormant'`, its deprecation comment, and
   "was 'dormant'" rename notes remain (no identifier, type member, wire value or log string).
 - Tests: riderState +3 (Sleeping sticky through staleness / null still Dark / reopen clears; legacy mapping table + mapped

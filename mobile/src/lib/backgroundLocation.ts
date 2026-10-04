@@ -1,4 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
+import type { RiderTacticalState } from '../state/riderState';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
 import { isCurrentIdentity } from './identity';
@@ -81,7 +82,9 @@ export async function sendSleepingPing(args: {
 }): Promise<void> {
   const sent = await restBroadcast(args.rideId, {
     riderId: args.riderId,
-    state: 'sleeping',
+    // Typed against the receiver's union (type-only import, no runtime cycle) so a future rename of
+    // RiderTacticalState fails tsc here instead of silently demoting Sleeping senders (review r1).
+    state: 'sleeping' satisfies RiderTacticalState,
     lat: args.lat,
     lng: args.lng,
     ts: Date.now(),

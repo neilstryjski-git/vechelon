@@ -26,7 +26,8 @@
 // W293 (item 2): renamed from 'dormant' — that word also named the ENGINE's idle motion
 // detection (now "stationary" in bgGeo.ts / measure.ts), and R3-40/R3-48 reasoning about
 // "engine dormant" read as this calm UI state. Wire value 'sleeping'; the legacy wire value is
-// accepted on receive for ONE release via normaliseReportedState below.
+// accepted on receive for ONE release via normaliseReportedState below. The SENDER's wire literal
+// (backgroundLocation.sendSleepingPing) is typed `satisfies RiderTacticalState` — keep in sync.
 export type RiderTacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'sleeping';
 
 // W293 — ONE-RELEASE WIRE COMPATIBILITY: a sender on the previous build still publishes the
