@@ -1493,3 +1493,36 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   frozen trace; rejoin after 300 m → ONE breadcrumb, visible gap, no straight line; leader pocketed > Dark → dashed, no
   cue; non-leader Captain leaves → no cue; End Ride → no cue; Management API: one row, earlier segments preserved,
   `{brk:1}` present, coordinates only).
+
+## W293 — 'dormant' naming collision: UI state → 'sleeping', engine idle → 'stationary' (item 2) (2026-10-04)
+
+- Pre-flight vs code (rail3-integration 3e1cb05): UI 'dormant' lived in riderState.ts (union + sticky branch), roleVisibility.ts
+  (TacticalState), RiderMarker STATE_STYLE, backgroundLocation sendDormantPing (wire `state: 'dormant'`, sink event
+  'dormant_sent'), useFleetPositions (import, handoff `branch: 'dormant'`, comments); ENGINE 'dormant' was comments only
+  (bgGeo.ts nudge rationale, measure.ts bg_nudge). tests/riderState.test.mjs had NO Sleeping case (the ticket's "update
+  sticky-Sleeping tests" = ADD them). admin/src, supabase/ and tools/ have zero hits → web Race Control does not consume
+  the state and rail3_sidecar_correlate.py does not filter on it (noted, no change).
+- Rename, no behaviour change: `RiderTacticalState` / `TacticalState` member 'dormant' → **'sleeping'**; the sticky branch
+  in deriveRenderState; STATE_STYLE key (SLEEP_VIOLET #8B5CF6, opacity 0.85 UNCHANGED); `sendDormantPing` →
+  `sendSleepingPing`, wire value 'sleeping', sink event 'sleeping_sent' (historical sink rows keep 'dormant_sent');
+  handoff `branch: 'sleeping'`; engine comments now say "stationary (motion detection idle)". Thresholds, colours and the
+  ladder are untouched (tested). UX label copy untouched (SD-013 deferred).
+- **One-release wire compatibility (recorded here per AC 3):** `normaliseReportedState()` in riderState.ts maps the legacy
+  wire value to 'sleeping' at the ONE inbound ping-state entry (the POSITION handler in useFleetPositions; PositionPayload
+  is typed as the normalised state, the raw payload is widened to `unknown` for the cast). The legacy literal lives in
+  exactly one constant (`LEGACY_SLEEPING_WIRE_VALUE`) beside a deprecation comment — REMOVE both in the release after this
+  one ships. Exposure the shim does NOT cover: a receiver on the PREVIOUS build has no STATE_STYLE for 'sleeping'; RiderMarker
+  now falls back to the active style for an unknown wire state (`?? STATE_STYLE.active`) so the NEW build never crashes on
+  a newer sender, but an OLD receiver would have thrown on `style.fill` — bounded by the same rule W290 already imposes:
+  all handsets on the new build before the field run.
+- Review round 1 (stride:task-reviewer: APPROVED 4/4; 1 minor pattern — taken): the sender's wire literal went through
+  restBroadcast's `Record<string, unknown>` payload, so tsc did not link it to the receiver's union; it is now
+  `'sleeping' satisfies RiderTacticalState` (type-only import, no runtime cycle) with a keep-in-sync note on both sides.
+- `grep -rn dormant mobile/src` after the change: only `LEGACY_SLEEPING_WIRE_VALUE = 'dormant'`, its deprecation comment, and
+  "was 'dormant'" rename notes remain (no identifier, type member, wire value or log string).
+- Tests: riderState +3 (Sleeping sticky through staleness / null still Dark / reopen clears; legacy mapping table + mapped
+  value behaves as Sleeping; Dark non-regression). `npm test` 177 / 175 (the 2 "fails" = stack-gated files, no local
+  Docker — identical on base); `npm run typecheck` = 2 pre-existing deepLinkAuth errors.
+- "Fixed means built AND validated" → FIELD RUN: pending (two devices, one on the previous build: rider without background
+  permission pockets the phone → both viewers render the calm violet Sleeping, no Dark escalation; old build interoperates
+  via the receive shim on the new one).

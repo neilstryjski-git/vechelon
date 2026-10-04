@@ -1,4 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
+import type { RiderTacticalState } from '../state/riderState';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
 import { isCurrentIdentity } from './identity';
@@ -18,7 +19,7 @@ const DEPARTED_EVENT = 'depart';
 // POST went out, false if there was no token or it threw.
 //
 // USED BY: the Transistorsoft engine (bgGeo, via useFleetPositions) for every position
-// ping, and by sendDormantPing below. (The old expo-location FGS TaskManager path that
+// ping, and by sendSleepingPing below. (The old expo-location FGS TaskManager path that
 // also used this was removed in W203 once Transistorsoft became the sole engine.)
 export async function restBroadcast(
   rideId: string,
@@ -71,7 +72,9 @@ export async function restBroadcast(
 // declined "Allow all the time", so the Transistorsoft FGS never starts). Sent over
 // REST so it escapes before the OS freezes the JS engine on screen-lock — the fleet
 // sees them go to SLEEP on purpose (calm) rather than decay into the alarming Dark.
-export async function sendDormantPing(args: {
+// W293: wire value 'sleeping' (was 'dormant'); receivers on the previous build do not know it —
+// one-release exposure, bounded by "all handsets on the new build before the field run".
+export async function sendSleepingPing(args: {
   rideId: string;
   riderId: string;
   lat: number;
@@ -79,7 +82,9 @@ export async function sendDormantPing(args: {
 }): Promise<void> {
   const sent = await restBroadcast(args.rideId, {
     riderId: args.riderId,
-    state: 'dormant',
+    // Typed against the receiver's union (type-only import, no runtime cycle) so a future rename of
+    // RiderTacticalState fails tsc here instead of silently demoting Sleeping senders (review r1).
+    state: 'sleeping' satisfies RiderTacticalState,
     lat: args.lat,
     lng: args.lng,
     ts: Date.now(),
@@ -87,7 +92,7 @@ export async function sendDormantPing(args: {
   void logMeasurement({
     rideId: args.rideId,
     kind: 'app_state_change',
-    payload: { event: 'dormant_sent', sent },
+    payload: { event: 'sleeping_sent', sent }, // W293: was 'dormant_sent' (historical sink rows keep the old string)
   });
 }
 

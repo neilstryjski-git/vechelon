@@ -74,7 +74,7 @@ export type MeasureKind =
   | 'channel_status'
   | 'fetch_result'
   // D86 — the battery-saver recovery nudge fired: Saver was turned OFF mid-ride, so the engine
-  // was forced to re-engage the motion detection that Saver-at-start left dormant. Lets the
+  // was forced to re-engage the motion detection that Saver-at-start left stationary (motion detection idle). Lets the
   // field session confirm the fix engaged and correlate it with pings resuming.
   | 'bg_nudge'
   // D77 — the identity invariant tripped: a broadcast or DB write was attempted under an id

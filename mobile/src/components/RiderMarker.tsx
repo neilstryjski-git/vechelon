@@ -40,7 +40,7 @@ const STATE_STYLE: Record<
   stopped: { fill: RIDER_GREEN, border: '#FFFFFF', opacity: 0.55, hollow: false },
   inactive: { fill: 'transparent', border: RIDER_GREEN, opacity: 1, hollow: true },
   dark: { fill: '#6B6B70', border: '#3A3A3E', opacity: 1, hollow: false },
-  dormant: { fill: SLEEP_VIOLET, border: '#FFFFFF', opacity: 0.85, hollow: false },
+  sleeping: { fill: SLEEP_VIOLET, border: '#FFFFFF', opacity: 0.85, hollow: false }, // W293: was 'dormant'
 };
 
 // Captain is a small letter badge; members/guests get none. SAG (support) is NOT a
@@ -118,7 +118,7 @@ const RiderMarker: React.FC<Props> = ({ participant, tappable, beaconActive, sta
   ]);
 
   if (!participant.position) return null;
-  const s = STATE_STYLE[participant.state];
+  const s = (STATE_STYLE[participant.state] ?? STATE_STYLE.active) /* W293: an unknown wire state (a newer sender) renders as active, never crashes the marker */;
   const badge = ROLE_BADGE[participant.role];
 
   return (

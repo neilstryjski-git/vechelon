@@ -13,7 +13,8 @@
 // ride_participants.role enum (existing prod schema). 'support' is SAG.
 export type RideRole = 'member' | 'captain' | 'support' | 'guest';
 
-export type TacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'dormant';
+// W293: 'sleeping' (was 'dormant' — the engine's idle motion detection is now 'stationary').
+export type TacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'sleeping';
 
 export interface FleetParticipant {
   riderId: string;

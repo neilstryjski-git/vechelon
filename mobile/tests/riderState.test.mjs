@@ -12,6 +12,7 @@ import {
   thresholdsFromTenant,
   DEFAULT_THRESHOLDS,
   MOVE_EPSILON_M,
+  normaliseReportedState,
 } from '../src/state/riderState.ts';
 
 const MIN = 60_000;
@@ -82,6 +83,31 @@ test('custom dark threshold honored receiver-side', () => {
   const now = T0 + 10 * MIN;
   assert.equal(deriveRenderState('active', T0 + 1 * MIN, now, th), 'dark'); // 9 min ≥ 8
   assert.equal(deriveRenderState('active', T0 + 3 * MIN, now, th), 'active'); // 7 min < 8
+});
+
+// ── Sleeping (W293: renamed from 'dormant'; sticky, sender-declared) ─────────────────────
+
+test('Sleeping is sticky: a sender-declared sleeping rider never escalates to Dark on staleness; a later ping clears it', () => {
+  const now = T0 + 60 * MIN;
+  assert.equal(deriveRenderState('sleeping', T0, now), 'sleeping'); // 60 min stale — still calm violet, not Dark
+  assert.equal(deriveRenderState('sleeping', null, now), 'dark', 'never heard from still fails dark');
+  assert.equal(deriveRenderState('active', now - 1000, now), 'active'); // reopen → whatever the fresh ping reports
+});
+
+test('W293 one-release wire compatibility: legacy "dormant" maps to "sleeping" on receive; other values pass through; non-strings fail to active', () => {
+  assert.equal(normaliseReportedState('dormant'), 'sleeping');
+  assert.equal(normaliseReportedState('sleeping'), 'sleeping');
+  for (const s of ['active', 'stopped', 'inactive', 'dark']) assert.equal(normaliseReportedState(s), s);
+  assert.equal(normaliseReportedState(undefined), 'active');
+  assert.equal(normaliseReportedState(42), 'active');
+  // The mapped value then behaves exactly as Sleeping (sticky through staleness).
+  assert.equal(deriveRenderState(normaliseReportedState('dormant'), T0, T0 + 60 * MIN), 'sleeping');
+});
+
+test('Dark non-regression after the rename: thresholds, colours and the ladder are untouched', () => {
+  assert.deepEqual(DEFAULT_THRESHOLDS, { stoppedMinutes: 2, inactiveMinutes: 5, darkMinutes: 15 });
+  const now = T0 + 20 * MIN;
+  assert.equal(deriveRenderState('active', T0 + 4 * MIN, now), 'dark');
 });
 
 // ── Threshold mapping from the W169 tenant columns ──────────────────────────

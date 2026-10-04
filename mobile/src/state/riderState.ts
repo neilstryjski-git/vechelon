@@ -19,11 +19,27 @@
 // Transitions are passive — no automated alerts anywhere (pitfall 1); state
 // feeds the icon only.
 
-// 'dormant' (Sleeping): SENDER-declared — the rider gracefully backgrounded with no
+// 'sleeping' (Sleeping): SENDER-declared — the rider gracefully backgrounded with no
 // background tracking taking over (foreground-only / bg permission denied). It's the
 // calm, expected counterpart to Dark: "I pocketed my phone," not "we lost them." An
 // OEM-killed/crashed app can't send it, so a true unexpected death still derives Dark.
-export type RiderTacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'dormant';
+// W293 (item 2): renamed from 'dormant' — that word also named the ENGINE's idle motion
+// detection (now "stationary" in bgGeo.ts / measure.ts), and R3-40/R3-48 reasoning about
+// "engine dormant" read as this calm UI state. Wire value 'sleeping'; the legacy wire value is
+// accepted on receive for ONE release via normaliseReportedState below. The SENDER's wire literal
+// (backgroundLocation.sendSleepingPing) is typed `satisfies RiderTacticalState` — keep in sync.
+export type RiderTacticalState = 'active' | 'stopped' | 'inactive' | 'dark' | 'sleeping';
+
+// W293 — ONE-RELEASE WIRE COMPATIBILITY: a sender on the previous build still publishes the
+// legacy value for Sleeping. Apply at the single inbound ping-state entry (useFleetPositions'
+// POSITION handler). Unknown strings pass through unchanged (deriveRenderState / STATE_STYLE
+// decide what to do with them). Remove this mapping, and the legacy literal with it, in the
+// release after W293 ships.
+const LEGACY_SLEEPING_WIRE_VALUE = 'dormant';
+export function normaliseReportedState(s: unknown): RiderTacticalState {
+  if (s === LEGACY_SLEEPING_WIRE_VALUE) return 'sleeping';
+  return (typeof s === 'string' ? s : 'active') as RiderTacticalState;
+}
 
 // Per-tenant thresholds (tenants.rail3_*_threshold_minutes — W169 schema).
 // Defaults mirror the column defaults; never hardcode at call sites.
@@ -106,7 +122,7 @@ export function deriveRenderState(
   // Sleeping is sender-declared and STICKY: the rider told us they backgrounded on
   // purpose, so it never escalates to the concerning Dark on staleness. A later Active
   // ping (reopen) clears it automatically.
-  if (reportedState === 'dormant') return 'dormant';
+  if (reportedState === 'sleeping') return 'sleeping';
   if (nowMs - lastPingAtMs >= minToMs(thresholds.darkMinutes)) return 'dark';
   return reportedState;
 }
