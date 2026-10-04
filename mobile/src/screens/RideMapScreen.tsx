@@ -135,6 +135,7 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     if (selfHealth.notReaching) setOsCoords(osCoordsRef.current);
   }, [selfHealth.notReaching]);
+  const selfHealthAnchor = myBeacon && myCoords ? myCoords : osCoords;
   const onUserLocationChange = useCallback(
     (e: { nativeEvent: { coordinate?: { latitude: number; longitude: number } } }) => {
       const c = e.nativeEvent.coordinate;
@@ -640,12 +641,12 @@ const RideMapScreen: React.FC = () => {
             while not reaching, on the SAME coordinate as the OS dot / own-beacon marker (one position,
             ever); above the beacon pulse; not gated on role, beacon or backgroundReady (the hook is
             inert on its own when there is no engine or no config). */}
-        {/* Anchor: the LIVE OS dot normally; during an own SOS the OS dot is suppressed and the red
-            beacon marker at myCoords is the one self indicator, so the badge sits on that. If the OS
-            has no location either, no OS dot is drawn and myCoords is the only self glyph. */}
-        {selfHealth.notReaching && (myBeacon ? myCoords : osCoords ?? myCoords) ? (
-          <SelfHealthBadge coordinate={(myBeacon ? myCoords : osCoords ?? myCoords) as { lat: number; lng: number }} />
-        ) : null}
+        {/* Anchor MIRRORS showsUserLocation exactly (review r2): when the red beacon marker replaces the
+            OS dot (myBeacon && myCoords) the badge sits on that marker; otherwise it sits ONLY on the
+            live OS dot's own coordinate. No myCoords fallback — myCoords is frozen exactly while the
+            badge shows, so a fallback would itself be a stale self display. No OS location yet → no
+            badge (the unlock prompt still covers the rider). */}
+        {selfHealth.notReaching && selfHealthAnchor ? <SelfHealthBadge coordinate={selfHealthAnchor} /> : null}
       </MapView>
 
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}

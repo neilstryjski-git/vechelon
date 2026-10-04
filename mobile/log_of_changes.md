@@ -1625,6 +1625,12 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   row / first-load failure is inert. What holds now: telemetry.ts keeps the previous cache on a later fetch failure, so a
   transient error after a successful load never regresses to inert. Once W279's values are Ledger-confirmed, whether they
   ALSO ship as committed first-load fallbacks is a Decision Brief question for the Brain, not a Hands change.
+- **Review round 2** (1 important + 1 minor; both r1 code fixes verified): the badge still fell back to `myCoords` when no OS
+  location had arrived yet (e.g. a remount mid-episode) — a stale self display, since myCoords is frozen while the badge
+  shows — and rendered nothing during an own SOS with myCoords null while the OS dot WAS shown. Fixed AFTER the two-round
+  cap without a third round (a mechanical change): the anchor now mirrors `showsUserLocation` exactly — `myBeacon &&
+  myCoords ? myCoords : osCoords`, no fallback; no OS location → no badge (the prompt still covers the rider). The minor
+  (security consideration 3 vs pitfall 1) stays recorded above for the Brain.
 - **STATUS: built, INERT until populated.** This ticket is NOT done until the Android row carries W279's confirmed values and
   the overlay is validated on-device. Operator SQL (service_role, after the wTBD2 brief is Ledger-confirmed):
   `UPDATE public.rail3_operator_config SET startup_ceiling_s = <wTBD2 ceiling>, steady_state_threshold_s = <wTBD2 steady>,
