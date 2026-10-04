@@ -8,6 +8,16 @@ import { supabase } from '../lib/supabase';
 import { logMeasurement } from '../lib/measure';
 import { sendSleepingPing, restBroadcast } from '../lib/backgroundLocation';
 import { startBgGeo, stopBgGeo, nudgeBgGeo, isEngineSessionActive } from '../lib/bgGeo';
+// W285: the self-health clocks read these engine signals from a module-level store, so the engine
+// effect below feeds it from its callbacks WITHOUT any dep change (D91).
+import {
+  noteFix,
+  noteMotion,
+  noteHeartbeat,
+  noteEngineStarted,
+  noteEngineDied,
+  resetSelfHealthSignals,
+} from '../lib/selfHealthSignals';
 import { setActiveRide } from '../lib/activeRide';
 import { persistLastKnown, LAST_KNOWN_WRITE_INTERVAL_MS } from '../lib/lastKnown';
 import { recordCounter, fullCaptureEvent, loadOperatorConfig } from '../lib/telemetry';
@@ -554,6 +564,7 @@ export function useFleetPositions(
     // cached; offline keeps the previous cache. Counters never depend on it.
     void loadOperatorConfig();
     void startBgGeo((fix) => {
+      noteFix(fix.ts, fix.isMoving); // W285 (covers the heartbeat re-engage synthetic fix too)
       const coords = { lat: fix.lat, lng: fix.lng };
       setMyCoords(coords);
       const dist = last ? haversineDistanceM(last, coords) : Infinity;
@@ -605,6 +616,7 @@ export function useFleetPositions(
         }
       }
     }, (isMoving, motionFix) => {
+      noteMotion(Date.now(), isMoving); // W285: the stationary-exemption input
       // W261: the SDK's moving↔stationary transition (un-forced in bgGeo.ts). On STOP,
       // persist last-known position (Pillar II §2 — last-known at a MEANINGFUL EVENT, not a
       // per-ping trail) and send ONE 'stopped' ping so the fleet sees the stop immediately
@@ -620,6 +632,7 @@ export function useFleetPositions(
       lastLastKnownMs = Date.now();
       void persistLastKnown(rideId, coords.lat, coords.lng, ts, 'stop');
     }, (hb) => {
+      noteHeartbeat(Date.now(), hb.engineMoving); // W285: engine liveness evidence while stationary
       // D88 MIDDLE GROUND — engine self-check outcome. Instrument every heartbeat so we can
       // confirm ON-DEVICE that (a) the heartbeat fires at all while backgrounded/stationary
       // (the open question on aggressive OEMs) and (b) whether it re-engaged tracking. A
@@ -648,6 +661,11 @@ export function useFleetPositions(
         outcome: ff.outcome, delta_ms: ff.delta_ms, saver_on: ff.saver_on, cold_start: ff.cold_start,
       });
     }, (ev) => {
+      // W285: the startup clock restarts on EVERY engine_started (a heartbeat_reassert is a fresh
+      // BG.start() — same acquisition window as a cold start — and it is what clears engineDied after
+      // a successful self-heal so the badge cannot stick); engine_died is not-reaching at once.
+      if (ev.kind === 'engine_started') noteEngineStarted(Date.now());
+      else if (ev.kind === 'engine_died') noteEngineDied();
       // W284 — always-on tier (slate 6, R3-45): engine_started on start() resolve, engine_died
       // when the plugin or location services go off while the process lives. warning_fired is
       // W285's (self-health) via the same recordCounter API. Fire-and-forget, ids only.
@@ -668,6 +686,7 @@ export function useFleetPositions(
       // leader's route, and a remount's seed waits for this write (serialised per ride above).
       if (dirty && prior !== null && leaderIdRef.current && myRiderId === leaderIdRef.current) upsertPath('flush');
       void stopBgGeo();
+      resetSelfHealthSignals(); // W285: one reset point per engine session
     };
     // D91: thresholds REMOVED from deps — the engine starts/stops on ride identity + permission
     // ONLY, never on tenant-threshold data. This is the fix for the +1s engine teardown.

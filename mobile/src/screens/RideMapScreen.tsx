@@ -32,6 +32,8 @@ import { deriveRenderState } from '../state/riderState';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
 import RiderMarker from '../components/RiderMarker';
+import SelfHealthBadge from '../components/SelfHealthBadge';
+import { useSelfHealth, isSelfHealthPromptActiveNow } from '../hooks/useSelfHealth';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
 import SupportBeacon from '../components/SupportBeacon';
@@ -116,6 +118,10 @@ const RideMapScreen: React.FC = () => {
   //
   // D80: the leader is the account that STARTED the ride (ride.leaderId ← rides.started_by), read
   // from the ride row — NOT the first captain-roled row in the roster, which elected a phantom.
+  // W285 (R3-40 / A3): the self-health clocks — inert until the operator config rows carry W279's
+  // measured values; never a tenant threshold; advisory only.
+  const selfHealth = useSelfHealth(rideId);
+
   // W290 (R3-72 / slate 9 / C1): segments (one polyline each, never joined across a capture gap),
   // liveness (live / stale / departed) and the departure instant for the cue.
   const {
@@ -282,11 +288,13 @@ const RideMapScreen: React.FC = () => {
   // Subscribed once tracking is engaged (backgroundReady) and unsubscribed on leave/unmount —
   // the effect's cleanup IS the unsubscribe, so there is exactly one listener per ride and
   // never a stacked one. Advisory only: it is never a precondition for anything (R3-49).
-  // The §5.1 collision-gate input is a stub until the R3-40 self-health overlay (W285)
-  // connects the real signal.
+  // W285 (R3-40, §5.1 collision rule): the self-health signal is a MODULE-LEVEL function computed
+  // synchronously from the engine signal store + operator config at the unlock edge, so this
+  // effect's deps stay exactly [backgroundReady] (one subscription per ride) and the Saver watcher
+  // reads the right answer ~1.2 s before the debounced self-health prompt itself would fire.
   useEffect(() => {
     if (!backgroundReady) return;
-    return watchBatterySaverOnScreenLock({ isSelfHealthPromptActive: () => false });
+    return watchBatterySaverOnScreenLock({ isSelfHealthPromptActive: isSelfHealthPromptActiveNow });
   }, [backgroundReady]);
 
   const mapRef = useRef<RNMapView | null>(null);
@@ -603,6 +611,11 @@ const RideMapScreen: React.FC = () => {
             onPress={() => {}}
           />
         ) : null}
+        {/* W285 (R3-40, A3, D-G33-A3-01): BINARY self-health overlay on the own position — present only
+            while not reaching, on the SAME coordinate as the OS dot / own-beacon marker (one position,
+            ever); above the beacon pulse; not gated on role, beacon or backgroundReady (the hook is
+            inert on its own when there is no engine or no config). */}
+        {selfHealth.notReaching && myCoords ? <SelfHealthBadge coordinate={myCoords} /> : null}
       </MapView>
 
       {/* Floating overlays — no persistent chrome during a ride (§5.1). */}

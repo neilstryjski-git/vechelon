@@ -10,6 +10,7 @@ import {
   shouldShowSaverAdvisory,
   lockTransition,
 } from '../src/lib/advisoryPolicy.ts';
+import { evaluateSelfHealth } from '../src/lib/selfHealth.ts';
 
 // --- shouldShowSaverAdvisory truth table (4 cases) --------------------------------
 
@@ -206,4 +207,27 @@ test('a rejected Saver read is swallowed (never throws into the ride flow) and s
   await flush();
   assert.equal(h.shows, 1, 'the healthy watcher still showed once');
   boom();
+});
+
+// --- W285: the LIVE self-health input drives the §5.1 gate (integration of the two pure modules) ---
+
+test('W285: a not-reaching self-health verdict suppresses the Saver advisory at unlock; a reaching one lets it show', async () => {
+  const T0 = 1_000_000_000_000;
+  const cfg = { startup_ceiling_s: 180, steady_state_threshold_s: 90 };
+  const notReaching = evaluateSelfHealth({ engineStartedAtMs: T0, lastFixAtMs: T0 + 1000, lastEngineSignalAtMs: T0 + 1000, engineMoving: true, engineDied: false, nowMs: T0 + 200_000, config: cfg });
+  const reaching = evaluateSelfHealth({ engineStartedAtMs: T0, lastFixAtMs: T0 + 190_000, lastEngineSignalAtMs: T0 + 190_000, engineMoving: true, engineDied: false, nowMs: T0 + 200_000, config: cfg });
+  assert.equal(notReaching.reaching, false);
+  assert.equal(reaching.reaching, true);
+
+  const suppressed = harness({ selfHealth: notReaching.reaching === false });
+  suppressed.emit('background');
+  suppressed.emit('active');
+  await flush();
+  assert.equal(suppressed.shows, 0, 'self-health prompt active → Saver advisory suppressed (§5.1)');
+
+  const shown = harness({ selfHealth: reaching.reaching === false });
+  shown.emit('background');
+  shown.emit('active');
+  await flush();
+  assert.equal(shown.shows, 1, 'tracking healthy → Saver advisory stands alone');
 });
