@@ -38,7 +38,8 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: CLI v3.0.0 (2026-11-06) rejects [inbucket] in config.toml; matches the local CLI.
+          version: 2.89.1
 
       - name: Start local Supabase stack (applies all migrations)
         # `supabase start` brings up a local Postgres + Auth + Realtime in Docker
