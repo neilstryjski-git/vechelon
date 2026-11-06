@@ -85,6 +85,6 @@ the job is a **required status check**. After the first run lands:
 - **Local only.** The gate refuses to run against a non-local `DB_URL`. Never
   point tests at `drktcxggaizkbvqccfhp`.
 - **Additive & Rail-3-scoped.** This workflow must not build, gate, or alter the
-  `admin/` Vercel build. `mobile/` stays outside the admin build.
+  `admin/` web build. `mobile/` stays outside the admin build.
 - **No extra hosted projects for CI.** CI uses the local stack; the one free
   hosted slot is reserved for `rail3-staging`.

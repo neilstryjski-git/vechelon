@@ -9,7 +9,8 @@ name: Rail 3 CI
 # test strategy).
 #
 # Additive and Rail-3-scoped: this workflow does NOT build, gate, or alter the
-# existing admin/ web app — that ships via Vercel on push to master, unaffected.
+# existing admin/ web app — that ships to Cloudflare (deploy-cloudflare.yml) on
+# push to master, unaffected.
 
 on:
   pull_request:
