@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendResendEmail } from '../_shared/resend.ts'
 import { extractSlug } from '../_shared/extractSlug.ts'
+import { classifyRedirect } from '../_shared/redirectAllowlist.ts'
+import { escapeHtml, safeHexColor, safeHttpsUrl } from '../_shared/html.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +25,18 @@ serve(async (req) => {
     if (!email) throw new Error('Email is required')
     if (!redirectTo) throw new Error('redirectTo is required')
 
+    // D96: the emailed click-through URL is built from redirectTo's origin and
+    // carries the real one-time token, so redirectTo MUST be one of our hosts.
+    // Supabase's uri_allow_list does not cover this — it only governs the final
+    // post-verify redirect. Reject before generating any link or sending email.
+    const redirectKind = classifyRedirect(redirectTo)
+    if (!redirectKind) {
+      return new Response(JSON.stringify({ error: 'redirectTo is not an allowed Vechelon URL' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
+
     // Parse the SPA-supplied redirectTo to derive tenant context.
     // Pre-W137: this used a hardcoded PORTAL_URL fallback, ignoring the user's
     // host. Combined with a LIMIT 1 tenant lookup, B&B users got Racer Sportif
@@ -38,7 +52,7 @@ serve(async (req) => {
     // a rail3:// deep-link redirectTo (no tenant hostname to derive from), so it passes
     // the slug in the body. Web callers (AuthPage/RideLanding) omit slug, so they fall
     // through to subdomain derivation exactly as before — unchanged.
-    const isDeepLink = !/^https?:\/\//i.test(redirectTo)
+    const isDeepLink = redirectKind === 'deep_link'
     const slug = bodySlug ?? (isDeepLink ? null : extractSlug(redirectURL.hostname))
 
     const adminClient = createClient(
@@ -56,14 +70,17 @@ serve(async (req) => {
       : { data: null }
     const tenant = tenantQuery.data
 
-    const clubName = tenant?.name || 'Vechelon'
+    // D96: everything interpolated into the email HTML is escaped; rawClubName
+    // is only used in the (plain-text) subject line.
+    const rawClubName = tenant?.name || 'Vechelon'
+    const clubName = escapeHtml(rawClubName)
     const rawLogoUrl = tenant?.logo_url || ''
     // Relative paths (e.g. /portal/logo.png) can't be resolved by email clients.
     // Prepend the tenant's origin so the <img> src is always absolute.
-    const clubLogo = rawLogoUrl.startsWith('/')
+    const clubLogo = safeHttpsUrl(rawLogoUrl.startsWith('/')
       ? `${redirectURL.origin}${rawLogoUrl}`
-      : rawLogoUrl
-    const brandColor = tenant?.primary_color || '#1c1c1c'
+      : rawLogoUrl)
+    const brandColor = safeHexColor(tenant?.primary_color, '#1c1c1c')
 
     const inputEmail = email.trim().toLowerCase()
 
@@ -117,7 +134,7 @@ serve(async (req) => {
             </div>
           </div>`
       : `<div style="margin-bottom: 32px;">
-            <a href="${clickThroughUrl}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
+            <a href="${escapeHtml(clickThroughUrl)}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
               Authorize Session
             </a>
           </div>`
@@ -127,7 +144,7 @@ serve(async (req) => {
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1c1c1c; background-color: #f9f9f9;">
         ${testBanner ? `<div style="background:#b91c1c;color:#fff;text-align:center;padding:12px;border-radius:10px;margin-bottom:16px;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">&#9888; Rail 3 TEST environment &mdash; not the live ${clubName} portal</div>` : ''}
         <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee;">
-          ${clubLogo ? `<img src="${clubLogo}" alt="${clubName}" style="height: 40px; margin-bottom: 24px;">` : `<h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 24px 0;">${clubName.toUpperCase()}</h1>`}
+          ${clubLogo ? `<img src="${clubLogo}" alt="${clubName}" style="height: 40px; margin-bottom: 24px;">` : `<h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 24px 0;">${escapeHtml(rawClubName.toUpperCase())}</h1>`}
 
           <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Authorization Required</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #444; margin-bottom: 32px;">
@@ -151,7 +168,7 @@ serve(async (req) => {
 
     const { error: resendError } = await sendResendEmail({
       to: inputEmail,
-      subject: `${testBanner ? '[Rail 3 TEST] ' : ''}Sign in to ${clubName}`,
+      subject: `${testBanner ? '[Rail 3 TEST] ' : ''}Sign in to ${rawClubName}`.replace(/[\r\n]+/g, ' '),
       html: emailHtml
     })
 
