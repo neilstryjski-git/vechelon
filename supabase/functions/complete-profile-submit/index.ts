@@ -130,7 +130,9 @@ serve(async (req) => {
       .maybeSingle()
     if (lookupError) throw lookupError
 
-    const isNewAccount = !existingAccount
+    // `let`: an email with an auth user but no accounts row (e.g. a Rail 3 OTP-only
+    // sign-in) is an EXISTING identity too — see the generateLink fallback below.
+    let isNewAccount = !existingAccount
     let accountId: string
     if (existingAccount) {
       const { data: sameTenantLink, error: linkError } = await adminClient
@@ -167,6 +169,10 @@ serve(async (req) => {
           throw new Error(`Could not create account: ${(inviteError ?? mlError)?.message ?? 'unknown error'}`)
         }
         accountId = mlData.user.id
+        // D96 (review r1): 'invite' failing means this auth identity already
+        // exists — someone else may own it. Treat as existing: no contact writes,
+        // no membership changes from an unauthenticated token holder.
+        isNewAccount = false
       } else {
         accountId = inviteData.user.id
       }

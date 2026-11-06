@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { classifyRedirect } from './redirectAllowlist';
+// Tests the deployed edge-function module directly (pure TS) — no mirror copy.
+import { classifyRedirect } from '../../../supabase/functions/_shared/redirectAllowlist';
 import { decodeVerifyLink, safeInternalPath } from './authLinks';
 
 describe('classifyRedirect (send-magic-link redirectTo allowlist, D96)', () => {
@@ -11,10 +12,23 @@ describe('classifyRedirect (send-magic-link redirectTo allowlist, D96)', () => {
     expect(classifyRedirect('https://vechelon.ca/auth')).toBe('web');
   });
 
-  it('accepts the legacy prod portal, staging alias and local dev', () => {
+  it('accepts the legacy prod portal', () => {
     expect(classifyRedirect('https://vechelon.productdelivered.ca/portal/auth')).toBe('web');
-    expect(classifyRedirect('https://vechelon-rail3-staging.vercel.app/auth')).toBe('web');
-    expect(classifyRedirect('http://localhost:5173/auth')).toBe('web');
+  });
+
+  it('rejects re-claimable third-party aliases and local dev origins', () => {
+    expect(classifyRedirect('https://vechelon-rail3-staging.vercel.app/auth')).toBeNull();
+    expect(classifyRedirect('http://localhost:5173/auth')).toBeNull();
+  });
+
+  it('normalises case, trailing dots and IDN before matching', () => {
+    expect(classifyRedirect('HTTPS://Racer-Sportif.VECHELON.CA/auth')).toBe('web');
+    expect(classifyRedirect('https://racer-sportif.vechelon.ca./auth')).toBe('web');
+    // WHATWG parses a backslash as a path separator: host is vechelon.ca, and the
+    // emailed link is rebuilt from the parsed origin, so this can only reach us.
+    expect(classifyRedirect('https://vechelon.ca\\@evil.com/')).toBe('web');
+    expect(classifyRedirect('https://evil.com\\.vechelon.ca/')).toBeNull();
+    expect(classifyRedirect('https://xn--vechlon-gya.ca/auth')).toBeNull();
   });
 
   it('accepts native deep links (code-only email, no clickable token)', () => {

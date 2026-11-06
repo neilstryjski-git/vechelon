@@ -1,7 +1,5 @@
-// Deno-compatible mirror of admin/src/lib/redirectAllowlist.ts.
-// Keep these two files in sync — pure URL parsing, no runtime-specific APIs
-// (same literal-duplicate convention as extractSlug.ts). Tests live on the
-// admin mirror (admin/src/lib/redirectAllowlist.test.ts).
+// D96: tests live in admin/src/lib/redirectAllowlist.test.ts, which imports
+// THIS file directly (pure TS, no Deno APIs) — there is no second copy to drift.
 //
 // D96: send-magic-link wraps the real one-time token in a click-through URL
 // built from the caller-supplied redirectTo origin. Without this check anyone
@@ -9,20 +7,21 @@
 // receive the victim's token when they click the genuine Vechelon email.
 // Supabase's uri_allow_list does NOT protect this path: the wrapper URL is
 // built before Supabase sees redirectTo. This list mirrors the union of the
-// prod + staging Auth uri_allow_list hosts — keep it in step with them.
+// prod + staging Auth uri_allow_list hosts we own — keep it in step with them.
+// No plain-http / localhost origin is accepted (local dev uses the local stack).
 
+// Only hosts we control indefinitely. Third-party platform subdomains (e.g. a
+// *.vercel.app alias) are deliberately excluded: once released they can be
+// re-claimed by anyone and would receive live tokens (review r1).
 const HTTPS_EXACT_HOSTS = new Set([
   'vechelon.ca',
   'vechelon.productdelivered.ca',      // legacy prod portal host
-  'vechelon-rail3-staging.vercel.app', // staging Race Control alias
 ]);
 
 // Any depth under vechelon.ca: tenant subdomains, *.preview, *.staging.
+// NOTE: this trusts every DNS name in the zone — a dangling CNAME there would
+// become a token sink. Keep the vechelon.ca zone free of dangling records.
 const HTTPS_HOST_SUFFIX = '.vechelon.ca';
-
-// Local dev only (vite default port). A token sent here reaches the victim's
-// own machine, never an attacker.
-const HTTP_DEV_HOSTS = new Set(['localhost:5173']);
 
 // Native callers receive a 6-digit code in the email, never a clickable link,
 // so a deep-link redirectTo cannot carry a token anywhere. Limit to our app's
@@ -60,10 +59,6 @@ export function classifyRedirect(raw: unknown): RedirectKind | null {
     if (HTTPS_EXACT_HOSTS.has(host)) return 'web';
     if (host.endsWith(HTTPS_HOST_SUFFIX) && host.length > HTTPS_HOST_SUFFIX.length) return 'web';
     return null;
-  }
-
-  if (protocol === 'http:') {
-    return HTTP_DEV_HOSTS.has(url.host) ? 'web' : null;
   }
 
   return null;
