@@ -48,17 +48,26 @@ SELECT (SELECT v FROM _fx WHERE k=x.r), (SELECT v FROM _fx WHERE k=x.t), 'd96 ' 
        (SELECT v FROM _fx WHERE k=x.c), 'created', 'adhoc', point(0,0), ''
 FROM (VALUES ('r2','t','a'), ('r3','t','m'), ('r4','t2','a')) AS x(r,t,c);
 
+-- participant_update_policy only lets the row owner or ride CREW update rows, so
+-- admin A must be crew on r2 for cases 09/10 to reach the trigger at all
+-- (otherwise RLS filters the UPDATE to 0 rows and nothing is tested).
+INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
+VALUES ((SELECT v FROM _fx WHERE k='r2'), (SELECT v FROM _fx WHERE k='a'), 'captain', 'rsvpd', 'd96-fx-admin@test.invalid');
+
 -- Run `stmt` as an API role with `uid` as auth.uid(); record ALLOWED/BLOCKED.
 CREATE FUNCTION pg_temp.try_as(p_role text, p_uid uuid, p_test text, p_expected text, p_stmt text)
 RETURNS void LANGUAGE plpgsql AS $$
-DECLARE v_out text;
+DECLARE v_out text; v_n bigint;
 BEGIN
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', p_uid, 'role', p_role)::text, true);
   PERFORM set_config('role', p_role, true);
   BEGIN
     EXECUTE p_stmt;
-    v_out := 'ALLOWED';
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    -- A statement RLS filtered to zero rows never reached the guard: that is
+    -- neither ALLOWED nor BLOCKED, so it must fail either expectation.
+    v_out := CASE WHEN v_n = 0 THEN 'NO-OP (0 rows — RLS filtered, guard not exercised)' ELSE 'ALLOWED' END;
   EXCEPTION WHEN others THEN
     v_out := 'BLOCKED: ' || SQLERRM;
   END;
