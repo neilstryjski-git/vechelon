@@ -130,9 +130,7 @@ serve(async (req) => {
       .maybeSingle()
     if (lookupError) throw lookupError
 
-    // `let`: an email with an auth user but no accounts row (e.g. a Rail 3 OTP-only
-    // sign-in) is an EXISTING identity too — see the generateLink fallback below.
-    let isNewAccount = !existingAccount
+    const isNewAccount = !existingAccount
     let accountId: string
     if (existingAccount) {
       const { data: sameTenantLink, error: linkError } = await adminClient
@@ -168,11 +166,16 @@ serve(async (req) => {
         if (mlError || !mlData?.user) {
           throw new Error(`Could not create account: ${(inviteError ?? mlError)?.message ?? 'unknown error'}`)
         }
-        accountId = mlData.user.id
-        // D96 (review r1): 'invite' failing means this auth identity already
-        // exists — someone else may own it. Treat as existing: no contact writes,
-        // no membership changes from an unauthenticated token holder.
-        isNewAccount = false
+        // D96 (review r1+r2): 'invite' failing means an auth identity for this
+        // email already exists (e.g. a Rail 3 OTP-only sign-in with no accounts
+        // row). An unauthenticated token holder has not proven they own it, so do
+        // NOT write contacts, link it to this club, or bypass the W127 cross-club
+        // rule — refuse exactly as the existing-account branch does.
+        void mlData
+        return new Response(
+          JSON.stringify({ error: CROSS_CLUB_MESSAGE }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 },
+        )
       } else {
         accountId = inviteData.user.id
       }
