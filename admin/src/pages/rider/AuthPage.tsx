@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { extractSlug } from '../../lib/extractSlug';
+import { decodeVerifyLink, safeInternalPath } from '../../lib/authLinks';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error' | 'verifying';
 
@@ -36,19 +37,19 @@ const AuthPage: React.FC = () => {
   });
 
   // Contextual Deep-Linking: Capture where the user wanted to go
-  const redirectTo = searchParams.get('redirectTo') || '/';
+  // D96: same-site paths only — never an absolute or protocol-relative URL.
+  const redirectTo = safeInternalPath(searchParams.get('redirectTo'));
 
   // 0. CLICK-THROUGH REDIRECT: Auto-forward to Supabase OTP URL.
   // Email scanners follow HTML links but don't execute JS, so the OTP is safe
   // until the real user's browser runs this effect and redirects them instantly.
   const encodedLink = searchParams.get('c');
   useEffect(() => {
-    if (!encodedLink) return;
-    try {
-      window.location.replace(atob(encodedLink));
-    } catch {
-      // malformed base64 — fall through to normal auth form
-    }
+    // D96: only ever forward to this project's own Supabase verify endpoint —
+    // never an arbitrary decoded URL (open redirect / javascript: XSS).
+    const target = decodeVerifyLink(encodedLink, import.meta.env.VITE_SUPABASE_URL);
+    if (target) window.location.replace(target);
+    // otherwise: malformed or foreign link — fall through to the normal auth form
   }, [encodedLink]);
 
   // 1. SILENT TOKEN EXCHANGE: Handle inbound email link tokens (PKCE ?code= or legacy #access_token=)
