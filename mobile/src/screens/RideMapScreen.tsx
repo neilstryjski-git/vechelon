@@ -17,6 +17,7 @@ import {
   releaseRideWakelock,
 } from '../lib/batteryGuards';
 import FirstRideExplainer from '../components/FirstRideExplainer';
+import LocationDisclosure from '../components/LocationDisclosure';
 import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
 import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
@@ -86,6 +87,20 @@ const RideMapScreen: React.FC = () => {
   const { channel, status } = useRideChannel(rideId);
   // D63: enabled only after the W176 explainer flow grants BACKGROUND location.
   const [backgroundReady, setBackgroundReady] = useState(false);
+  // W302: prominent-disclosure consent gate ahead of the background-location request.
+  const [disclosureVisible, setDisclosureVisible] = useState(false);
+  const disclosureResolveRef = useRef<((allowed: boolean) => void) | null>(null);
+  const answerDisclosure = useCallback((allowed: boolean) => {
+    setDisclosureVisible(false);
+    const resolve = disclosureResolveRef.current;
+    disclosureResolveRef.current = null;
+    resolve?.(allowed);
+  }, []);
+  // Leaving the ride with the disclosure open resolves it as a decline (no request).
+  useEffect(() => () => {
+    disclosureResolveRef.current?.(false);
+    disclosureResolveRef.current = null;
+  }, []);
   const { fleet, myCoords, channelStatus } = useFleetPositions(
     rideId,
     myRiderId,
@@ -251,18 +266,34 @@ const RideMapScreen: React.FC = () => {
       () => ({ status: 'denied' as Location.PermissionStatus }),
     );
     if (fg !== 'granted') return;
-    const { status: bg } = await Location.requestBackgroundPermissionsAsync().catch(
+    // W302 — Google Play prominent disclosure. If BACKGROUND isn't already granted, show
+    // the disclosure and request it ONLY on an affirmative Allow. Not now (or back) skips
+    // the request entirely: the ride continues foreground-only, nothing throws.
+    const already = await Location.getBackgroundPermissionsAsync().catch(
       () => ({ status: 'denied' as Location.PermissionStatus }),
     );
+    let bg: Location.PermissionStatus = already.status;
+    let consented = bg === 'granted';
+    if (!consented) {
+      consented = await new Promise<boolean>((resolve) => {
+        disclosureResolveRef.current = resolve;
+        setDisclosureVisible(true);
+      });
+      if (consented) {
+        ({ status: bg } = await Location.requestBackgroundPermissionsAsync().catch(
+          () => ({ status: 'denied' as Location.PermissionStatus }),
+        ));
+      }
+    }
     // PoC/staging instrumentation: capture the actual grant result so the sink shows
     // — per device/OS — whether riders are reaching "Allow all the time" at all.
-    void logMeasurement({ rideId, kind: 'ux_explainer_shown', payload: { fg, bg } });
+    void logMeasurement({ rideId, kind: 'ux_explainer_shown', payload: { fg, bg, consented } });
     // Android 11+ reality: requestBackgroundPermissionsAsync does NOT show an inline
     // dialog after foreground is granted — the OS only grants "Allow all the time"
     // from the app's system Settings. So a silent `denied` here is the EXPECTED first
     // outcome, and the field walk's frozen-while-locked symptom. Guide the rider there
     // explicitly; the AppState re-check effect below picks up the grant when they return.
-    if (bg !== 'granted') {
+    if (consented && bg !== 'granted') {
       Alert.alert(
         'Stay on the map when pocketed',
         'To keep sharing your position after your screen locks, set location access to "Allow all the time" in Settings. Without it, the group sees you go to sleep when you pocket your phone.',
@@ -790,6 +821,13 @@ const RideMapScreen: React.FC = () => {
       {myRiderId ? (
         <FirstRideExplainer riderId={myRiderId} onDismiss={handleExplainerDismiss} />
       ) : null}
+
+      {/* W302 Google prominent disclosure — shown before the background-location request. */}
+      <LocationDisclosure
+        visible={disclosureVisible}
+        onAllow={() => answerDisclosure(true)}
+        onDeny={() => answerDisclosure(false)}
+      />
     </View>
   );
 };
