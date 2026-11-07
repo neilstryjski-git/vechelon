@@ -54,6 +54,14 @@ FROM (VALUES ('r2','t','a'), ('r3','t','m'), ('r4','t2','a')) AS x(r,t,c);
 INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
 VALUES ((SELECT v FROM _fx WHERE k='r2'), (SELECT v FROM _fx WHERE k='a'), 'captain', 'rsvpd', 'd96-fx-admin@test.invalid');
 
+-- Round-3 hardening: T2 gets a real affiliated member, so case 18 can only be 0
+-- because of the authz gate; and gpx-routes gets a seeded object, so case 25
+-- cannot pass merely because the bucket is empty (18a/25a assert both).
+INSERT INTO public.account_tenants (tenant_id, account_id, role, status)
+VALUES ((SELECT v FROM _fx WHERE k='t2'), (SELECT v FROM _fx WHERE k='b'), 'member', 'affiliated');
+INSERT INTO storage.objects (bucket_id, name)
+VALUES ('gpx-routes', (SELECT v FROM _fx WHERE k='t')::text || '/d96-regression-fixture.gpx');
+
 -- Run `stmt` as an API role with `uid` as auth.uid(); record ALLOWED/BLOCKED.
 CREATE FUNCTION pg_temp.try_as(p_role text, p_uid uuid, p_test text, p_expected text, p_stmt text)
 RETURNS void LANGUAGE plpgsql AS $$
@@ -102,15 +110,15 @@ DECLARE
   r4 uuid := (SELECT v FROM _fx WHERE k='r4');
 BEGIN
   -- (c) ride_participants command-role guard
-  PERFORM pg_temp.try_as('authenticated', m, '01 member self-inserts CAPTAIN on own-club ride', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', m, '01 member self-inserts CAPTAIN on own-club ride', 'GUARD',
     format($q$INSERT INTO ride_participants (ride_id, account_id, role, status, email) VALUES (%L,%L,'captain','rsvpd','d96-01@test.invalid')$q$, r2, m));
-  PERFORM pg_temp.try_as('authenticated', m, '02 member self-inserts SUPPORT on foreign-club ride', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', m, '02 member self-inserts SUPPORT on foreign-club ride', 'GUARD',
     format($q$INSERT INTO ride_participants (ride_id, account_id, role, status, email) VALUES (%L,%L,'support','rsvpd','d96-02@test.invalid')$q$, r4, m));
   PERFORM pg_temp.try_as('authenticated', m, '03 member self-inserts MEMBER on own-club ride', 'ALLOWED',
     format($q$INSERT INTO ride_participants (ride_id, account_id, role, status, email) VALUES (%L,%L,'member','rsvpd','d96-03@test.invalid')$q$, r2, m));
-  PERFORM pg_temp.try_as('authenticated', m, '04 member updates own row to CAPTAIN', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', m, '04 member updates own row to CAPTAIN', 'GUARD',
     format($q$UPDATE ride_participants SET role='captain' WHERE ride_id=%L AND account_id=%L$q$, r2, m));
-  PERFORM pg_temp.try_as('authenticated', m, '05 member moves own row to another ride', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', m, '05 member moves own row to another ride', 'GUARD',
     format($q$UPDATE ride_participants SET ride_id=%L WHERE ride_id=%L AND account_id=%L$q$, r3, r2, m));
   PERFORM pg_temp.try_as('authenticated', m, '06 member benign own-row update', 'ALLOWED',
     format($q$UPDATE ride_participants SET status=status WHERE ride_id=%L AND account_id=%L$q$, r2, m));
@@ -120,7 +128,7 @@ BEGIN
     format($q$INSERT INTO ride_participants (ride_id, account_id, role, status, email) VALUES (%L,%L,'support','rsvpd','d96-08@test.invalid')$q$, r2, b));
   PERFORM pg_temp.try_as('authenticated', a, '09 club admin promotes member row to CAPTAIN', 'ALLOWED',
     format($q$UPDATE ride_participants SET role='captain' WHERE ride_id=%L AND account_id=%L$q$, r2, m));
-  PERFORM pg_temp.try_as('authenticated', a, '10 club admin moves a captain row to a FOREIGN-club ride', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', a, '10 club admin moves a captain row to a FOREIGN-club ride', 'GUARD',
     format($q$UPDATE ride_participants SET ride_id=%L WHERE ride_id=%L AND account_id=%L$q$, r4, r2, m));
 
   -- (c) rides tenant scope
@@ -144,6 +152,8 @@ BEGIN
     format($q$SELECT count(*) FROM get_member_directory(%L)$q$, t));
   PERFORM pg_temp.count_as('authenticated', m, '18 member: directory RPC rows for foreign club', '0',
     format($q$SELECT count(*) FROM get_member_directory(%L)$q$, t2));
+  INSERT INTO _r SELECT '18a precondition: foreign club has members (service view, >0)', '>0',
+    (SELECT count(*) FROM account_tenants WHERE tenant_id = t2 AND status = 'affiliated')::text;
   PERFORM pg_temp.try_as('anon', NULL, '19 anon calls directory RPC', 'BLOCKED',
     format($q$SELECT get_member_directory(%L)$q$, t));
   PERFORM pg_temp.count_as('authenticated', a, '20 admin: member accounts rows via account_admin_select (>0)', '>0',
@@ -156,18 +166,22 @@ BEGIN
     format($q$SELECT count(*) FROM get_ride_roster_contacts(%L)$q$, r3));
 
   -- Step A
-  PERFORM pg_temp.try_as('authenticated', m, '23 member sets own platform_admin', 'BLOCKED',
+  PERFORM pg_temp.try_as('authenticated', m, '23 member sets own platform_admin', 'GUARD',
     format($q$UPDATE accounts SET platform_admin=true WHERE id=%L$q$, m));
   PERFORM pg_temp.try_as('anon', NULL, '24 anon calls get_rider_hash_secret', 'BLOCKED',
     $q$SELECT get_rider_hash_secret()$q$);
   PERFORM pg_temp.count_as('anon', NULL, '25 anon: gpx-routes objects visible', '0',
     $q$SELECT count(*) FROM storage.objects WHERE bucket_id='gpx-routes'$q$);
+  INSERT INTO _r SELECT '25a precondition: gpx-routes objects exist (service view, >0)', '>0',
+    (SELECT count(*) FROM storage.objects WHERE bucket_id='gpx-routes')::text;
 END $$;
 
 SELECT test, expected, outcome,
        CASE expected
          WHEN 'ALLOWED' THEN outcome = 'ALLOWED'
          WHEN 'BLOCKED' THEN outcome LIKE 'BLOCKED%'
+         -- blocked by a D96/Step A guard specifically (a stray RLS denial would not count)
+         WHEN 'GUARD'   THEN outcome LIKE 'BLOCKED: permission\_denied%'
          WHEN '>0'      THEN outcome ~ '^[0-9]+$' AND outcome::bigint > 0
          ELSE outcome = expected
        END AS pass
