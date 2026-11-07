@@ -89,16 +89,18 @@ const RideMapScreen: React.FC = () => {
   const [backgroundReady, setBackgroundReady] = useState(false);
   // W302: prominent-disclosure consent gate ahead of the background-location request.
   const [disclosureVisible, setDisclosureVisible] = useState(false);
-  const disclosureResolveRef = useRef<((allowed: boolean) => void) | null>(null);
-  const answerDisclosure = useCallback((allowed: boolean) => {
+  // 'aborted' = superseded by a newer request or the screen unmounted: the caller
+  // must stop (no request, no advisories, no wakelock, no state updates).
+  type DisclosureAnswer = 'allow' | 'deny' | 'aborted';
+  const disclosureResolveRef = useRef<((answer: DisclosureAnswer) => void) | null>(null);
+  const answerDisclosure = useCallback((answer: DisclosureAnswer) => {
     setDisclosureVisible(false);
     const resolve = disclosureResolveRef.current;
     disclosureResolveRef.current = null;
-    resolve?.(allowed);
+    resolve?.(answer);
   }, []);
-  // Leaving the ride with the disclosure open resolves it as a decline (no request).
   useEffect(() => () => {
-    disclosureResolveRef.current?.(false);
+    disclosureResolveRef.current?.('aborted');
     disclosureResolveRef.current = null;
   }, []);
   const { fleet, myCoords, channelStatus } = useFleetPositions(
@@ -275,10 +277,14 @@ const RideMapScreen: React.FC = () => {
     let bg: Location.PermissionStatus = already.status;
     let consented = bg === 'granted';
     if (!consented) {
-      consented = await new Promise<boolean>((resolve) => {
+      // Settle any still-pending disclosure first so it never hangs.
+      disclosureResolveRef.current?.('aborted');
+      const answer = await new Promise<DisclosureAnswer>((resolve) => {
         disclosureResolveRef.current = resolve;
         setDisclosureVisible(true);
       });
+      if (answer === 'aborted') return;
+      consented = answer === 'allow';
       if (consented) {
         ({ status: bg } = await Location.requestBackgroundPermissionsAsync().catch(
           () => ({ status: 'denied' as Location.PermissionStatus }),
@@ -825,8 +831,8 @@ const RideMapScreen: React.FC = () => {
       {/* W302 Google prominent disclosure — shown before the background-location request. */}
       <LocationDisclosure
         visible={disclosureVisible}
-        onAllow={() => answerDisclosure(true)}
-        onDeny={() => answerDisclosure(false)}
+        onAllow={() => answerDisclosure('allow')}
+        onDeny={() => answerDisclosure('deny')}
       />
     </View>
   );
