@@ -12,7 +12,6 @@ import { supabase } from '../lib/supabase';
 import { resetMeasureIdentity } from '../lib/measure';
 import { resetTelemetryIdentity } from '../lib/telemetry';
 import { isIdentityChange } from '../lib/identityDelta';
-import { TENANT_SLUG } from '../lib/env';
 import { getActiveRide, clearActiveRide } from '../lib/activeRide';
 import { clearRosterCache } from '../lib/rosterCache';
 import { runIdentityTransition, runSignOutSequence } from '../lib/signOutSequence';
@@ -22,40 +21,8 @@ import { runIdentityTransition, runSignOutSequence } from '../lib/signOutSequenc
 // sequence — which is not launch-safe and rolled back the D87 OTA on boot (ee6a927: 0 devices
 // ever ran it). That subtree only ever loaded on the ride screen before; keep it that way.
 
-// Auto-join the build's tenant on sign-in (W191 — staging PoC onboarding).
-//
-// The mobile OTP sign-in creates an auth user but NOT a public.accounts row or a tenant
-// membership — those are created only web/edge-side via ensure_account_exists. So a
-// tester would sign in and see an empty, tenant-scoped fleet. Here we resolve the tenant
-// from the build's slug and call the SAME ensure_account_exists RPC the web rider flow
-// uses, so a tester auto-joins (e.g. racer-sportif) and appears in the fleet — no
-// pre-provisioning, no emails. The membership INSERT is ON CONFLICT DO NOTHING, so an
-// existing member's role is preserved (the captain stays admin); new testers land as
-// 'member'. p_tenant_id is REQUIRED (D39 multi-tenant safety); p_session_cookie_id is a
-// web guest-claim concern and is null on mobile.
-//
-// Idempotent, so it's safe on every sign-in / cold-start restore and repairs a
-// previously cold-signed-in (account-less) user on next launch.
-//
-// STAGING-ONLY: this auto-join must never ship in a prod build — anyone who signed in
-// would auto-join a club. The Rail 3 PoC build points at a fixed staging slug.
-async function ensureTenantMembership(): Promise<void> {
-  if (!TENANT_SLUG) return;
-  try {
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', TENANT_SLUG)
-      .maybeSingle();
-    if (!tenant?.id) return;
-    await supabase.rpc('ensure_account_exists', {
-      p_session_cookie_id: null,
-      p_tenant_id: tenant.id,
-    });
-  } catch {
-    // Best-effort onboarding — never block the session on it.
-  }
-}
+// Club membership / auto-join moved to club/ClubContext.tsx (W303): the active club is
+// resolved per rider at runtime instead of the build-pinned slug (W191's per-build join).
 
 type AuthContextValue = {
   session: Session | null;
@@ -72,20 +39,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
-  // Run the tenant auto-join once per signed-in user (idempotent server-side anyway).
-  const ensuredForUserRef = useRef<string | null>(null);
   // D77 — the last user id we saw, so an auth event can be classified as a genuine identity
   // CHANGE (sign-out, or a swap to a different account) versus a routine token refresh.
   const lastUserIdRef = useRef<string | null>(null);
-
-  // Whenever a session is established (fresh sign-in or cold-start restore), ensure the
-  // user is a member of the build's tenant so they show up in the (tenant-scoped) fleet.
-  useEffect(() => {
-    const uid = session?.user?.id ?? null;
-    if (!uid || ensuredForUserRef.current === uid) return;
-    ensuredForUserRef.current = uid;
-    void ensureTenantMembership();
-  }, [session]);
 
   useEffect(() => {
     let mounted = true;

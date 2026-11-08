@@ -16,7 +16,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
-import { TENANT_SLUG, PRIVACY_POLICY_URL } from '../lib/env';
+import { PRIVACY_POLICY_URL } from '../lib/env';
+import { useClub } from '../club/ClubContext';
 import {
   isTrackingPingEnabled,
   loadTrackingPingFlag,
@@ -51,7 +52,9 @@ const HomeScreen: React.FC = () => {
   // server-side by ride_admin_insert (is_tenant_admin) — same as prod, where
   // ride creators are tenant admins. Show the control only to accounts that
   // can actually use it (PoC captains are seeded as tenant admins).
-  const [canCreate, setCanCreate] = useState(false);
+  // W303: admin of the rider's ACTIVE club (resolved at runtime) may start a ride.
+  const { club } = useClub();
+  const canCreate = club?.role === 'admin';
   // W231: opt-in audible tracking-ping toggle (closed-test field-QA aid). Off by
   // default; hydrate from storage on mount. Source of truth lives in trackingPing.ts.
   const [pingOn, setPingOn] = useState(false);
@@ -97,28 +100,6 @@ const HomeScreen: React.FC = () => {
       Alert.alert('Update check failed', result.message);
     }
     // 'updated' → reloadAsync already restarted the app into the new bundle.
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user || !mounted) return;
-      // Pinned to the build's club slug (multi-membership safe); without a
-      // slug the creator can't mint a valid join URL anyway, so stay hidden.
-      if (!TENANT_SLUG) return;
-      const { data } = await supabase
-        .from('account_tenants')
-        .select('role, tenants!inner(slug)')
-        .eq('account_id', auth.user.id)
-        .eq('tenants.slug', TENANT_SLUG)
-        .limit(1)
-        .maybeSingle();
-      if (mounted) setCanCreate(data?.role === 'admin');
-    })();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   const loadRides = useCallback(async () => {

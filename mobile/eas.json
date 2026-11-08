@@ -14,7 +14,9 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
-        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
+        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
+        "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca"
       }
     },
     "preview": {
@@ -26,7 +28,9 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
-        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
+        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
+        "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca"
       }
     },
     "trial": {
@@ -40,7 +44,9 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
-        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif"
+        "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
+        "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca"
       }
     },
     "production": {
@@ -56,6 +62,8 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
         "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
+        "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca",
         "EXPO_PUBLIC_GIT_COMMIT": "b056cbe"
       }
     },
@@ -71,6 +79,8 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://xybgtbybdhxuwqjfcfkc.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_PPgEfOq3C6AWbenlgXkONg_Tj2jH8_y",
         "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
+        "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
+        "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca",
         "EXPO_PUBLIC_GIT_COMMIT": "993020f"
       }
     }

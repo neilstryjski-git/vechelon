@@ -8,7 +8,7 @@ import QRCode from 'react-native-qrcode-svg';
 
 import { supabase } from '../lib/supabase';
 import { selfRsvpWithIdentity, markRail3Joined } from '../lib/rideJoin';
-import { TENANT_SLUG } from '../lib/env';
+import { useClub } from '../club/ClubContext';
 import { useTheme } from '../theme/ThemeProvider';
 import {
   adHocProximityConflict,
@@ -36,6 +36,7 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 const AdHocCreator: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const theme = useTheme();
+  const { club } = useClub();
   const [phase, setPhase] = useState<'idle' | 'checking' | 'warn' | 'creating'>('idle');
   // Why we're warning: a real conflict, or a failed check (fail-closed copy).
   const [warnReason, setWarnReason] = useState<'conflict' | 'unverified'>('conflict');
@@ -127,25 +128,25 @@ const AdHocCreator: React.FC = () => {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
       if (!userId) throw new Error('Not signed in.');
-      if (!TENANT_SLUG) {
-        // Without the build's club slug the join URL would encode an invalid
-        // host (https://.vechelon.ca/…) and persist it — refuse instead.
-        throw new Error('Tenant not configured — set EXPO_PUBLIC_TENANT_SLUG.');
+      if (!club?.slug) {
+        // Without a resolved club the join URL would encode an invalid host
+        // (https://.vechelon.ca/…) and persist it — refuse instead.
+        throw new Error('No club resolved for this account yet.');
       }
-      // Membership PINNED to the build's club (review finding): a multi-club
-      // account must create the ride in the tenant whose slug the QR encodes,
-      // not an arbitrary membership row.
+      // Membership PINNED to the rider's active club (W303; review finding): a
+      // multi-club account must create the ride in the tenant whose slug the QR
+      // encodes, not an arbitrary membership row. Re-read, never trust the cache.
       const { data: membership } = await supabase
         .from('account_tenants')
         .select('tenant_id, tenants!inner(slug)')
         .eq('account_id', userId)
-        .eq('tenants.slug', TENANT_SLUG)
+        .eq('tenant_id', club.tenantId)
         .limit(1)
         .maybeSingle();
       if (!membership?.tenant_id) throw new Error('No membership in this club.');
 
       const rideId = Crypto.randomUUID();
-      const joinUrl = buildRideJoinUrl(rideId, TENANT_SLUG);
+      const joinUrl = buildRideJoinUrl(rideId, club.slug);
 
       // D51: the off-screen QR PNG capture must NEVER block creating the ride.
       // Try to capture it up front; if it times out / fails, create the ride
