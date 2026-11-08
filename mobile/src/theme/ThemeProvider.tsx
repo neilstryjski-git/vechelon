@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
-import { TENANT_SLUG } from '../lib/env';
+import { useClub } from '../club/ClubContext';
 
 // Rail 3 tenant theming (W178 / Pillar II §5.2, Pillar III R3-18, SD-014).
 //
@@ -37,22 +37,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
+  const { club } = useClub();
+  const tenantId = club?.tenantId ?? null;
 
   useEffect(() => {
     let mounted = true;
+    // W303: Vechelon branding until a club is resolved (sign-in screen, signed out, or a
+    // failed resolution) — Sr PM decision 2026-11-08. Reset on every club change so a
+    // signed-out / switched rider never keeps the previous club's brand.
+    setTheme(DEFAULT_THEME);
 
-    // Resolve the tenant at runtime from the build's slug (env config — NOT a
-    // hard-coded UUID; a hard-coded staging id is exactly what turns the
-    // staging->prod switch into a hunt-and-replace migration). Mirrors the web
-    // rider AuthPage tenant-config query. Anon can read tenants
-    // (tenant_public_select_policy: public SELECT true), so branding loads before
-    // sign-in — the club's identity shows at the front door.
-    if (!TENANT_SLUG) return;
+    // Brand from the rider's active club (ClubContext), resolved at runtime — never a
+    // hard-coded id. Mirrors the web rider AuthPage tenant-config query.
+    if (!tenantId) return () => { mounted = false; };
 
     supabase
       .from('tenants')
       .select('name, primary_color, accent_color, logo_url')
-      .eq('slug', TENANT_SLUG)
+      .eq('id', tenantId)
       .maybeSingle()
       .then(({ data, error }) => {
         if (!mounted || error || !data) return;
@@ -69,7 +71,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [tenantId]);
 
   // Provide defaults immediately and update on fetch — never gate render on the
   // network call, so branding-loading never white-screens the app.

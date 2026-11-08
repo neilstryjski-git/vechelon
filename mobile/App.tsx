@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
+import { ClubProvider } from './src/club/ClubContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { supabase } from './src/lib/supabase';
 import { identityKey } from './src/lib/identityDelta';
@@ -62,11 +63,14 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <AuthedNavigation />
-        </AuthProvider>
-      </ThemeProvider>
+      {/* W303: theme follows the rider's resolved club, so it sits inside Auth + Club. */}
+      <AuthProvider>
+        <ClubProvider>
+          <ThemeProvider>
+            <AuthedNavigation />
+          </ThemeProvider>
+        </ClubProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

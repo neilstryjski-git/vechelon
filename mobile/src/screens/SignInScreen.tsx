@@ -14,7 +14,8 @@ import {
 
 import { supabase } from '../lib/supabase';
 import { authRedirectUrl } from '../lib/deepLinkAuth';
-import { TENANT_SLUG, PRIVACY_POLICY_URL } from '../lib/env';
+import { PRIVACY_POLICY_URL, REVIEWER_EMAIL } from '../lib/env';
+import { isReviewerEmail } from '../lib/reviewerAccess';
 import { useTheme } from '../theme/ThemeProvider';
 
 // Stages of the passwordless OTP flow:
@@ -49,15 +50,25 @@ const SignInScreen: React.FC = () => {
   const showLogo = !!theme.logoUrl && !logoFailed;
 
   const trimmedEmail = email.trim().toLowerCase();
+  // W303: the one configured Play reviewer signs in with a password (no email sent).
+  const reviewer = isReviewerEmail(trimmedEmail, REVIEWER_EMAIL);
 
   const sendCode = async () => {
     if (!trimmedEmail) return;
+
+    if (reviewer) {
+      setErrorMsg('');
+      setCode('');
+      setStage('code');
+      return;
+    }
 
     setStage('sending');
     setErrorMsg('');
 
     const { error } = await supabase.functions.invoke('send-magic-link', {
-      body: { email: trimmedEmail, redirectTo: authRedirectUrl, slug: TENANT_SLUG },
+      // W303: no club slug — the club isn't known before sign-in, so the email is Vechelon-branded.
+      body: { email: trimmedEmail, redirectTo: authRedirectUrl },
     });
 
     if (error) {
@@ -90,11 +101,13 @@ const SignInScreen: React.FC = () => {
     // type: 'email' verifies the email OTP from generateLink. On success supabase-js
     // sets the session and AuthContext's onAuthStateChange flips the gate — no
     // navigation needed here.
-    const { error } = await supabase.auth.verifyOtp({
-      email: trimmedEmail,
-      token,
-      type: 'email',
-    });
+    const { error } = reviewer
+      ? await supabase.auth.signInWithPassword({ email: trimmedEmail, password: code })
+      : await supabase.auth.verifyOtp({
+          email: trimmedEmail,
+          token,
+          type: 'email',
+        });
 
     if (error) {
       setStage('code');
@@ -111,25 +124,43 @@ const SignInScreen: React.FC = () => {
       >
         <Text style={styles.brand}>{theme.clubName.toUpperCase()}</Text>
         <Text style={[styles.subtitle, { color: theme.accentColor }]}>
-          Enter your code
+          {reviewer ? 'Enter your password' : 'Enter your code'}
         </Text>
 
         <Text style={styles.body}>
-          We sent a code to {trimmedEmail}. Enter it below to sign in.
+          {reviewer
+            ? 'Reviewer account — enter the password from the App Access instructions.'
+            : `We sent a code to ${trimmedEmail}. Enter it below to sign in.`}
         </Text>
-        <TextInput
-          style={[styles.input, styles.codeInput]}
-          value={code}
-          onChangeText={(t) =>
-            setCode(t.replace(/[^0-9]/g, '').slice(0, MAX_CODE_LENGTH))
-          }
-          placeholder="••••••"
-          placeholderTextColor="#7A7A7A"
-          keyboardType="number-pad"
-          autoFocus
-          maxLength={MAX_CODE_LENGTH}
-          editable={!verifying}
-        />
+        {reviewer ? (
+          <TextInput
+            style={styles.input}
+            value={code}
+            onChangeText={setCode}
+            placeholder="Password"
+            placeholderTextColor="#7A7A7A"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            maxLength={128}
+            editable={!verifying}
+          />
+        ) : (
+          <TextInput
+            style={[styles.input, styles.codeInput]}
+            value={code}
+            onChangeText={(t) =>
+              setCode(t.replace(/[^0-9]/g, '').slice(0, MAX_CODE_LENGTH))
+            }
+            placeholder="••••••"
+            placeholderTextColor="#7A7A7A"
+            keyboardType="number-pad"
+            autoFocus
+            maxLength={MAX_CODE_LENGTH}
+            editable={!verifying}
+          />
+        )}
 
         {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
 
