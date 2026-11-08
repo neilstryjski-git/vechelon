@@ -13,7 +13,8 @@ name: Rail 3 CI
 
 on:
   pull_request:
-    branches: [master]
+    # W306: rail3-integration is where the Rail 3 app lands; its PRs ran no CI before.
+    branches: [master, rail3-integration]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
