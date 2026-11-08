@@ -11,8 +11,9 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  // D97 r2: caller must be signed in and allowed to end this ride — the same people the
-  // rides UPDATE policy lets end it (an affiliated member of the ride's club, or its creator).
+  // D97 r2: caller must be signed in and allowed to end this ride — the effective rides UPDATE
+  // gate (ride_admin_modify AND restrictive rides_tenant_scope_update): a club admin, or the
+  // ride's creator while still affiliated with the club.
   // Without this, anyone holding the public anon key could spend a club's AI credits and
   // overwrite its ride summaries.
   const authHeader = req.headers.get('Authorization');
@@ -48,13 +49,14 @@ serve(async (req) => {
 
     const { data: membership, error: memberError } = await supabaseClient
       .from('account_tenants')
-      .select('account_id')
+      .select('role, status')
       .eq('account_id', user.id)
       .eq('tenant_id', ride.tenant_id)
-      .eq('status', 'affiliated')
       .maybeSingle();
     if (memberError) throw memberError;
-    if (!membership && ride.created_by !== user.id) {
+    const isClubAdmin = membership?.role === 'admin';
+    const isAffiliatedCreator = ride.created_by === user.id && membership?.status === 'affiliated';
+    if (!isClubAdmin && !isAffiliatedCreator) {
       // Same answer as a missing ride, so the endpoint can't be used to probe other clubs' rides.
       return json({ error: 'Ride not found' }, 404);
     }

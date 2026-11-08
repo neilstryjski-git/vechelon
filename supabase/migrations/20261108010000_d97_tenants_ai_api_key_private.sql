@@ -53,7 +53,8 @@ BEGIN
   FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF has_table_privilege(r, 'public.tenant_ai_secrets', 'SELECT')
        OR has_table_privilege(r, 'public.tenant_ai_secrets', 'INSERT')
-       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'UPDATE') THEN
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'UPDATE')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'DELETE') THEN
       RAISE EXCEPTION 'D97: % has privileges on tenant_ai_secrets', r;
     END IF;
   END LOOP;
