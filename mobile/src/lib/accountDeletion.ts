@@ -100,7 +100,7 @@ export async function runAccountDeletion(
   if (onRide) {
     steps.push('blocked_active_ride');
     return {
-      outcome: { ok: false, reason: 'active_ride', message: 'Leave your ride first, then delete your account.' },
+      outcome: { ok: false, reason: 'active_ride', message: 'Leave your ride first, then delete your account. Not on a ride? Sign out and back in (that clears it), then try again.' },
       steps,
     };
   }

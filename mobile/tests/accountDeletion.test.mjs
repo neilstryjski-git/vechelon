@@ -39,6 +39,7 @@ test('on an active ride (sync, async, or unreadable holder): refuses before call
     const { outcome, steps } = await runAccountDeletion(d);
     assert.equal(outcome.ok, false);
     assert.equal(outcome.reason, 'active_ride');
+    assert.match(outcome.message, /Sign out and back in/); // the exit for a stale holder
     assert.deepEqual(d.calls, []);
     assert.deepEqual(steps, ['blocked_active_ride']);
   }
