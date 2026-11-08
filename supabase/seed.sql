@@ -30,7 +30,7 @@ DECLARE
   f text;
   service_only text[] := ARRAY[
     'public.get_github_voc_pat()', 'public.get_rider_hash_secret()', 'public.reverse_rider_hash(text)',
-    'public.system_owner_email(uuid)', 'public.account_deletion_preflight(uuid)',
+    'public.account_deletion_preflight(uuid)',
     'public.delete_account_data(uuid)', 'public.register_system_owner(uuid)'
   ];
   authenticated_only text[] := ARRAY[

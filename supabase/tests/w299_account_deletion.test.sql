@@ -17,7 +17,8 @@ DO $$
 DECLARE f text;
 BEGIN
   FOREACH f IN ARRAY ARRAY['public.delete_account_data(uuid)', 'public.account_deletion_preflight(uuid)',
-                           'public.register_system_owner(uuid)', 'public.system_owner_email(uuid)'] LOOP
+                           'public.register_system_owner(uuid)'] LOOP
+    IF to_regprocedure(f) IS NULL THEN RAISE EXCEPTION 'W299 gate FAILED: % missing', f; END IF;
     IF has_function_privilege('anon', f, 'EXECUTE') THEN
       RAISE EXCEPTION 'W299 gate FAILED: anon can EXECUTE %', f;
     END IF;
@@ -42,8 +43,9 @@ END $$;
 -- ── 2. Fixtures ─────────────────────────────────────────────────────────────────────────
 -- Club T1 and club T2.
 -- U = the user deleting themselves (admin of T1, member of T2); A = second T1 admin;
--- S1 = T1's genuine system owner (admin-API markers); F = a look-alike: a REAL account given
--- T2's owner address (what change-member-email allows) with no markers; X = a bystander.
+-- S1 = T1's genuine system owner (admin-API markers, random address); F = a look-alike: a
+-- REAL account given an owner-style address for T2 (what change-member-email or a magic-link
+-- sign-up allows) with no markers; X = a bystander.
 SET session_replication_role = 'replica';  -- skip the accounts/participants sync triggers
 
 INSERT INTO tenants (id, name, slug, primary_color, accent_color) VALUES
@@ -84,11 +86,12 @@ INSERT INTO route_library (tenant_id, name, file_path, created_by) VALUES
 INSERT INTO ride_participants (ride_id, account_id, display_name, email, phone, role, last_lat, last_long) VALUES
   ('a2991111-0000-0000-0000-000000000001', 'a2999999-0000-0000-0000-000000000001', 'Una User', 'w299-user@test.local', '+15550000001', 'captain', 1.0, 2.0),
   ('a2991111-0000-0000-0000-000000000002', 'a2999999-0000-0000-0000-000000000004', 'Bea Bystander', 'w299-bystander@test.local', '+15550000004', 'member', NULL, NULL);
--- Guest rows with no account link: one under U's email (claim-by-email), one under U's
--- session cookie only, and a bystander guest sharing U's PHONE (must NOT be touched).
+-- Guest rows with no account link: one under U's email (claim-by-email) — anonymised; and two
+-- that must NOT be touched: someone else on U's browser (same session cookie) and a guest
+-- who shares U's phone number.
 INSERT INTO ride_participants (ride_id, account_id, display_name, email, phone, role, session_cookie_id) VALUES
   ('a2991111-0000-0000-0000-000000000002', NULL, 'Una (guest)', 'W299-User@test.local', '+15550000001', 'guest', NULL),
-  ('a2991111-0000-0000-0000-000000000002', NULL, 'Una (cookie)', NULL, NULL, 'guest', 'w299-cookie-u'),
+  ('a2991111-0000-0000-0000-000000000002', NULL, 'Bo Sharedbrowser', NULL, NULL, 'guest', 'w299-cookie-u'),
   ('a2991111-0000-0000-0000-000000000002', NULL, 'Phil Sharedphone', NULL, '+15550000001', 'guest', NULL);
 
 -- A phone shell U graduated from.
@@ -164,13 +167,8 @@ ROLLBACK TO SAVEPOINT s_owner;
 -- ride_support move has to de-duplicate.
 SET session_replication_role = 'replica';
 INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, banned_until) VALUES
-  ('a2999999-0000-0000-0000-000000000006', 'w299-s2-placeholder@test.local', 'authenticated', 'authenticated',
+  ('a2999999-0000-0000-0000-000000000006', 'former-member+5b2e9c1a-random@system.vechelon.invalid', 'authenticated', 'authenticated',
    '{"system_owner": true, "tenant_id": "a2990000-0000-0000-0000-00000000000b"}', now() + interval '100 years');
--- The look-alike must lose the address for the genuine owner to take it (unique email).
-UPDATE accounts SET email = 'fay@test.local' WHERE id = 'a2999999-0000-0000-0000-000000000005';
-UPDATE auth.users SET email = 'fay@test.local' WHERE id = 'a2999999-0000-0000-0000-000000000005';
-UPDATE auth.users SET email = 'former-member+a2990000-0000-0000-0000-00000000000b@system.vechelon.invalid'
-WHERE id = 'a2999999-0000-0000-0000-000000000006';
 SET session_replication_role = 'origin';
 SELECT public.register_system_owner('a2990000-0000-0000-0000-00000000000b');
 
@@ -188,8 +186,8 @@ DECLARE
   s2 uuid := 'a2999999-0000-0000-0000-000000000006';
 BEGIN
   r := public.delete_account_data(u);
-  IF (r->>'participants_anonymised')::int <> 3 THEN
-    RAISE EXCEPTION 'W299 gate FAILED: expected 3 participant rows anonymised, got %', r;
+  IF (r->>'participants_anonymised')::int <> 2 THEN
+    RAISE EXCEPTION 'W299 gate FAILED: expected 2 participant rows anonymised, got %', r;
   END IF;
 
   IF EXISTS (SELECT 1 FROM accounts WHERE id = u) THEN RAISE EXCEPTION 'W299 gate FAILED: accounts row survived'; END IF;
@@ -215,8 +213,7 @@ BEGIN
 
   -- Nothing identifies U any more.
   SELECT count(*) INTO n FROM ride_participants
-  WHERE account_id = u OR lower(email) = 'w299-user@test.local' OR session_cookie_id = 'w299-cookie-u'
-     OR display_name ILIKE 'una%';
+  WHERE account_id = u OR lower(email) = 'w299-user@test.local' OR display_name ILIKE 'una%';
   IF n <> 0 THEN RAISE EXCEPTION 'W299 gate FAILED: % participant row(s) still identify the user', n; END IF;
   IF EXISTS (SELECT 1 FROM ride_participants WHERE display_name = 'Deleted rider' AND (last_lat IS NOT NULL OR last_long IS NOT NULL)) THEN
     RAISE EXCEPTION 'W299 gate FAILED: last position kept on an anonymised row';
@@ -228,6 +225,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM ride_participants WHERE display_name = 'Phil Sharedphone' AND phone = '+15550000001') THEN
     RAISE EXCEPTION 'W299 gate FAILED: a phone-only match anonymised someone else';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM ride_participants WHERE display_name = 'Bo Sharedbrowser' AND session_cookie_id = 'w299-cookie-u') THEN
+    RAISE EXCEPTION 'W299 gate FAILED: a cookie-only match anonymised someone else';
   END IF;
   IF EXISTS (SELECT 1 FROM account_tenants WHERE account_id IN (s1, s2)) THEN
     RAISE EXCEPTION 'W299 gate FAILED: a system owner holds a membership';

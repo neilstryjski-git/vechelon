@@ -14,20 +14,23 @@
 --   DELETE     pending_members rows the user graduated from (same person's phone / name /
 --              emergency contact) and the user's rail3_sag_allowlist entries (privacy-
 --              positive additions to the approved decision, flagged on W299).
---   ANONYMISE  also guest ride_participants rows under the user's email or the account's
---              session cookie. Not matched by phone alone: a shared phone would anonymise
---              someone else's rows.
+--   ANONYMISE  also guest ride_participants rows under the user's email. Not matched by
+--              phone or session cookie alone: a shared phone or shared browser would
+--              anonymise someone else's rows (and ensure_account_exists already links the
+--              user's own cookie rows to the account at sign-in, D43).
 --   SET NULL   FKs (analytics_events, pending_members.created_by, rail3_telemetry_events) are
 --              left to cascade as-is.
 --
--- Per-club system owner: an auth user + accounts row with the email
--- `former-member+<tenant_id>@system.vechelon.invalid`, name 'Former member', NO membership
--- (no club powers), no password, banned in auth. The delete-account edge function creates
--- the auth user (only the Auth admin API can) with app_metadata.system_owner = true; then
--- register_system_owner VERIFIES it and records it in public.tenant_system_owners.
--- Deletion trusts ONLY that registry, never an email match: an admin can give a real
--- account any unused address through change-member-email, but cannot set app_metadata or
--- a ban, so a look-alike account fails verification and deletion fails closed.
+-- Per-club system owner: an auth user + accounts row named 'Former member' with a RANDOM
+-- `former-member+<random>@system.vechelon.invalid` address, NO membership (no club
+-- powers), no password, banned in auth. The delete-account edge function creates the auth
+-- user (only the Auth admin API can) with app_metadata {system_owner, tenant_id}; then
+-- register_system_owner finds it BY THOSE MARKERS, verifies it, and records it in
+-- public.tenant_system_owners. Deletion trusts ONLY that registry.
+-- Nothing keys on the address: app_metadata and bans are settable only through the Auth
+-- admin API, so an account given a look-alike address (change-member-email, magic-link
+-- sign-up) is never registered, and because the address is random it can't be squatted
+-- in advance to block owner creation either.
 --
 -- Both routines are service-role only: the delete-account edge function verifies the
 -- caller's JWT and passes ONLY that verified uid. Nothing here trusts a client-supplied id,
@@ -44,14 +47,7 @@
 -- guards are neither tripped nor weakened.
 -- =====================================================================
 
-CREATE OR REPLACE FUNCTION public.system_owner_email(p_tenant_id uuid)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-SET search_path = public
-AS $$
-  SELECT 'former-member+' || p_tenant_id::text || '@system.vechelon.invalid';
-$$;
+DROP FUNCTION IF EXISTS public.system_owner_email(uuid);
 
 -- Registry of verified system owners, one per club. Service-role only.
 CREATE TABLE IF NOT EXISTS public.tenant_system_owners (
@@ -86,14 +82,16 @@ BEGIN
     RETURN v_id;
   END IF;
 
-  v_email := public.system_owner_email(p_tenant_id);
   -- app_metadata and bans are settable only through the Auth admin API (never by a user or
   -- by change-member-email), so together they prove the edge function made this identity.
-  SELECT id INTO v_id FROM auth.users
-  WHERE lower(email) = v_email
-    AND raw_app_meta_data->>'system_owner' = 'true'
+  -- If an earlier attempt died after createUser, its user is found here (oldest first).
+  SELECT id, lower(email) INTO v_id, v_email FROM auth.users
+  WHERE raw_app_meta_data->>'system_owner' = 'true'
     AND raw_app_meta_data->>'tenant_id' = p_tenant_id::text
-    AND banned_until > now() + interval '1 year';
+    AND banned_until > now() + interval '1 year'
+    AND email LIKE 'former-member+%@system.vechelon.invalid'
+  ORDER BY created_at, id
+  LIMIT 1;
   IF v_id IS NULL THEN
     RAISE EXCEPTION 'system_owner_unverified:%', p_tenant_id USING ERRCODE = 'P0001';
   END IF;
@@ -185,7 +183,6 @@ DECLARE
   v_email    text;
   v_tenant   uuid;
   v_owner    uuid;
-  v_cookie   text;
   v_anon     integer := 0;
 BEGIN
   IF p_uid IS NULL THEN
@@ -209,7 +206,6 @@ BEGIN
   IF v_email IS NULL THEN
     SELECT lower(email) INTO v_email FROM public.accounts WHERE id = p_uid;
   END IF;
-  SELECT session_cookie_id INTO v_cookie FROM public.accounts WHERE id = p_uid;
 
   -- 1. Reassign club-owned records to each club's system owner.
   FOR v_tenant IN SELECT (jsonb_array_elements_text(v_pre->'owner_tenants'))::uuid LOOP
@@ -238,8 +234,7 @@ BEGIN
     WHERE s.ride_id = r.id AND r.tenant_id = v_tenant AND s.account_id = p_uid;
   END LOOP;
 
-  -- 2. Anonymise ride participation: linked rows, and guest rows under the same email or
-  --    the account's own session cookie.
+  -- 2. Anonymise ride participation: linked rows, and guest rows under the same email.
   UPDATE public.ride_participants
   SET account_id = NULL,
       display_name = 'Deleted rider',
@@ -249,8 +244,7 @@ BEGIN
       last_lat = NULL,
       last_long = NULL
   WHERE account_id = p_uid
-     OR (v_email IS NOT NULL AND email IS NOT NULL AND lower(email) = v_email)
-     OR (v_cookie IS NOT NULL AND session_cookie_id = v_cookie);
+     OR (v_email IS NOT NULL AND email IS NOT NULL AND lower(email) = v_email);
   GET DIAGNOSTICS v_anon = ROW_COUNT;
 
   -- 3. Actor references (Rail 3 schema only).
@@ -281,11 +275,9 @@ $$;
 
 -- Service-role only. REVOKE FROM PUBLIC alone leaves Supabase's default grants to anon /
 -- authenticated in place, so revoke those explicitly too (verified with has_function_privilege).
-REVOKE ALL ON FUNCTION public.system_owner_email(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.register_system_owner(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.account_deletion_preflight(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_account_data(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.system_owner_email(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.register_system_owner(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.account_deletion_preflight(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_account_data(uuid) TO service_role;

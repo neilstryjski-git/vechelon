@@ -37,15 +37,16 @@ function json(body: unknown, status: number): Response {
   })
 }
 
-function systemOwnerEmail(tenantId: string): string {
-  return `former-member+${tenantId}@system.vechelon.invalid`
+// Random per attempt, so the address can't be claimed in advance to block creation;
+// registration identifies the owner by admin-only app_metadata, never by address.
+function systemOwnerEmail(): string {
+  return `former-member+${crypto.randomUUID()}@system.vechelon.invalid`
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Retry-safe: if an earlier call created the auth user but died before registering it,
-// createUser now fails on the duplicate email and register_system_owner still finds and
-// verifies that user. Deletion trusts only the registry, never an email match (see the
+// Retry-safe: register_system_owner finds the owner by its admin-only markers, so an
+// earlier half-finished attempt is picked up. Deletion trusts only the registry (see the
 // migration header for why).
 async function ensureSystemOwner(admin: SupabaseClient, tenantId: string): Promise<void> {
   if (!UUID_RE.test(tenantId)) throw new Error('bad tenant id')
@@ -54,9 +55,10 @@ async function ensureSystemOwner(admin: SupabaseClient, tenantId: string): Promi
   if (lookupErr) throw new Error('system owner lookup failed')
   if (existing) return
 
-  // A duplicate-email error here is expected on a retry; registration decides.
-  await admin.auth.admin.createUser({
-    email: systemOwnerEmail(tenantId),
+  // If an earlier attempt created the user but died before registering it, registration
+  // finds that user; this one then stays an unused, banned, membership-less identity.
+  const { error: createErr } = await admin.auth.admin.createUser({
+    email: systemOwnerEmail(),
     email_confirm: true,
     ban_duration: SYSTEM_OWNER_BAN,
     // app_metadata is admin-only, so it marks this identity as ours (users can edit
@@ -64,6 +66,8 @@ async function ensureSystemOwner(admin: SupabaseClient, tenantId: string): Promi
     app_metadata: { system_owner: true, tenant_id: tenantId },
     user_metadata: { name: SYSTEM_OWNER_NAME },
   })
+
+  if (createErr) console.error('[delete-account] system owner createUser:', createErr.message)
 
   const { error: regErr } = await admin.rpc('register_system_owner', { p_tenant_id: tenantId })
   if (regErr) throw new Error('could not register system owner')
