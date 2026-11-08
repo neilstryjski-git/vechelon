@@ -3,7 +3,9 @@
 // The open-testing build is not pinned to one club. After sign-in:
 //   1. a membership in the PRIMARY club (Racer Sportif on staging) wins;
 //   2. otherwise a membership in the FALLBACK club (Bikes and Beers on staging);
-//   3. otherwise the rider is joined to the FALLBACK club (auto-join, Sr PM: yes).
+//   3. otherwise an active membership in any other club (e.g. the Play reviewer's demo
+//      club) — admin rows first — so nobody already in a club is pushed into the fallback;
+//   4. otherwise the rider is joined to the FALLBACK club (auto-join, Sr PM: yes).
 // A rider in both clubs gets the primary. Inactive memberships (suspended / archived /
 // deleted) don't count. Both slugs are BUILD CONFIG (eas.json), never literals in logic:
 // on prod Bikes and Beers is a real club, so a prod build must point FALLBACK at a demo
@@ -38,6 +40,8 @@ export function chooseActiveClub(
   if (primary) return { kind: 'member', membership: primary };
   const fallback = find(fallbackSlug);
   if (fallback) return { kind: 'member', membership: fallback };
+  const other = active.find((x) => x.role === 'admin') ?? active[0];
+  if (other) return { kind: 'member', membership: other };
   // Never auto-join a club the rider was removed from (inactive row present).
   if (fallbackSlug && !memberships.some((m) => m.slug === fallbackSlug)) {
     return { kind: 'join-fallback', slug: fallbackSlug };

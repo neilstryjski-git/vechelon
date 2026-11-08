@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isReviewerEmail } from '../src/lib/reviewerAccess.ts';
+import { isReviewerEmail, reviewerEmailFor, STAGING_SUPABASE_URL } from '../src/lib/reviewerAccess.ts';
 
 const R = 'play-review@vechelon.ca';
 
@@ -21,4 +21,12 @@ test('unset reviewer config disables the path', () => {
   assert.equal(isReviewerEmail(R, ''), false);
   assert.equal(isReviewerEmail('', ''), false);
   assert.equal(isReviewerEmail(' ', '  '), false);
+});
+
+test('reviewer email exists only on the staging backend', () => {
+  assert.equal(reviewerEmailFor(STAGING_SUPABASE_URL, R), R);
+  assert.equal(reviewerEmailFor(STAGING_SUPABASE_URL + '/', R), R);
+  assert.equal(reviewerEmailFor('https://drktcxggaizkbvqccfhp.supabase.co', R), '');
+  assert.equal(reviewerEmailFor('https://xybgtbybdhxuwqjfcfkc.supabase.co.evil.com', R), '');
+  assert.equal(reviewerEmailFor('', R), '');
 });

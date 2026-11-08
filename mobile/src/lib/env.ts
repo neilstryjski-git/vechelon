@@ -1,3 +1,5 @@
+import { reviewerEmailFor } from './reviewerAccess';
+
 // Reads Expo public env vars. EXPO_PUBLIC_* are inlined at build time, mirroring
 // the admin/ web app's VITE_SUPABASE_* convention (admin/src/lib/supabase.ts).
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -12,9 +14,12 @@ export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 export const PRIMARY_CLUB_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG ?? '';
 export const FALLBACK_CLUB_SLUG = process.env.EXPO_PUBLIC_FALLBACK_CLUB_SLUG ?? '';
 
-// W303 — the single Google Play reviewer identity (lib/reviewerAccess.ts). Staging only;
-// leave unset in any build that should have no reviewer path.
-export const REVIEWER_EMAIL = process.env.EXPO_PUBLIC_REVIEWER_EMAIL ?? '';
+// W303 — the single Google Play reviewer identity (lib/reviewerAccess.ts). Enforced
+// staging-only: empty unless SUPABASE_URL is exactly the staging project.
+export const REVIEWER_EMAIL = reviewerEmailFor(
+  SUPABASE_URL,
+  process.env.EXPO_PUBLIC_REVIEWER_EMAIL ?? '',
+);
 
 // Hosted privacy policy (W224) — linked in-app for Play compliance. Single source
 // so SignInScreen (pre-auth) and HomeScreen (post-auth) stay in sync.

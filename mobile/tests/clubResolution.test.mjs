@@ -29,8 +29,17 @@ test('no memberships -> join the fallback club', () => {
   assert.deepEqual(chooseActiveClub([], RS, BB), { kind: 'join-fallback', slug: BB });
 });
 
-test('member of some other club only -> join the fallback club', () => {
-  assert.deepEqual(chooseActiveClub([m('lakeside-wheelers')], RS, BB), { kind: 'join-fallback', slug: BB });
+test('member of some other club only -> keeps that club (never pushed into the fallback)', () => {
+  assert.equal(chooseActiveClub([m('vechelon-demo', 'affiliated', 'admin')], RS, BB).membership.slug, 'vechelon-demo');
+});
+
+test('several other clubs -> the admin one first', () => {
+  const c = chooseActiveClub([m('a-club'), m('b-club', 'affiliated', 'admin')], RS, BB);
+  assert.equal(c.membership.slug, 'b-club');
+});
+
+test('only inactive other-club rows -> join the fallback club', () => {
+  assert.deepEqual(chooseActiveClub([m('a-club', 'archived')], RS, BB), { kind: 'join-fallback', slug: BB });
 });
 
 test('inactive primary membership does not count', () => {
@@ -53,5 +62,5 @@ test('no fallback configured -> none', () => {
 
 test('no primary configured -> fallback rules still apply', () => {
   assert.equal(chooseActiveClub([m(BB)], '', BB).membership.slug, BB);
-  assert.deepEqual(chooseActiveClub([m(RS)], '', BB), { kind: 'join-fallback', slug: BB });
+  assert.equal(chooseActiveClub([m(RS)], '', BB).membership.slug, RS); // kept as an 'other' club
 });
