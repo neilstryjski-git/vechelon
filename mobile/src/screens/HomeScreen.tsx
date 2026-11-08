@@ -27,6 +27,7 @@ import { sendDiagnosticLog } from '../lib/diagnostics';
 import { checkAndApplyUpdate } from '../lib/otaUpdate';
 import { versionLabel } from '../lib/version';
 import AdHocCreator from '../components/AdHocCreator';
+import DeleteAccountModal from '../components/DeleteAccountModal';
 import type { RootStackParamList } from './../navigation/RootNavigator';
 
 interface ActiveRide {
@@ -58,6 +59,8 @@ const HomeScreen: React.FC = () => {
   // W231: opt-in audible tracking-ping toggle (closed-test field-QA aid). Off by
   // default; hydrate from storage on mount. Source of truth lives in trackingPing.ts.
   const [pingOn, setPingOn] = useState(false);
+  // W300: Play-required in-app account deletion.
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -189,13 +192,28 @@ const HomeScreen: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      <Text
-        style={styles.privacyLink}
-        onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
-        accessibilityRole="link"
-      >
-        Privacy Policy
-      </Text>
+      <View style={styles.linkRow}>
+        <Text
+          style={styles.privacyLink}
+          onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+          accessibilityRole="link"
+        >
+          Privacy Policy
+        </Text>
+        <Text
+          style={[styles.privacyLink, styles.deleteLink]}
+          onPress={() => setDeleteOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+        >
+          Delete account
+        </Text>
+      </View>
+      <DeleteAccountModal
+        visible={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        accent={theme.primaryColor}
+      />
 
       {/* Which JS bundle is running — OTA vs baked, at a glance (no sink query needed).
           selectable so the commit can be copied. Closed-test aid; strip for production. */}
@@ -260,6 +278,8 @@ const styles = StyleSheet.create({
   },
   label: { color: '#9A9A9A', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' },
   email: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 4 },
+  linkRow: { flexDirection: 'row', alignItems: 'center' },
+  deleteLink: { color: '#C0675E', marginLeft: 18 },
   privacyLink: {
     color: '#7A7A7A',
     fontSize: 11,
