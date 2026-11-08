@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { supabase } from '../lib/supabase';
-import { getActiveRide, clearActiveRide } from '../lib/activeRide';
+import { clearActiveRide, readPersistedActiveRide } from '../lib/activeRide';
 import { clearRosterCache } from '../lib/rosterCache';
 import {
   DELETE_CONFIRM_WORD,
@@ -26,7 +26,17 @@ import {
 // tap Continue; (2) type DELETE and tap Delete my account. Cancel at either step deletes nothing.
 // On success the sign-out lands the app on SignInScreen via the auth state change.
 
-type Stage = 'explain' | 'confirm' | 'working';
+type Stage = 'explain' | 'confirm' | 'working' | 'done_unsigned';
+
+// After a failed call: does the server still know this user? getUser validates the JWT against
+// the auth server, so a deleted user comes back as an error with no user.
+async function isAccountGone(): Promise<boolean> {
+  const { data, error } = await supabase.auth.getUser();
+  if (data?.user) return false;
+  const status = (error as { status?: number } | null)?.status;
+  // 401/403/404 = the server rejects this user; anything else (offline) proves nothing.
+  return status === 401 || status === 403 || status === 404;
+}
 
 async function invokeDelete(): Promise<DeleteResponse> {
   // No body: the server acts ONLY on the session JWT's verified uid.
@@ -69,8 +79,12 @@ const DeleteAccountModal: React.FC<{ visible: boolean; onClose: () => void; acce
     setStage('working');
     setErrorMsg('');
     const { outcome } = await runAccountDeletion({
-      hasActiveRide: () => getActiveRide() !== null,
+      // The DURABLE holder (W286): set while tracking a ride, cleared by Leave Ride, and
+      // restored on a cold start mid-ride. The in-memory holder deliberately outlives Leave
+      // Ride (D87), so it would block riders who already left.
+      hasActiveRide: async () => (await readPersistedActiveRide()) !== null,
       invokeDelete,
+      isAccountGone,
       clearActive: clearActiveRide,
       clearRosterCache: () => clearRosterCache('auth_transition'),
       // Default scope ('global') — supabase-patterns Pattern 4. The local fallback runs only
@@ -79,6 +93,10 @@ const DeleteAccountModal: React.FC<{ visible: boolean; onClose: () => void; acce
       signOutLocal: () => supabase.auth.signOut({ scope: 'local' }),
     });
     if (outcome.ok) {
+      if (!outcome.signedOut) {
+        setStage('done_unsigned');
+        return;
+      }
       // SIGNED_OUT unmounts the signed-in stack; closing is just tidy-up.
       onClose();
       return;
@@ -94,7 +112,11 @@ const DeleteAccountModal: React.FC<{ visible: boolean; onClose: () => void; acce
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Text style={styles.title}>Delete your account?</Text>
 
-            {stage === 'explain' ? (
+            {stage === 'done_unsigned' ? (
+              <Text style={styles.body}>
+                Your account is deleted. Close and reopen the app to finish signing out.
+              </Text>
+            ) : stage === 'explain' ? (
               <>
                 <Text style={styles.section}>This permanently deletes</Text>
                 {DELETION_EXPLANATION.map((line) => (

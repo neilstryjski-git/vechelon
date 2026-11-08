@@ -15,6 +15,7 @@ function deps(overrides = {}) {
     calls,
     hasActiveRide: () => false,
     invokeDelete: async () => { calls.push('invokeDelete'); return { ok: true }; },
+    isAccountGone: async () => { calls.push('isAccountGone'); return false; },
     clearActive: () => calls.push('clearActive'),
     clearRosterCache: () => calls.push('clearRosterCache'),
     signOut: async () => { calls.push('signOut'); return { error: null }; },
@@ -26,18 +27,20 @@ function deps(overrides = {}) {
 test('happy path: delete, then clear holder + roster cache, then sign out (in that order)', async () => {
   const d = deps();
   const { outcome, steps } = await runAccountDeletion(d);
-  assert.deepEqual(outcome, { ok: true });
+  assert.deepEqual(outcome, { ok: true, signedOut: true });
   assert.deepEqual(d.calls, ['invokeDelete', 'clearActive', 'clearRosterCache', 'signOut']);
   assert.deepEqual(steps, ['delete_called', 'clear_active', 'clear_roster_cache', 'sign_out']);
 });
 
-test('on an active ride: refuses before calling the server, touches nothing', async () => {
-  const d = deps({ hasActiveRide: () => true });
-  const { outcome, steps } = await runAccountDeletion(d);
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.reason, 'active_ride');
-  assert.deepEqual(d.calls, []);
-  assert.deepEqual(steps, ['blocked_active_ride']);
+test('on an active ride (sync, async, or unreadable holder): refuses before calling the server', async () => {
+  for (const hasActiveRide of [() => true, async () => true, async () => { throw new Error('storage'); }]) {
+    const d = deps({ hasActiveRide });
+    const { outcome, steps } = await runAccountDeletion(d);
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'active_ride');
+    assert.deepEqual(d.calls, []);
+    assert.deepEqual(steps, ['blocked_active_ride']);
+  }
 });
 
 test('last admin refusal: shows the server message, nothing local changes', async () => {
@@ -55,18 +58,46 @@ test('platform admin refusal is reported as such', async () => {
   assert.deepEqual(d.calls, []);
 });
 
-test('server failure or a thrown network error: generic message, stays signed in', async () => {
+test('failure with the account still present: retry message (never "nothing was removed"), stays signed in', async () => {
   for (const invokeDelete of [
     async () => ({ ok: false, status: 500, error: 'deletion_failed', message: 'raw server text' }),
     async () => { throw new Error('network down'); },
   ]) {
     const d = deps({ invokeDelete });
-    const { outcome } = await runAccountDeletion(d);
+    const { outcome, steps } = await runAccountDeletion(d);
     assert.equal(outcome.ok, false);
     assert.equal(outcome.reason, 'failed');
-    assert.match(outcome.message, /Nothing was removed/);
-    assert.deepEqual(d.calls, []);
+    assert.match(outcome.message, /try again/);
+    assert.doesNotMatch(outcome.message, /nothing was removed/i);
+    assert.doesNotMatch(outcome.message, /raw server text/);
+    assert.deepEqual(d.calls, ['isAccountGone']);
+    assert.deepEqual(steps, ['delete_called', 'delete_failed']);
   }
+});
+
+test('failure but the server confirms the account is gone (dropped response): finishes locally', async () => {
+  const d = deps({
+    invokeDelete: async () => { throw new Error('connection reset'); },
+    isAccountGone: async () => true,
+  });
+  const { outcome, steps } = await runAccountDeletion(d);
+  assert.deepEqual(outcome, { ok: true, signedOut: true });
+  assert.deepEqual(steps, ['delete_called', 'delete_failed', 'account_gone', 'clear_active', 'clear_roster_cache', 'sign_out']);
+});
+
+test('isAccountGone throwing counts as not gone', async () => {
+  const d = deps({ invokeDelete: async () => ({ ok: false }), isAccountGone: async () => { throw new Error('offline'); } });
+  const { outcome } = await runAccountDeletion(d);
+  assert.equal(outcome.reason, 'failed');
+});
+
+test('both sign-outs failing: still ok (account gone) but signedOut=false so the UI can say so', async () => {
+  const d = deps({
+    signOut: async () => { throw new Error('offline'); },
+    signOutLocal: async () => ({ error: new Error('storage') }),
+  });
+  const { outcome } = await runAccountDeletion(d);
+  assert.deepEqual(outcome, { ok: true, signedOut: false });
 });
 
 test('global sign-out failing after deletion falls back to a local clear', async () => {
@@ -76,7 +107,7 @@ test('global sign-out failing after deletion falls back to a local clear', async
   ]) {
     var d0 = deps({ signOut });
     const { outcome, steps } = await runAccountDeletion(d0);
-    assert.deepEqual(outcome, { ok: true });
+    assert.deepEqual(outcome, { ok: true, signedOut: true });
     assert.deepEqual(d0.calls, ['invokeDelete', 'clearActive', 'clearRosterCache', 'signOut', 'signOutLocal']);
     assert.equal(steps.at(-1), 'sign_out_local');
   }
@@ -94,4 +125,7 @@ test('copy never promises deletion of what the server keeps', () => {
   const kept = DELETION_RETAINED.join(' ').toLowerCase();
   assert.match(kept, /rides and routes you created/);
   assert.match(kept, /statistics/);
+  assert.match(kept, /support/);
+  assert.match(kept, /logs may keep your email/);
+  assert.match(kept, /different email address/);
 });
