@@ -54,6 +54,15 @@ BEGIN
   END IF;
 END $$;
 
+-- 0c. D97: the blanket table grant above re-exposes tenants.ai_api_key locally. Re-apply the
+-- migration's column-level tenants grants (single source of truth) so CI tests the real ones.
+DO $$
+BEGIN
+  IF to_regprocedure('public.apply_tenant_api_grants()') IS NOT NULL THEN
+    PERFORM public.apply_tenant_api_grants();
+  END IF;
+END $$;
+
 -- 1. Create a Primary Tenant (Racer Sportif)
 INSERT INTO tenants (id, name, slug, primary_color, accent_color)
 VALUES (
