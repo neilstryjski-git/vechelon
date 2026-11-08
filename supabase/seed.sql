@@ -54,6 +54,15 @@ BEGIN
   END IF;
 END $$;
 
+-- 0c. D97: the blanket table grant above would hand anon/authenticated the service-only AI
+-- key table. Re-apply the migration's revoke so CI tests the real grants.
+DO $$
+BEGIN
+  IF to_regclass('public.tenant_ai_secrets') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;
+
 -- 1. Create a Primary Tenant (Racer Sportif)
 INSERT INTO tenants (id, name, slug, primary_color, accent_color)
 VALUES (

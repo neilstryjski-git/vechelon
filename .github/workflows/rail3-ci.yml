@@ -60,6 +60,8 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rail3_rls_isolation.test.sql
           # W299: account self-deletion (grants, last-admin block, reassign/anonymise, idempotency).
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/w299_account_deletion.test.sql
+          # D97: tenants.ai_api_key is service-role only; branding stays readable.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/d97_tenant_key_grants.test.sql
 
       - name: Stop local Supabase stack
         if: always()
