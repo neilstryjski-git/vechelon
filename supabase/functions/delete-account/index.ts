@@ -43,28 +43,30 @@ function systemOwnerEmail(tenantId: string): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Retry-safe: if an earlier call created the auth user but died before registering it,
+// createUser now fails on the duplicate email and register_system_owner still finds and
+// verifies that user. Deletion trusts only the registry, never an email match (see the
+// migration header for why).
 async function ensureSystemOwner(admin: SupabaseClient, tenantId: string): Promise<void> {
   if (!UUID_RE.test(tenantId)) throw new Error('bad tenant id')
-  const email = systemOwnerEmail(tenantId)
-  const { data: existing } = await admin.from('accounts').select('id').eq('email', email).maybeSingle()
+  const { data: existing, error: lookupErr } = await admin
+    .from('tenant_system_owners').select('account_id').eq('tenant_id', tenantId).maybeSingle()
+  if (lookupErr) throw new Error('system owner lookup failed')
   if (existing) return
 
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
+  // A duplicate-email error here is expected on a retry; registration decides.
+  await admin.auth.admin.createUser({
+    email: systemOwnerEmail(tenantId),
     email_confirm: true,
     ban_duration: SYSTEM_OWNER_BAN,
-    user_metadata: { system_owner: true, tenant_id: tenantId },
+    // app_metadata is admin-only, so it marks this identity as ours (users can edit
+    // user_metadata themselves).
+    app_metadata: { system_owner: true, tenant_id: tenantId },
+    user_metadata: { name: SYSTEM_OWNER_NAME },
   })
-  if (createErr || !created?.user) {
-    // A concurrent deletion in the same club may have just created it — re-check once.
-    const { data: again } = await admin.from('accounts').select('id').eq('email', email).maybeSingle()
-    if (again) return
-    throw new Error('could not create system owner')
-  }
-  const { error: insErr } = await admin
-    .from('accounts')
-    .upsert({ id: created.user.id, email, name: SYSTEM_OWNER_NAME }, { onConflict: 'id' })
-  if (insErr) throw new Error('could not record system owner')
+
+  const { error: regErr } = await admin.rpc('register_system_owner', { p_tenant_id: tenantId })
+  if (regErr) throw new Error('could not register system owner')
 }
 
 serve(async (req) => {
@@ -126,10 +128,15 @@ serve(async (req) => {
     }
 
     // ── 5. Avatar objects under avatars/<uid>/ (uid is a verified UUID, not user input) ─
+    //    Fails BEFORE the auth user goes, so the user can still sign in and retry.
     if (UUID_RE.test(uid)) {
-      const { data: files } = await admin.storage.from('avatars').list(uid)
+      const { data: files, error: listErr } = await admin.storage.from('avatars').list(uid)
+      if (listErr) throw new Error('avatar list failed')
       const paths = (files ?? []).map((f) => `${uid}/${f.name}`)
-      if (paths.length > 0) await admin.storage.from('avatars').remove(paths)
+      if (paths.length > 0) {
+        const { error: rmErr } = await admin.storage.from('avatars').remove(paths)
+        if (rmErr) throw new Error('avatar removal failed')
+      }
     }
 
     // ── 6. The auth user (sessions + identities go with it) ───────────────────────────

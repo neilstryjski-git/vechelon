@@ -31,7 +31,7 @@ DECLARE
   service_only text[] := ARRAY[
     'public.get_github_voc_pat()', 'public.get_rider_hash_secret()', 'public.reverse_rider_hash(text)',
     'public.system_owner_email(uuid)', 'public.account_deletion_preflight(uuid)',
-    'public.delete_account_data(uuid)'
+    'public.delete_account_data(uuid)', 'public.register_system_owner(uuid)'
   ];
   authenticated_only text[] := ARRAY[
     'public.is_ride_tenant_admin(uuid)', 'public.can_assign_ride_command(uuid)',
@@ -48,6 +48,10 @@ BEGIN
       EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', f);
     END IF;
   END LOOP;
+  -- Service-only table (W299): RLS with no policies is the real gate; drop the blanket grant too.
+  IF to_regclass('public.tenant_system_owners') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_system_owners FROM PUBLIC, anon, authenticated;
+  END IF;
 END $$;
 
 -- 1. Create a Primary Tenant (Racer Sportif)
