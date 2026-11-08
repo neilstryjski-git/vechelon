@@ -53,6 +53,13 @@ export function clearPersistedActiveRide(): void {
   void AsyncStorage.removeItem(ACTIVE_RIDE_KEY).catch(() => {});
 }
 
+// W300 — for the account-deletion guard, which must fail CLOSED the other way: any stored value
+// (even one that doesn't parse) means "on a ride", and a storage error THROWS so the caller can
+// refuse. readPersistedActiveRide below can't serve here: it maps errors to null (= no ride).
+export async function hasPersistedActiveRide(): Promise<boolean> {
+  return (await AsyncStorage.getItem(ACTIVE_RIDE_KEY)) !== null;
+}
+
 // For non-React callers (headless task, heartbeat re-assert). Never throws; fails CLOSED.
 export async function readPersistedActiveRide(): Promise<ActiveRide | null> {
   try {

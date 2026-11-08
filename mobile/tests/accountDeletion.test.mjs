@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   runAccountDeletion,
   isDeleteConfirmed,
+  classifyUserCheck,
   DELETION_EXPLANATION,
   DELETION_RETAINED,
 } from '../src/lib/accountDeletion.ts';
@@ -15,7 +16,7 @@ function deps(overrides = {}) {
     calls,
     hasActiveRide: () => false,
     invokeDelete: async () => { calls.push('invokeDelete'); return { ok: true }; },
-    isAccountGone: async () => { calls.push('isAccountGone'); return false; },
+    checkUser: async () => { calls.push('checkUser'); return 'present'; },
     clearActive: () => calls.push('clearActive'),
     clearRosterCache: () => calls.push('clearRosterCache'),
     signOut: async () => { calls.push('signOut'); return { error: null }; },
@@ -70,7 +71,7 @@ test('failure with the account still present: retry message (never "nothing was 
     assert.match(outcome.message, /try again/);
     assert.doesNotMatch(outcome.message, /nothing was removed/i);
     assert.doesNotMatch(outcome.message, /raw server text/);
-    assert.deepEqual(d.calls, ['isAccountGone']);
+    assert.deepEqual(d.calls, ['checkUser']);
     assert.deepEqual(steps, ['delete_called', 'delete_failed']);
   }
 });
@@ -78,17 +79,39 @@ test('failure with the account still present: retry message (never "nothing was 
 test('failure but the server confirms the account is gone (dropped response): finishes locally', async () => {
   const d = deps({
     invokeDelete: async () => { throw new Error('connection reset'); },
-    isAccountGone: async () => true,
+    checkUser: async () => 'gone',
   });
   const { outcome, steps } = await runAccountDeletion(d);
   assert.deepEqual(outcome, { ok: true, signedOut: true });
   assert.deepEqual(steps, ['delete_called', 'delete_failed', 'account_gone', 'clear_active', 'clear_roster_cache', 'sign_out']);
 });
 
-test('isAccountGone throwing counts as not gone', async () => {
-  const d = deps({ invokeDelete: async () => ({ ok: false }), isAccountGone: async () => { throw new Error('offline'); } });
+test('checkUser throwing or unknown counts as not gone', async () => {
+  for (const checkUser of [async () => { throw new Error('offline'); }, async () => 'unknown']) {
+    const d = deps({ invokeDelete: async () => ({ ok: false }), checkUser });
+    const { outcome } = await runAccountDeletion(d);
+    assert.equal(outcome.reason, 'failed');
+    assert.equal(d.calls.includes('signOut'), false);
+  }
+});
+
+test('dead session (revoked / expired): says the account was NOT deleted, device untouched', async () => {
+  const d = deps({ invokeDelete: async () => ({ ok: false, status: 401 }), checkUser: async () => 'session' });
   const { outcome } = await runAccountDeletion(d);
-  assert.equal(outcome.reason, 'failed');
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.reason, 'session');
+  assert.match(outcome.message, /not deleted/);
+  assert.deepEqual(d.calls, []);
+});
+
+test('classifyUserCheck: only user_not_found means gone (codes observed on staging)', () => {
+  assert.equal(classifyUserCheck({ hasUser: true }), 'present');
+  assert.equal(classifyUserCheck({ hasUser: false, status: 403, code: 'user_not_found' }), 'gone');
+  assert.equal(classifyUserCheck({ hasUser: false, status: 403, code: 'bad_jwt' }), 'session');
+  assert.equal(classifyUserCheck({ hasUser: false, status: 400, code: null }), 'session');
+  assert.equal(classifyUserCheck({ hasUser: false, status: 403, code: 'session_not_found' }), 'session');
+  assert.equal(classifyUserCheck({ hasUser: false, status: 404, code: null }), 'unknown');
+  assert.equal(classifyUserCheck({ hasUser: false, status: null, code: null }), 'unknown');
 });
 
 test('both sign-outs failing: still ok (account gone) but signedOut=false so the UI can say so', async () => {

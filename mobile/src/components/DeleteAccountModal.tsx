@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { supabase } from '../lib/supabase';
-import { clearActiveRide, readPersistedActiveRide } from '../lib/activeRide';
+import { clearActiveRide, hasPersistedActiveRide } from '../lib/activeRide';
 import { clearRosterCache } from '../lib/rosterCache';
 import {
   DELETE_CONFIRM_WORD,
@@ -19,7 +19,9 @@ import {
   DELETION_RETAINED,
   isDeleteConfirmed,
   runAccountDeletion,
+  classifyUserCheck,
   type DeleteResponse,
+  type UserCheck,
 } from '../lib/accountDeletion';
 
 // W300 — in-app account deletion. Two deliberate confirmations: (1) read what is deleted and
@@ -28,14 +30,12 @@ import {
 
 type Stage = 'explain' | 'confirm' | 'working' | 'done_unsigned';
 
-// After a failed call: does the server still know this user? getUser validates the JWT against
-// the auth server, so a deleted user comes back as an error with no user.
-async function isAccountGone(): Promise<boolean> {
+// After a failed call: ask the auth server about this session. getUser validates the JWT
+// server-side; classifyUserCheck decides what the answer means (only user_not_found = gone).
+async function checkUser(): Promise<UserCheck> {
   const { data, error } = await supabase.auth.getUser();
-  if (data?.user) return false;
-  const status = (error as { status?: number } | null)?.status;
-  // 401/403/404 = the server rejects this user; anything else (offline) proves nothing.
-  return status === 401 || status === 403 || status === 404;
+  const e = error as { status?: number; code?: string } | null;
+  return classifyUserCheck({ hasUser: !!data?.user, status: e?.status ?? null, code: e?.code ?? null });
 }
 
 async function invokeDelete(): Promise<DeleteResponse> {
@@ -82,9 +82,9 @@ const DeleteAccountModal: React.FC<{ visible: boolean; onClose: () => void; acce
       // The DURABLE holder (W286): set while tracking a ride, cleared by Leave Ride, and
       // restored on a cold start mid-ride. The in-memory holder deliberately outlives Leave
       // Ride (D87), so it would block riders who already left.
-      hasActiveRide: async () => (await readPersistedActiveRide()) !== null,
+      hasActiveRide: hasPersistedActiveRide,
       invokeDelete,
-      isAccountGone,
+      checkUser,
       clearActive: clearActiveRide,
       clearRosterCache: () => clearRosterCache('auth_transition'),
       // Default scope ('global') — supabase-patterns Pattern 4. The local fallback runs only
@@ -178,9 +178,11 @@ const DeleteAccountModal: React.FC<{ visible: boolean; onClose: () => void; acce
               onPress={cancel}
               disabled={stage === 'working'}
               accessibilityRole="button"
-              accessibilityLabel="Cancel"
+              accessibilityLabel={stage === 'done_unsigned' ? 'Close' : 'Cancel'}
             >
-              <Text style={[styles.secondaryText, { color: accent }]}>Cancel</Text>
+              <Text style={[styles.secondaryText, { color: accent }]}>
+                {stage === 'done_unsigned' ? 'Close' : 'Cancel'}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

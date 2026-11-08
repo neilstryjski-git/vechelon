@@ -25,7 +25,7 @@ export const DELETION_EXPLANATION: readonly string[] = [
 ];
 export const DELETION_RETAINED: readonly string[] = [
   'Rides and routes you created, and rides you were assigned to support, stay with your club, credited to "Former member".',
-  'Rides you joined as a guest under a different email address aren’t linked to your account, so they stay as they are.',
+  'Guest sign-ups made under a different email address, and never linked to this account, stay as they are.',
   'Anonymous usage statistics stay, but can no longer be linked to you.',
   'Our sign-in provider’s logs may keep your email address for about a day.',
 ];
@@ -45,15 +45,35 @@ export type DeleteResponse =
 export type DeletionOutcome =
   // signedOut=false: the account is gone but the device couldn't clear its session.
   | { ok: true; signedOut: boolean }
-  | { ok: false; reason: 'active_ride' | 'last_admin' | 'platform_admin' | 'failed'; message: string };
+  | { ok: false; reason: 'active_ride' | 'last_admin' | 'platform_admin' | 'failed' | 'session'; message: string };
+
+// What the auth server says about this device's session after a failed delete call.
+//   gone     — the user no longer exists (GoTrue code user_not_found): the delete went through
+//   present  — the user is still there: the delete really failed
+//   session  — the SESSION is dead (revoked, expired, bad token) but says nothing about the
+//              account: GoTrue returns 400/403 bad_jwt/session_not_found for these
+//   unknown  — offline or anything else
+export type UserCheck = 'gone' | 'present' | 'session' | 'unknown';
+
+// Pure, so the classification is pinned by tests. Only user_not_found (verified on staging
+// 2026-11-08: deleted user → 403 user_not_found; revoked session → 400; garbage JWT → 403
+// bad_jwt) counts as gone. A bare status code never does.
+export function classifyUserCheck(r: { hasUser: boolean; status?: number | null; code?: string | null }): UserCheck {
+  if (r.hasUser) return 'present';
+  if (r.code === 'user_not_found') return 'gone';
+  if (r.code === 'bad_jwt' || r.code === 'session_not_found' || r.code === 'session_expired' || r.status === 400 || r.status === 401 || r.status === 403) {
+    return 'session';
+  }
+  return 'unknown';
+}
 
 export type DeletionStep = 'blocked_active_ride' | 'delete_called' | 'delete_refused' | 'delete_failed' | 'account_gone' | 'clear_active' | 'clear_roster_cache' | 'sign_out' | 'sign_out_local';
 
 export type DeletionDeps = {
   hasActiveRide: () => boolean | Promise<boolean>;
   invokeDelete: () => Promise<DeleteResponse>;
-  // After a failed call: true only if the server confirms this user no longer exists.
-  isAccountGone: () => Promise<boolean>;
+  // After a failed call: what the auth server says about this session (classifyUserCheck).
+  checkUser: () => Promise<UserCheck>;
   clearActive: () => void;
   clearRosterCache: () => void;
   signOut: () => Promise<{ error?: unknown } | void>;
@@ -63,6 +83,8 @@ export type DeletionDeps = {
 // Not "nothing was removed": the server can fail part-way. A retry finishes the job (every
 // server step is idempotent).
 const GENERIC_FAILURE = 'Your account deletion didn’t finish. Please try again.';
+// The session died, which says nothing about the account; never imply it was deleted.
+const SESSION_EXPIRED = 'Your sign-in has expired, so your account was not deleted. Sign out, sign in again, then try again.';
 
 export async function runAccountDeletion(
   deps: DeletionDeps,
@@ -97,13 +119,16 @@ export async function runAccountDeletion(
       return { outcome: { ok: false, reason: res.error, message: res.message || GENERIC_FAILURE }, steps };
     }
     steps.push('delete_failed');
-    let gone = false;
+    let check: UserCheck = 'unknown';
     try {
-      gone = await deps.isAccountGone();
+      check = await deps.checkUser();
     } catch {
-      gone = false;
+      check = 'unknown';
     }
-    if (!gone) {
+    if (check === 'session') {
+      return { outcome: { ok: false, reason: 'session', message: SESSION_EXPIRED }, steps };
+    }
+    if (check !== 'gone') {
       return { outcome: { ok: false, reason: 'failed', message: GENERIC_FAILURE }, steps };
     }
     steps.push('account_gone');
