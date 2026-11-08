@@ -55,8 +55,13 @@ async function ensureSystemOwner(admin: SupabaseClient, tenantId: string): Promi
   if (lookupErr) throw new Error('system owner lookup failed')
   if (existing) return
 
-  // If an earlier attempt created the user but died before registering it, registration
-  // finds that user; this one then stays an unused, banned, membership-less identity.
+  // An earlier attempt may have created the user and died before registering it: try
+  // registration first so a retry doesn't mint another identity.
+  const { error: firstErr } = await admin.rpc('register_system_owner', { p_tenant_id: tenantId })
+  if (!firstErr) return
+
+  // Only a concurrent deleter in the same club can still mint a spare here; the spare is
+  // banned, membership-less and never registered, so it has no powers.
   const { error: createErr } = await admin.auth.admin.createUser({
     email: systemOwnerEmail(),
     email_confirm: true,

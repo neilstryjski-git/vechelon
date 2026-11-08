@@ -118,6 +118,16 @@ BEGIN
   RAISE NOTICE 'genuine owner registered: OK';
 END $$;
 
+-- Marker users that fail one leg are not owners either: a short ban, or an address that
+-- isn't the owner pattern.
+SET session_replication_role = 'replica';
+INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, banned_until) VALUES
+  ('a2999999-0000-0000-0000-000000000007', 'former-member+short-ban@system.vechelon.invalid', 'authenticated', 'authenticated',
+   '{"system_owner": true, "tenant_id": "a2990000-0000-0000-0000-00000000000b"}', now() + interval '1 day'),
+  ('a2999999-0000-0000-0000-000000000008', 'w299-wrong-address@test.local', 'authenticated', 'authenticated',
+   '{"system_owner": true, "tenant_id": "a2990000-0000-0000-0000-00000000000b"}', now() + interval '100 years');
+SET session_replication_role = 'origin';
+
 SAVEPOINT s_fake;
 DO $$
 BEGIN
@@ -169,8 +179,19 @@ SET session_replication_role = 'replica';
 INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, banned_until) VALUES
   ('a2999999-0000-0000-0000-000000000006', 'former-member+5b2e9c1a-random@system.vechelon.invalid', 'authenticated', 'authenticated',
    '{"system_owner": true, "tenant_id": "a2990000-0000-0000-0000-00000000000b"}', now() + interval '100 years');
+-- A NEWER genuine marker user (a concurrent attempt's spare): the oldest must win.
+INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, banned_until, created_at) VALUES
+  ('a2999999-0000-0000-0000-000000000009', 'former-member+spare@system.vechelon.invalid', 'authenticated', 'authenticated',
+   '{"system_owner": true, "tenant_id": "a2990000-0000-0000-0000-00000000000b"}', now() + interval '100 years', now() + interval '1 minute');
+UPDATE auth.users SET created_at = now() WHERE id = 'a2999999-0000-0000-0000-000000000006';
 SET session_replication_role = 'origin';
-SELECT public.register_system_owner('a2990000-0000-0000-0000-00000000000b');
+DO $$
+BEGIN
+  IF public.register_system_owner('a2990000-0000-0000-0000-00000000000b') IS DISTINCT FROM 'a2999999-0000-0000-0000-000000000006'::uuid THEN
+    RAISE EXCEPTION 'W299 gate FAILED: register did not pick the oldest genuine owner';
+  END IF;
+  RAISE NOTICE 'oldest genuine owner registered: OK';
+END $$;
 
 INSERT INTO ride_support (ride_id, account_id) VALUES
   ('a2991111-0000-0000-0000-000000000002', 'a2999999-0000-0000-0000-000000000001'),
