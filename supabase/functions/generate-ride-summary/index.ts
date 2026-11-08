@@ -61,8 +61,15 @@ serve(async (req) => {
       Instructions: Use 3 bullet points. Include one tactical observation. End with "See you next time."
     `;
 
-    // 5. Generate Summary using Provider Factory
-    const provider = getAIProvider(ride.tenants);
+    // 5. Generate Summary using Provider Factory. D97: the key lives in the service-only
+    //    tenant_ai_secrets table (never on tenants, which is world-readable for branding).
+    const { data: secret, error: secretError } = await supabaseClient
+      .from('tenant_ai_secrets')
+      .select('ai_api_key')
+      .eq('tenant_id', ride.tenant_id)
+      .maybeSingle();
+    if (secretError) throw new Error('Could not load the AI provider key');
+    const provider = getAIProvider({ ...ride.tenants, ai_api_key: secret?.ai_api_key });
     const summary = await provider.generateSummary(prompt);
 
     // 6. Persist to ride_summaries

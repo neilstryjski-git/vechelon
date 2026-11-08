@@ -1,51 +1,63 @@
 -- =====================================================================
--- D97 — tenants.ai_api_key must not be readable or writable through the Data API.
+-- D97 — move tenants.ai_api_key out of the world-readable tenants table.
 --
--- Before: anon and authenticated held table-level SELECT/INSERT/UPDATE on public.tenants
--- (the pre-2026-10-30 implicit grants), and tenant_public_select_policy is
--- `FOR SELECT TO public USING (true)` (branding must load before sign-in). RLS can't hide
--- one column, so ai_api_key was world-readable. 0 of 3 tenants store a key today on both
--- projects (verified 2026-11-08), so nothing has leaked.
+-- Before: tenant_public_select_policy is `FOR SELECT TO public USING (true)` (branding must
+-- load before sign-in), and anon/authenticated hold table-level privileges on tenants, so
+-- tenants.ai_api_key was readable by anyone. RLS can't hide one column. 0 of 3 tenants stored
+-- a key on prod and on staging (verified 2026-11-08), so nothing has leaked.
 --
--- Fix: a column-level REVOKE does nothing while a table-level grant exists, so revoke at
--- table level and re-grant every column EXCEPT ai_api_key:
---   anon           SELECT (all columns but the key)
---   authenticated  SELECT, INSERT, UPDATE (all columns but the key). RLS still decides
---                  which rows: only platform admins have INSERT/UPDATE policies.
---   service_role   untouched (full): supabase/functions/_shared/ai-provider.ts reads the key.
--- TRUNCATE/TRIGGER/REFERENCES are dropped for anon/authenticated (nothing uses them; TRUNCATE
--- would bypass RLS). DELETE is left as it was (no DELETE policy exists, so RLS denies it).
+-- Why a separate table, not column-level grants: column grants would hide every column ADDED
+-- to tenants later until someone remembered to grant it (the Rail 3 promotion adds three that
+-- the app embeds), and a table-level REVOKE leaves any column-level grant in place. A
+-- service-only table has neither problem: tenants' grants are untouched.
 --
--- The column list is built at run time, so prod and staging (which have different tenants
--- columns) both get it right. A column ADDED to tenants later is NOT exposed to the API
--- until it is granted: re-run `SELECT public.apply_tenant_api_grants();` in that migration.
--- supabase/seed.sql also calls it after its blanket local grants, so CI tests these grants.
+--   public.tenant_ai_secrets  one row per tenant; RLS on with NO policies; no anon or
+--                             authenticated privileges; service_role only (generate-ride-summary).
 --
--- supabase-patterns: Pattern 7 (explicit, role-matched grants); Pattern 5 (idempotent:
--- CREATE OR REPLACE + re-runnable REVOKE/GRANT).
+-- Idempotent (Pattern 5): IF NOT EXISTS, the column move runs only while the column exists.
+-- Pattern 7: the new table carries explicit, role-matched grants. Ends with a post-condition
+-- that fails the migration (so `db push` fails closed) if the key is still exposed.
 -- =====================================================================
 
-CREATE OR REPLACE FUNCTION public.apply_tenant_api_grants()
-RETURNS void
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-DECLARE
-  v_cols text;
+CREATE TABLE IF NOT EXISTS public.tenant_ai_secrets (
+  tenant_id  uuid PRIMARY KEY REFERENCES public.tenants(id) ON DELETE CASCADE,
+  ai_api_key text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.tenant_ai_secrets IS
+  'D97: per-tenant AI provider keys. Service role only (no policies, no API-role grants). Never join into client-visible queries.';
+
+ALTER TABLE public.tenant_ai_secrets ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tenant_ai_secrets TO service_role;
+
+DO $$
 BEGIN
-  SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
-  INTO v_cols
-  FROM information_schema.columns
-  WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name <> 'ai_api_key';
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name = 'ai_api_key') THEN
+    INSERT INTO public.tenant_ai_secrets (tenant_id, ai_api_key)
+    SELECT id, ai_api_key FROM public.tenants WHERE ai_api_key IS NOT NULL
+    ON CONFLICT (tenant_id) DO NOTHING;
+    ALTER TABLE public.tenants DROP COLUMN ai_api_key;
+  END IF;
+END $$;
 
-  EXECUTE 'REVOKE SELECT, INSERT, UPDATE, TRUNCATE, TRIGGER, REFERENCES ON public.tenants FROM PUBLIC, anon, authenticated';
-  EXECUTE format('GRANT SELECT (%s) ON public.tenants TO anon, authenticated', v_cols);
-  EXECUTE format('GRANT INSERT (%s), UPDATE (%s) ON public.tenants TO authenticated', v_cols, v_cols);
-  EXECUTE 'GRANT ALL ON public.tenants TO service_role';
-END;
-$$;
-
--- Owner-only helper: it only re-applies grants, but no API role needs to call it.
-REVOKE ALL ON FUNCTION public.apply_tenant_api_grants() FROM PUBLIC, anon, authenticated;
-
-SELECT public.apply_tenant_api_grants();
+-- Post-condition: fail the migration if the key is reachable through the Data API.
+DO $$
+DECLARE r text;
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name = 'ai_api_key') THEN
+    RAISE EXCEPTION 'D97: tenants.ai_api_key still exists';
+  END IF;
+  FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    IF has_table_privilege(r, 'public.tenant_ai_secrets', 'SELECT')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'INSERT')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'UPDATE') THEN
+      RAISE EXCEPTION 'D97: % has privileges on tenant_ai_secrets', r;
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_ai_secrets') THEN
+    RAISE EXCEPTION 'D97: tenant_ai_secrets must have no RLS policies';
+  END IF;
+END $$;

@@ -1,62 +1,37 @@
 -- =====================================================================
--- D97 — tenants.ai_api_key is service-role only (CI gate, ephemeral local stack).
--- ON_ERROR_STOP=1: any RAISE fails the job. Read-only, plus one rolled-back write probe.
+-- D97 — AI provider keys live only in the service-only tenant_ai_secrets table
+-- (CI gate, ephemeral local stack). ON_ERROR_STOP=1: any RAISE fails the job. Read-only.
 -- =====================================================================
-BEGIN;
-SET client_min_messages = warning;
-
 DO $$
 DECLARE r text;
 BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name = 'ai_api_key') THEN
+    RAISE EXCEPTION 'D97 gate FAILED: tenants.ai_api_key still exists';
+  END IF;
+
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.tenant_ai_secrets'::regclass) THEN
+    RAISE EXCEPTION 'D97 gate FAILED: RLS is off on tenant_ai_secrets';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_ai_secrets') THEN
+    RAISE EXCEPTION 'D97 gate FAILED: tenant_ai_secrets has an RLS policy';
+  END IF;
+
   FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
-    IF has_column_privilege(r, 'public.tenants', 'ai_api_key', 'SELECT') THEN
-      RAISE EXCEPTION 'D97 gate FAILED: % can SELECT tenants.ai_api_key', r;
+    IF has_table_privilege(r, 'public.tenant_ai_secrets', 'SELECT')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'INSERT')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'UPDATE')
+       OR has_table_privilege(r, 'public.tenant_ai_secrets', 'DELETE') THEN
+      RAISE EXCEPTION 'D97 gate FAILED: % has privileges on tenant_ai_secrets', r;
     END IF;
-    IF has_column_privilege(r, 'public.tenants', 'ai_api_key', 'UPDATE')
-       OR has_column_privilege(r, 'public.tenants', 'ai_api_key', 'INSERT') THEN
-      RAISE EXCEPTION 'D97 gate FAILED: % can write tenants.ai_api_key', r;
-    END IF;
-    -- Branding must still load before sign-in.
-    IF NOT has_column_privilege(r, 'public.tenants', 'name', 'SELECT')
-       OR NOT has_column_privilege(r, 'public.tenants', 'logo_url', 'SELECT')
-       OR NOT has_column_privilege(r, 'public.tenants', 'primary_color', 'SELECT') THEN
-      RAISE EXCEPTION 'D97 gate FAILED: % lost SELECT on tenants branding columns', r;
-    END IF;
-    IF has_table_privilege(r, 'public.tenants', 'TRUNCATE') THEN
-      RAISE EXCEPTION 'D97 gate FAILED: % can TRUNCATE tenants', r;
+    -- Branding is untouched and still readable before sign-in.
+    IF NOT has_table_privilege(r, 'public.tenants', 'SELECT') THEN
+      RAISE EXCEPTION 'D97 gate FAILED: % lost SELECT on tenants', r;
     END IF;
   END LOOP;
 
-  -- Platform-admin edits (RLS-gated) still have their column privileges.
-  IF NOT has_column_privilege('authenticated', 'public.tenants', 'primary_color', 'UPDATE')
-     OR NOT has_column_privilege('authenticated', 'public.tenants', 'name', 'INSERT') THEN
-    RAISE EXCEPTION 'D97 gate FAILED: authenticated lost INSERT/UPDATE on ordinary tenants columns';
+  IF NOT has_table_privilege('service_role', 'public.tenant_ai_secrets', 'SELECT') THEN
+    RAISE EXCEPTION 'D97 gate FAILED: service_role cannot read tenant_ai_secrets';
   END IF;
-  IF has_column_privilege('anon', 'public.tenants', 'primary_color', 'UPDATE') THEN
-    RAISE EXCEPTION 'D97 gate FAILED: anon can UPDATE tenants';
-  END IF;
-
-  IF NOT has_column_privilege('service_role', 'public.tenants', 'ai_api_key', 'SELECT')
-     OR NOT has_column_privilege('service_role', 'public.tenants', 'ai_api_key', 'UPDATE') THEN
-    RAISE EXCEPTION 'D97 gate FAILED: service_role lost access to tenants.ai_api_key';
-  END IF;
-  RAISE NOTICE 'D97 grants: OK';
+  RAISE NOTICE 'D97: OK';
 END $$;
-
--- Behavioural probe: anon selecting the key is refused (42501), not filtered.
-SAVEPOINT s_anon;
-SET LOCAL ROLE anon;
-DO $$
-BEGIN
-  BEGIN
-    PERFORM ai_api_key FROM public.tenants LIMIT 1;
-    RAISE EXCEPTION 'D97 gate FAILED: anon SELECT ai_api_key succeeded';
-  EXCEPTION WHEN insufficient_privilege THEN
-    RAISE NOTICE 'anon SELECT ai_api_key refused: OK';
-  END;
-  PERFORM name, logo_url FROM public.tenants LIMIT 1;  -- branding still readable
-END $$;
-RESET ROLE;
-ROLLBACK TO SAVEPOINT s_anon;
-
-ROLLBACK;

@@ -54,12 +54,12 @@ BEGIN
   END IF;
 END $$;
 
--- 0c. D97: the blanket table grant above re-exposes tenants.ai_api_key locally. Re-apply the
--- migration's column-level tenants grants (single source of truth) so CI tests the real ones.
+-- 0c. D97: the blanket table grant above would hand anon/authenticated the service-only AI
+-- key table. Re-apply the migration's revoke so CI tests the real grants.
 DO $$
 BEGIN
-  IF to_regprocedure('public.apply_tenant_api_grants()') IS NOT NULL THEN
-    PERFORM public.apply_tenant_api_grants();
+  IF to_regclass('public.tenant_ai_secrets') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;
   END IF;
 END $$;
 
