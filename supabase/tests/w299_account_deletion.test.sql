@@ -26,20 +26,9 @@ BEGIN
   RAISE NOTICE 'grants: OK';
 END $$;
 
--- An authenticated caller calling it directly is refused by the grant, not by luck.
-SAVEPOINT s_auth;
-SET LOCAL ROLE authenticated;
-DO $$
-BEGIN
-  BEGIN
-    PERFORM public.delete_account_data('a2999999-0000-0000-0000-000000000001');
-    RAISE EXCEPTION 'W299 gate FAILED: authenticated could call delete_account_data';
-  EXCEPTION WHEN insufficient_privilege THEN
-    RAISE NOTICE 'authenticated direct call refused: OK';
-  END;
-END $$;
-ROLLBACK TO SAVEPOINT s_auth;
-RESET ROLE;
+-- (A direct call as authenticated is refused by exactly these grants; calling it inside a
+-- DO block under SET LOCAL ROLE dropped the local backend's connection in CI, so the
+-- privilege check above is the assertion.)
 
 -- ── 2. Fixtures (superuser, FK triggers suppressed so no auth.users rows are needed) ────
 SET session_replication_role = 'replica';
