@@ -11,22 +11,53 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // D97 r2: caller must be signed in and allowed to end this ride — the same people the
+  // rides UPDATE policy lets end it (an affiliated member of the ride's club, or its creator).
+  // Without this, anyone holding the public anon key could spend a club's AI credits and
+  // overwrite its ride summaries.
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return json({ error: 'Not signed in' }, 401);
+
   try {
+    const userClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) return json({ error: 'Not signed in' }, 401);
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { rideId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const rideId = typeof body?.rideId === 'string' ? body.rideId : '';
+    if (!rideId) return json({ error: 'rideId is required' }, 400);
 
     // 1. Fetch Ride Metadata & Tenant Config
     const { data: ride, error: rideError } = await supabaseClient
       .from('rides')
       .select('*, tenants!inner(*)')
       .eq('id', rideId)
-      .single();
+      .maybeSingle();
 
     if (rideError) throw rideError;
+    if (!ride) return json({ error: 'Ride not found' }, 404);
+
+    const { data: membership, error: memberError } = await supabaseClient
+      .from('account_tenants')
+      .select('account_id')
+      .eq('account_id', user.id)
+      .eq('tenant_id', ride.tenant_id)
+      .eq('status', 'affiliated')
+      .maybeSingle();
+    if (memberError) throw memberError;
+    if (!membership && ride.created_by !== user.id) {
+      // Same answer as a missing ride, so the endpoint can't be used to probe other clubs' rides.
+      return json({ error: 'Ride not found' }, 404);
+    }
 
     // 2. Fetch Participant Count & Stats
     const { count: participantCount } = await supabaseClient
@@ -84,15 +115,19 @@ serve(async (req) => {
 
     if (summaryError) throw summaryError;
 
-    return new Response(JSON.stringify({ summary, weather: weatherData }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+    return json({ summary, weather: weatherData }, 200);
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    // D97 r2: never echo the raw error — provider and network errors can carry request URLs
+    // or upstream text. Log a type-only line; the caller gets a generic message.
+    console.error('generate-ride-summary failed:', error instanceof Error ? error.name : typeof error);
+    return json({ error: 'Could not generate the ride summary' }, 500);
   }
 });
+
+function json(payload: unknown, status: number): Response {
+  return new Response(JSON.stringify(payload), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status,
+  });
+}
