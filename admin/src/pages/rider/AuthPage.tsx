@@ -240,6 +240,13 @@ const AuthPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">
 
+      {/* W301: landing here after a web account deletion. Static copy only. */}
+      {searchParams.get('deleted') === '1' && (
+        <p role="status" className="mb-8 w-full max-w-sm rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-center font-body text-sm text-on-background">
+          Your account has been deleted.
+        </p>
+      )}
+
       {/* Club mark - Dynamic Branding */}
       <div className="mb-12 text-center animate-in slide-in-from-top-4 duration-700 w-full max-w-sm">
         {tenant?.banner_url ? (
