@@ -11,7 +11,8 @@ Rules this copy follows:
   history is kept per rider. The server does hold three things: each rider's latest
   position during a ride (`ride_participants.last_lat/long`), the Beacon location
   (`beacon_alerts.lat/long`), and the ride leader's route (`rail3_breadcrumb`, purged after
-  4 hours). So the copy must NOT say "never stored".
+  4 hours). So the copy must NOT say "never stored". Retention per D100: within 5 hours of
+  the ride ending (Beacon location: 30 days).
 - Use is club-gated: anyone can install, but riding with a club needs that club's approval.
 
 ---
@@ -59,8 +60,9 @@ Rules this copy follows:
 > - Vechelon doesn't keep a history of your rides. It holds your latest position, so
 >   your Captain can find you if your phone goes quiet. If you raise a
 >   Beacon, it records where you raised it, so the group knows where to look. The ride
->   leader's route is shown to the group and deleted within a few hours. Tracking stops
->   when the ride ends.
+>   leader's route is shown to the group. Your last position and the leader's route are
+>   deleted within 5 hours of the ride ending, and a Beacon location after 30 days.
+>   Tracking stops when the ride ends.
 >
 > **Signing in**
 > No passwords. Enter your email and we'll send you a one-time code.
@@ -73,15 +75,9 @@ Rules this copy follows:
 
 ## Open questions for the Sr PM
 
-0. **Retention vs the privacy policy (blocking).** `privacy.html` §4 says positions "once
-   a ride ends … are not retained as a location record". On staging, which backs the open
-   test, latest positions persist on 52 saved-ride participants (the oldest is from
-   2026-07-07), and 113 Beacon locations persist (the oldest is from 2026-06-14). Prod
-   holds none, because Rail 3 is not promoted. Either purge those columns when the ride
-   ends or on a schedule, or change the policy. The listing above makes no claim about
-   when positions are deleted, so it stays accurate whichever way this is decided.
-   Once retention is decided, add one plain line stating it. This also feeds the
-   W224 Data Safety form.
+0. **Retention: DECIDED 2026-11-09 (option C, D100).** Last position and leader route are
+   deleted within 5 hours of the ride ending, and Beacon location after 30 days. privacy.html
+   is amended to match, and the line above states it.
 
 1. **Naming the clubs.** The ticket asks for Racer Sportif and Bikes and Beers to be
    named. Does Racer Sportif agree to be named in a public listing?
