@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { AUTH_HREF } from '../lib/portalBase';
 import {
@@ -19,8 +19,10 @@ type Stage = 'idle' | 'explain' | 'confirm' | 'working';
 
 async function invokeDelete(): Promise<DeleteResponse> {
   // No body: the server acts ONLY on the session JWT's verified uid.
-  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
-  if (!error) return { ok: true };
+  const { data, error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  // Only the documented {deleted:true} counts as success; anything else goes through the
+  // "is the account actually gone?" check rather than telling the rider it was deleted.
+  if (!error) return (data as { deleted?: boolean } | null)?.deleted === true ? { ok: true } : { ok: false };
   // supabase-js puts the function's JSON body on error.context, not in `data`.
   try {
     const ctx = (error as { context?: { status?: number; json?: () => Promise<{ error?: string; message?: string }> } }).context;
@@ -45,8 +47,23 @@ export const DeleteAccountPanel: React.FC<{
   const [stage, setStage] = useState<Stage>('idle');
   const [typed, setTyped] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef(false);
+
+  // Keep keyboard and screen-reader focus with the flow as each step replaces the last.
+  useEffect(() => {
+    if (stage === 'explain') headingRef.current?.focus();
+    else if (stage === 'confirm') inputRef.current?.focus();
+    else if (stage === 'idle' && returnFocus.current) {
+      returnFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [stage]);
 
   const cancel = () => {
+    returnFocus.current = true;
     setStage('idle');
     setTyped('');
     setMessage(null);
@@ -77,6 +94,7 @@ export const DeleteAccountPanel: React.FC<{
     return (
       <div className="pt-4 border-t border-surface-container-low">
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setStage('explain')}
           className="w-full py-3 rounded-xl font-label text-[10px] uppercase tracking-widest text-error hover:bg-error/5 transition-colors"
@@ -92,7 +110,7 @@ export const DeleteAccountPanel: React.FC<{
       aria-labelledby="delete-account-heading"
       className="border border-error/30 rounded-2xl p-6 space-y-5 bg-surface-container-low"
     >
-      <h3 id="delete-account-heading" className="font-headline font-bold text-lg text-on-background">
+      <h3 id="delete-account-heading" ref={headingRef} tabIndex={-1} className="outline-none font-headline font-bold text-lg text-on-background">
         Delete your account
       </h3>
 
@@ -129,6 +147,7 @@ export const DeleteAccountPanel: React.FC<{
           </label>
           <input
             id="delete-confirm"
+            ref={inputRef}
             type="text"
             autoComplete="off"
             value={typed}
