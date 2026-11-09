@@ -18,6 +18,16 @@
 -- the Beacon rule. The edge function stays callable for manual runs, and both are idempotent.
 -- Active rides are never touched: only rides with status 'saved' and actual_end older than 4 hours.
 --
+-- Review r1 additions:
+--  * Rides nobody ends would keep positions forever (auto-close-rides is not scheduled either), so
+--    this job also ends any ride still 'active' 24 hours after it started (status 'saved',
+--    actual_end = now(), auto_closed = true). That fires the existing ride_closed analytics event
+--    with auto_closed = true, which it already supports. This is a safety net, not Scenario 29's
+--    midnight close.
+--  * The leader-route purge (rail3-breadcrumb-purge) existed only as a hand-applied staging cron
+--    job. Its rule (delete rail3_breadcrumb rows not updated for 4 hours) is folded in here, so the
+--    privacy-policy claim rests on versioned code, and the hand-made job is unscheduled.
+--
 -- supabase-patterns: no RLS policy or view is created (Patterns 1, 2, 7 n/a). Pattern 5: CREATE OR
 -- REPLACE, plus unschedule-if-exists before scheduling.
 
@@ -30,11 +40,20 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  n_auto_closed  integer := 0;
+  n_routes       integer := 0;
   n_participants integer := 0;
   n_beacons      integer := 0;
   n_tel_deleted  integer := 0;
   n_tel_stripped integer := 0;
 BEGIN
+  -- 0) Safety net: end rides left running 24 hours after they started, so they reach step 1.
+  UPDATE public.rides
+     SET status = 'saved', actual_end = now(), auto_closed = true
+   WHERE status = 'active'
+     AND COALESCE(actual_start, scheduled_start, created_at) < now() - interval '24 hours';
+  GET DIAGNOSTICS n_auto_closed = ROW_COUNT;
+
   -- 1) Scenario 28: participants of rides that ended more than 4 hours ago.
   UPDATE public.ride_participants rp
      SET last_lat = NULL, last_long = NULL, last_ping = NULL
@@ -44,6 +63,12 @@ BEGIN
      AND r.actual_end < now() - interval '4 hours'
      AND (rp.last_lat IS NOT NULL OR rp.last_long IS NOT NULL OR rp.last_ping IS NOT NULL);
   GET DIAGNOSTICS n_participants = ROW_COUNT;
+
+  -- 1b) Leader route (W234 rail3_breadcrumb): deleted 4 hours after its last update.
+  IF to_regclass('public.rail3_breadcrumb') IS NOT NULL THEN
+    DELETE FROM public.rail3_breadcrumb WHERE updated_at < now() - interval '4 hours';
+    GET DIAGNOSTICS n_routes = ROW_COUNT;
+  END IF;
 
   -- 2) Beacon location: kept 30 days, then cleared (row kept as the audit record).
   IF to_regclass('public.beacon_alerts') IS NOT NULL THEN
@@ -82,6 +107,8 @@ BEGIN
   END IF;
 
   RETURN jsonb_build_object(
+    'rides_auto_closed', n_auto_closed,
+    'leader_routes_deleted', n_routes,
     'participant_positions_cleared', n_participants,
     'beacon_locations_cleared', n_beacons,
     'telemetry_full_capture_deleted', n_tel_deleted,
@@ -98,6 +125,10 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'rail3-retention-purge') THEN
     PERFORM cron.unschedule('rail3-retention-purge');
+  END IF;
+  -- Superseded hand-applied staging job (same rule now lives in rail3_retention_purge).
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'rail3-breadcrumb-purge') THEN
+    PERFORM cron.unschedule('rail3-breadcrumb-purge');
   END IF;
   PERFORM cron.schedule('rail3-retention-purge', '*/30 * * * *',
                         'SELECT public.rail3_retention_purge()');
