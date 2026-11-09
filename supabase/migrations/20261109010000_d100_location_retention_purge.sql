@@ -1,9 +1,9 @@
 -- D100: location retention, scheduled in the database (Sr PM decision 2026-11-09, option C).
 --
 -- Scenario 28 / Pillar II §5 (ratified): 4 hours after a ride ends, each participant's last
--- position is cleared. (The edge function also cleared the per-ride phone copy and set status
--- 'purged'; Sr PM 2026-11-09: leave the phone copy — this job clears POSITIONS ONLY and does
--- not change participant status.) The logic lived
+-- position AND the per-ride phone copy are cleared (Sr PM 2026-11-09: purge the phone from the
+-- ride; the profile phone stays and is copied to a ride roster as needed). Participant status
+-- is left unchanged (the edge function also set 'purged'; not needed for retention). The logic lived
 -- only in the hard-purge-location edge function, whose cron entry was never scheduled
 -- (supabase/tests/cron_verification.sql keeps it commented out), so the purge has never run.
 -- On staging (which backs the Play open test), 47 ended-ride positions were still stored,
@@ -14,8 +14,10 @@
 --
 -- Design: one SECURITY DEFINER SQL function scheduled with pg_cron. It runs inside the database,
 -- so no service-role key is stored in cron.job (scheduling the edge function would require that).
--- It covers the location part of hard-purge-location plus its W284 telemetry retention, and adds
--- the Beacon rule. The edge function stays callable for manual runs, and both are idempotent.
+-- It covers hard-purge-location's participant purge (positions + per-ride phone) and its W284
+-- telemetry retention, and adds the Beacon rule. The hard-purge-location edge function is
+-- SUPERSEDED by this job: don't run it by hand (it also sets participant status 'purged', which
+-- this job deliberately does not).
 -- Active rides are never touched: only rides with status 'saved' and actual_end older than 4 hours.
 --
 -- Review r1 additions:
@@ -56,12 +58,13 @@ BEGIN
 
   -- 1) Scenario 28: participants of rides that ended more than 4 hours ago.
   UPDATE public.ride_participants rp
-     SET last_lat = NULL, last_long = NULL, last_ping = NULL
+     SET last_lat = NULL, last_long = NULL, last_ping = NULL, phone = NULL
     FROM public.rides r
    WHERE r.id = rp.ride_id
      AND r.status = 'saved'
      AND r.actual_end < now() - interval '4 hours'
-     AND (rp.last_lat IS NOT NULL OR rp.last_long IS NOT NULL OR rp.last_ping IS NOT NULL);
+     AND (rp.last_lat IS NOT NULL OR rp.last_long IS NOT NULL OR rp.last_ping IS NOT NULL
+          OR rp.phone IS NOT NULL);
   GET DIAGNOSTICS n_participants = ROW_COUNT;
 
   -- 1b) Leader route (W234 rail3_breadcrumb): deleted 4 hours after its last update.
@@ -109,7 +112,7 @@ BEGIN
   RETURN jsonb_build_object(
     'rides_auto_closed', n_auto_closed,
     'leader_routes_deleted', n_routes,
-    'participant_positions_cleared', n_participants,
+    'participants_purged', n_participants,
     'beacon_locations_cleared', n_beacons,
     'telemetry_full_capture_deleted', n_tel_deleted,
     'telemetry_always_on_stripped', n_tel_stripped
