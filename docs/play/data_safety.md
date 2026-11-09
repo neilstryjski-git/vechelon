@@ -12,7 +12,7 @@ answers decided on 2026-11-09 (D100, option C) so W224 can enter them. It is che
 | Approximate location | Not separately (precise covers it) | — | — | — |
 | Email address | Yes | No | Required (sign-in) | Account management |
 | Name (display name) | Yes | No | Required | App functionality |
-| Phone number | Yes (optional on the account; a copy is held per ride for the organiser) | No | Optional | App functionality (contacting a rider during a ride) |
+| Phone number | Yes (optional on the account; a copy is held per ride for the organiser and deleted within 5 hours of the ride ending) | No | Optional | App functionality (contacting a rider during a ride) |
 | App activity / diagnostics | Yes (ride telemetry: cadence, state, latency — no coordinates) | No | Required | Analytics, app functionality |
 
 - **Background location:** used only during an active ride, after an in-app explanation and consent.
@@ -31,4 +31,4 @@ answers decided on 2026-11-09 (D100, option C) so W224 can enter them. It is che
 | Rides never ended | — | Closed automatically 24 hours after they started, then the rules above apply |
 
 The job runs every 30 minutes, which is why the policy says "within 5 hours" rather than 4.
-The per-ride phone copy is kept (Sr PM, 2026-11-09).
+The per-ride phone copy is deleted with the last position (Sr PM, 2026-11-09); the profile phone is kept while the account exists.
