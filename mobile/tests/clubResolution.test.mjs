@@ -64,3 +64,29 @@ test('no primary configured -> fallback rules still apply', () => {
   assert.equal(chooseActiveClub([m(BB)], '', BB).membership.slug, BB);
   assert.equal(chooseActiveClub([m(RS)], '', BB).membership.slug, RS); // kept as an 'other' club
 });
+
+// ── W304: home-screen access state ───────────────────────────────────────────
+import { clubAccess } from '../src/lib/clubResolution.ts';
+
+test('W304: affiliated member sees the club', () => {
+  assert.equal(clubAccess({ status: 'affiliated' }, false), 'member');
+});
+
+test('W304: initiated (pending) member gets the pending state', () => {
+  assert.equal(clubAccess({ status: 'initiated' }, false), 'pending');
+});
+
+test('W304: no club resolved → none', () => {
+  assert.equal(clubAccess(null, false), 'none');
+});
+
+test('W304: still resolving → loading, even with a stale club', () => {
+  assert.equal(clubAccess(null, true), 'loading');
+  assert.equal(clubAccess({ status: 'affiliated' }, true), 'loading');
+});
+
+test('W304: any other status never shows club data', () => {
+  for (const s of ['suspended', 'archived', 'deleted', '', 'weird']) {
+    assert.equal(clubAccess({ status: s }, false), 'none');
+  }
+});

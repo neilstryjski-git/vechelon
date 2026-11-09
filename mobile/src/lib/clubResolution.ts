@@ -48,3 +48,20 @@ export function chooseActiveClub(
   }
   return { kind: 'none' };
 }
+
+// W304 — what the home screen may show for the resolved club. Only an AFFILIATED member
+// sees the club's rides; a pending ('initiated') member gets the "awaiting approval" state,
+// and a rider with no usable club gets the "no club" state. The server enforces the same
+// line (rail3_is_affiliated RLS) — this only decides which screen to render.
+export type ClubAccess = 'loading' | 'member' | 'pending' | 'none';
+
+export function clubAccess(
+  club: { status: string } | null,
+  resolving: boolean,
+): ClubAccess {
+  if (resolving) return 'loading';
+  if (!club) return 'none';
+  if (club.status === 'affiliated') return 'member';
+  if (club.status === 'initiated') return 'pending';
+  return 'none';
+}

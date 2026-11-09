@@ -55,11 +55,14 @@ SET session_replication_role = 'replica';
 -- 20260411000000, so accounts is just id/email/phone here).
 INSERT INTO accounts (id, email, phone) VALUES
   ('a1111111-1111-1111-1111-111111111111', 'rls-a@test.local', '000'),
-  ('b1111111-1111-1111-1111-111111111111', 'rls-b@test.local', '000');
+  ('b1111111-1111-1111-1111-111111111111', 'rls-b@test.local', '000'),
+  ('b2222222-2222-2222-2222-222222222222', 'rls-b-pending@test.local', '000');  -- W304
 
 INSERT INTO account_tenants (account_id, tenant_id, role, status) VALUES
   ('a1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'member', 'affiliated'),
-  ('b1111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member', 'affiliated');
+  ('b1111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member', 'affiliated'),
+  -- W304: a PENDING (initiated) member of Tenant B — not yet approved by an organiser.
+  ('b2222222-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member', 'initiated');
 
 -- Rail 3 (W169) fixtures — only when the schema is present. A Tenant-B beacon + rider
 -- state that W169's tenant-scoped RLS must hide from a Tenant-A user.
@@ -125,6 +128,50 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'Cross-tenant denial + in-tenant access (incl. Rail 3 tables when present): OK';
+END $$;
+
+RESET ROLE;
+
+-- ── 4. W304: a PENDING member of Tenant B sees none of Tenant B's Rail 3 live data,
+-- while an AFFILIATED Tenant-B member still does (no over-block).
+DO $$
+DECLARE n integer;
+BEGIN
+  IF to_regprocedure('public.rail3_is_affiliated(uuid)') IS NULL THEN
+    RAISE NOTICE 'rail3_is_affiliated absent — W304 pending-member checks skipped';
+    RETURN;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    '{"sub":"b2222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  SELECT count(*) INTO n FROM beacon_alerts;
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'pending LEAK: initiated member saw % beacon_alerts row(s) (expected 0)', n;
+  END IF;
+  SELECT count(*) INTO n FROM rider_states;
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'pending LEAK: initiated member saw % rider_states row(s) (expected 0)', n;
+  END IF;
+  IF public.rail3_is_affiliated('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') THEN
+    RAISE EXCEPTION 'pending LEAK: rail3_is_affiliated() true for an initiated member (broadcast gate open)';
+  END IF;
+  EXECUTE 'RESET ROLE';
+
+  PERFORM set_config('request.jwt.claims',
+    '{"sub":"b1111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  SELECT count(*) INTO n FROM beacon_alerts;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'over-block: affiliated Tenant-B member saw % beacon_alerts row(s) (expected 1)', n;
+  END IF;
+  SELECT count(*) INTO n FROM rider_states;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'over-block: affiliated Tenant-B member saw % rider_states row(s) (expected 1)', n;
+  END IF;
+  EXECUTE 'RESET ROLE';
+
+  RAISE NOTICE 'W304 pending-member denial + affiliated access: OK';
 END $$;
 
 RESET ROLE;
