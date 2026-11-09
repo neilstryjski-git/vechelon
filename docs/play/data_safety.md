@@ -28,7 +28,7 @@ answers decided on 2026-11-09 (D100, option C) so W224 can enter them. It is che
 | Rider's last known position | So the Captain can find a rider whose phone goes quiet | Within 5 hours of the ride ending |
 | Beacon location | So the club can follow up a call for help | Coordinates cleared after 30 days; the alert record stays |
 | Ride leader's route | So the group can follow the route | Within 5 hours of the ride ending (4 hours after its last update) |
-| Rides never ended | — | Closed automatically 24 hours after they started, then the rules above apply |
+| Rides never ended | — | Closed automatically about 24 hours after they started, then the rules above apply |
 
 The job runs every 30 minutes, which is why the policy says "within 5 hours" rather than 4.
 The per-ride phone copy is deleted with the last position (Sr PM, 2026-11-09); the profile phone is kept while the account exists.
