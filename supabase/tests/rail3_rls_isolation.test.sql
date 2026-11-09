@@ -78,6 +78,22 @@ BEGIN
   END IF;
 END $$;
 
+-- W304 fixtures: a Tenant-B ride the PENDING member has joined (the web self-RSVP lets
+-- them), plus a Captain breadcrumb for it.
+DO $$
+BEGIN
+  IF to_regclass('public.rail3_breadcrumb') IS NOT NULL THEN
+    INSERT INTO rides (id, tenant_id, name, type, start_coords, qr_code, created_by, status) VALUES
+      ('11111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+       'W304 fixture ride', 'adhoc', point(0, 0), 'w304-fixture',
+       'b1111111-1111-1111-1111-111111111111', 'active');
+    INSERT INTO ride_participants (ride_id, account_id) VALUES
+      ('11111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222'),
+      ('11111111-1111-1111-1111-111111111111', 'b1111111-1111-1111-1111-111111111111');
+    INSERT INTO rail3_breadcrumb (ride_id) VALUES ('11111111-1111-1111-1111-111111111111');
+  END IF;
+END $$;
+
 SET session_replication_role = 'origin';
 
 -- ── 3. Behavioral cross-tenant denial, as an authenticated Tenant-A member ────
@@ -156,6 +172,31 @@ BEGIN
   IF public.rail3_is_affiliated('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') THEN
     RAISE EXCEPTION 'pending LEAK: rail3_is_affiliated() true for an initiated member (broadcast gate open)';
   END IF;
+  IF to_regclass('public.rail3_breadcrumb') IS NOT NULL THEN
+    -- Joined the ride, but still must not read the Captain's route.
+    SELECT count(*) INTO n FROM rail3_breadcrumb;
+    IF n <> 0 THEN
+      RAISE EXCEPTION 'pending LEAK: initiated participant saw % rail3_breadcrumb row(s) (expected 0)', n;
+    END IF;
+    -- ...nor write into the club's telemetry sink.
+    BEGIN
+      INSERT INTO rail3_telemetry_events (tenant_id, ride_id, account_id, platform, device_class, kind, client_ts)
+      VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '11111111-1111-1111-1111-111111111111',
+              'b2222222-2222-2222-2222-222222222222', 'android', 'test', 'engine_started', now());
+      RAISE EXCEPTION 'pending LEAK: initiated member inserted rail3_telemetry_events';
+    EXCEPTION
+      WHEN insufficient_privilege THEN NULL;  -- 42501 = RLS denial, expected
+      WHEN others THEN  -- anything else (e.g. an FK error) means RLS let the row through
+        RAISE EXCEPTION 'pending LEAK: initiated member passed rail3_telemetry_events RLS (%)', SQLSTATE;
+    END;
+    -- Broadcast receive policy itself, evaluated on the ride's topic.
+    PERFORM set_config('realtime.topic', 'rail3:ride:11111111-1111-1111-1111-111111111111', true);
+    IF to_regclass('realtime.messages') IS NOT NULL AND EXISTS (
+      SELECT 1 FROM pg_policies WHERE schemaname = 'realtime' AND policyname = 'rail3_broadcast_tenant_receive'
+    ) AND public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic())) THEN
+      RAISE EXCEPTION 'pending LEAK: broadcast receive gate open for an initiated member';
+    END IF;
+  END IF;
   EXECUTE 'RESET ROLE';
 
   PERFORM set_config('request.jwt.claims',
@@ -168,6 +209,15 @@ BEGIN
   SELECT count(*) INTO n FROM rider_states;
   IF n <> 1 THEN
     RAISE EXCEPTION 'over-block: affiliated Tenant-B member saw % rider_states row(s) (expected 1)', n;
+  END IF;
+  IF to_regclass('public.rail3_breadcrumb') IS NOT NULL THEN
+    SELECT count(*) INTO n FROM rail3_breadcrumb;
+    IF n <> 1 THEN
+      RAISE EXCEPTION 'over-block: affiliated participant saw % rail3_breadcrumb row(s) (expected 1)', n;
+    END IF;
+    IF NOT public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic())) THEN
+      RAISE EXCEPTION 'over-block: broadcast receive gate closed for an affiliated member';
+    END IF;
   END IF;
   EXECUTE 'RESET ROLE';
 

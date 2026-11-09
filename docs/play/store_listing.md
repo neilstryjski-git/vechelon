@@ -46,7 +46,8 @@ Rules this copy follows:
 >
 > **On the ride**
 > - A live map of everyone in your ride, while the ride is on
-> - Captains can start a ride on the spot and end it when everyone's home
+> - Club organisers can start a ride on the spot, and any Captain can end it when
+>   everyone's home
 > - A Beacon lets a rider signal they need help, so the group knows to look for them
 >
 > **Your location, plainly**
@@ -55,8 +56,8 @@ Rules this copy follows:
 > - To keep you on the map when your phone is in a pocket or jersey, Vechelon asks for
 >   background location. It always explains why first, and you can say no. Android shows
 >   a notification the whole time tracking is on.
-> - Vechelon doesn't keep a history of your rides. During a ride it holds your latest
->   position, so your Captain can find you if your phone goes quiet. If you raise a
+> - Vechelon doesn't keep a history of your rides. It holds your latest position, so
+>   your Captain can find you if your phone goes quiet. If you raise a
 >   Beacon, it records where you raised it, so the group knows where to look. The ride
 >   leader's route is shown to the group and deleted within a few hours. Tracking stops
 >   when the ride ends.
@@ -77,8 +78,9 @@ Rules this copy follows:
    test, latest positions persist on 52 saved-ride participants (the oldest is from
    2026-07-07), and 113 Beacon locations persist (the oldest is from 2026-06-14). Prod
    holds none, because Rail 3 is not promoted. Either purge those columns when the ride
-   ends or on a schedule, or change the policy. The listing above stays accurate either
-   way, because it makes no claim about when positions are deleted. This also feeds the
+   ends or on a schedule, or change the policy. The listing above makes no claim about
+   when positions are deleted, so it stays accurate whichever way this is decided.
+   Once retention is decided, add one plain line stating it. This also feeds the
    W224 Data Safety form.
 
 1. **Naming the clubs.** The ticket asks for Racer Sportif and Bikes and Beers to be
