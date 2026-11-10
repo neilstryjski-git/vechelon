@@ -53,7 +53,7 @@ Rules this copy follows:
 >
 > **Your location, plainly**
 > - Vechelon uses your location only while you're in an active ride. It's shared live
->   with the other riders.
+>   with the other riders on your ride.
 > - To keep you on the map when your phone is in a pocket or jersey, Vechelon asks for
 >   background location. It always explains why first, and you can say no. Android shows
 >   a notification the whole time tracking is on.
