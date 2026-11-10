@@ -7,11 +7,16 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "platforms": [
       "android"
     ],
     "android": {
-      "package": "ca.vechelon.rail3"
+      "package": "ca.vechelon.rail3",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#16161A"
+      }
     },
     "plugins": [
       "expo-dev-client",
