@@ -42,7 +42,15 @@ device is quoted exactly.
 
 ---
 
-## Demo video shot list (target 60–90 seconds, portrait, no narration needed)
+## Demo video shot list (30 seconds or less, portrait, no narration needed)
+
+Google's guidance (Play Console Help, "Understanding location in the background
+permissions", https://support.google.com/googleplay/android-developer/answer/9799150):
+- keep it to 30 seconds or less
+- film it on an Android device
+- show the in-app disclosure, the runtime permission prompt, and the feature working with
+  the app in the background
+- share it as a YouTube link (or a Drive link to an MP4) that reviewers can open
 
 Requirements:
 - Use a **licensed release build** (the EAS validate or production build), not a dev build.
@@ -51,25 +59,23 @@ Requirements:
   Vechelon → Permissions → Location → Don't allow), so the first-time prompts appear.
 - Use **two phones**. Phone A is the rider being filmed. Phone B is the Captain's view,
   which shows that A keeps updating with its screen off.
+- Rehearse once before filming, then cut any dead time (waiting for GPS, typing) in the edit.
 - This is a short walk to show the permission flow, not a field ride test.
 
-Shots, in order:
-1. **Phone A:** open Vechelon (signed in as a club member) and join the active ride that
-   Phone B (Captain) started.
-2. **Phone A:** the "Keep your ride visible" explainer appears. Tap "Got it".
-3. **Phone A:** the Android location prompt. Choose "While using the app". It may already
+Shots, in order (rough seconds):
+1. **Phone A (3s):** join the active ride that Phone B (Captain) started. Tap "Got it" on the
+   "Keep your ride visible" explainer.
+2. **Phone A (3s):** the Android location prompt. Choose "While using the app". It may already
    have appeared when the ride opened; if so, it won't appear again here.
-4. **Phone A: the disclosure screen.** Hold for about 3 seconds so the full sentence is readable:
+3. **Phone A (5s): the disclosure screen.** Hold long enough to read the sentence:
    "Vechelon collects location data to show your position to your club during a ride, even
    when the app is closed or not in use." Then tap **Allow**.
-5. **Phone A:** the "Stay on the map when pocketed" dialog appears. Tap **Open Settings**,
-   then Permissions → Location → **"Allow all the time"**, then go back to the app. (On
-   Android 11+ the system only offers "Allow all the time" from Settings.)
-6. **Phone A:** pull down the notification shade and show "Vechelon — sharing your position".
-7. **Phone A:** lock the screen and put the phone away. Walk.
-8. **Phone B (Captain):** film Phone A's marker moving on the map while Phone A stays locked
-   (about 20–30 seconds).
-9. **Phone B:** End Ride. **Phone A:** unlock it. The ride has ended and the notification
-   is gone.
+4. **Phone A (6s):** the "Stay on the map when pocketed" dialog. Tap **Open Settings**, then
+   Permissions → Location → **"Allow all the time"**, then go back to the app. (On Android 11+
+   the system only offers "Allow all the time" from Settings.)
+5. **Phone A (3s):** pull down the notification shade and show "Vechelon — sharing your
+   position". Lock the screen.
+6. **Phone B (10s):** Phone A's marker keeps moving on the Captain's map while Phone A stays
+   locked in a pocket.
 
 Upload as **Unlisted** on YouTube and paste the link above and into the declaration.
