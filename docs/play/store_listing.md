@@ -31,9 +31,10 @@ Rules this copy follows:
 
 > **Vechelon keeps your club's group ride together.**
 >
-> When your ride starts, everyone in it shows up on one live map. You can see who's
-> ahead, who's dropped off the back and where the Captain is. There's no group chat to
-> scroll and nobody needs to shout "All In" down the line to find out who's missing.
+> When your ride starts, your Captain and support crew see everyone on one live map:
+> who's ahead, who's dropped off the back, who needs help. You see where your Captain
+> and support crew are. There's no group chat to scroll and nobody needs to shout "All In" down the line
+> to find out who's missing.
 >
 > **Made for clubs, not strangers**
 > Vechelon is for members of a cycling club. You need to be a member of
@@ -46,20 +47,22 @@ Rules this copy follows:
 > organiser approves you.
 >
 > **On the ride**
-> - A live map of everyone in your ride, while the ride is on
+> - A live map while the ride is on: Captains and support crew see every rider, and
+>   riders see their Captain and support crew
 > - Club organisers can start a ride on the spot, and any Captain can end it when
 >   everyone's home
-> - A Beacon lets a rider signal they need help, so the group knows to look for them
+> - A Beacon lets a rider signal they need help, so the Captain and support crew know
+>   to look for them
 >
 > **Your location, plainly**
 > - Vechelon uses your location only while you're in an active ride. It's shared live
->   with the other riders on your ride.
+>   with your ride's Captain and support crew.
 > - To keep you on the map when your phone is in a pocket or jersey, Vechelon asks for
 >   background location. It always explains why first, and you can say no. Android shows
 >   a notification the whole time tracking is on.
 > - Vechelon doesn't keep a history of your rides. It holds your latest position, so
 >   your Captain can find you if your phone goes quiet. If you raise a
->   Beacon, it records where you raised it, so the group knows where to look. The ride
+>   Beacon, it records where you raised it, so your Captain knows where to look. The ride
 >   leader's route is shown to the group. Your last position and the leader's route are
 >   deleted within 5 hours of the ride ending, and a Beacon location after 30 days.
 >   Tracking stops when the ride ends.
