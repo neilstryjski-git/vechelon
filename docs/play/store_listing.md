@@ -1,4 +1,4 @@
-# Google Play: store listing copy (W304 draft for Sr PM approval)
+# Google Play: store listing copy (W304, approved by the Sr PM 2026-11-09)
 
 Paste into Play Console → Grow → Store presence → Main store listing. The limits are
 Play's: app name 30 characters, short description 80, full description 4,000.
@@ -33,10 +33,10 @@ Rules this copy follows:
 >
 > When your ride starts, everyone in it shows up on one live map. You can see who's
 > ahead, who's dropped off the back and where the Captain is. There's no group chat to
-> scroll and nobody needs to shout "car back" down the line to find out who's missing.
+> scroll and nobody needs to shout "All In" down the line to find out who's missing.
 >
 > **Made for clubs, not strangers**
-> Vechelon is for members of a cycling club that uses it. You need to be a member of
+> Vechelon is for members of a cycling club. You need to be a member of
 > that club to see its rides. After you sign in, your club organiser approves your
 > membership. Until they do, you'll see that your membership is pending and none of the
 > club's rides or riders.
@@ -53,7 +53,7 @@ Rules this copy follows:
 >
 > **Your location, plainly**
 > - Vechelon uses your location only while you're in an active ride. It's shared live
->   with the other riders in that ride.
+>   with the other riders.
 > - To keep you on the map when your phone is in a pocket or jersey, Vechelon asks for
 >   background location. It always explains why first, and you can say no. Android shows
 >   a notification the whole time tracking is on.
@@ -81,6 +81,6 @@ Rules this copy follows:
 
 1. **Naming the clubs.** The ticket asks for Racer Sportif and Bikes and Beers to be
    named. Does Racer Sportif agree to be named in a public listing?
-2. **"Car back".** This is cycling-native wording, but it's playful. Keep it or cut it?
+2. **"Car back": DECIDED 2026-11-10.** Replaced with "All In" (Sr PM edit).
 3. **Beacon.** The line describes it as a help signal to the group. Confirm that matches
    how Beacon should be positioned publicly before Voice & Tone signs off the Beacon copy.
