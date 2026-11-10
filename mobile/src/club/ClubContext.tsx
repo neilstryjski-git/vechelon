@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -20,15 +20,25 @@ export type Club = {
   slug: string;
   name: string;
   role: string;
+  // W304: membership status in this club ('affiliated' | 'initiated' | …). Only an
+  // affiliated member may see club data — see clubAccess() in lib/clubResolution.ts.
+  status: string;
 };
 
 type ClubContextValue = {
   club: Club | null;
   // True from sign-in until the first resolution settles (success or failure).
   resolving: boolean;
+  // W304: re-resolve the club for the CURRENT uid (e.g. a pending rider checking whether
+  // an organiser has approved them) without restarting the app. Resolves when done.
+  refresh: () => Promise<void>;
 };
 
-const ClubContext = createContext<ClubContextValue>({ club: null, resolving: false });
+const ClubContext = createContext<ClubContextValue>({
+  club: null,
+  resolving: false,
+  refresh: async () => {},
+});
 
 type Row = {
   tenant_id: string;
@@ -104,6 +114,7 @@ async function resolveClub(uid: string, isCancelled: () => boolean): Promise<Clu
     slug: chosen.slug,
     name: found?.name ?? chosen.slug,
     role: chosen.role,
+    status: chosen.status,
   };
 }
 
@@ -118,6 +129,21 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
     club: null,
     done: false,
   });
+  // W304: re-resolve for the same uid without blanking the current club (no branding
+  // flicker), and keep the previous club if the re-check fails (a transient network error
+  // must not read as "no club"). A result is applied only if that uid is still live.
+  const uidRef = useRef(uid);
+  uidRef.current = uid;
+  const refresh = useCallback(async () => {
+    const forUid = uidRef.current;
+    if (!forUid) return;
+    try {
+      const club = await resolveClub(forUid, () => uidRef.current !== forUid);
+      if (uidRef.current === forUid) setState({ uid: forUid, club, done: true });
+    } catch {
+      // keep what we had
+    }
+  }, []);
 
   useEffect(() => {
     if (!uid) return;
@@ -136,6 +162,7 @@ export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value: ClubContextValue = {
     club: current ? state.club : null,
     resolving: uid !== null && !(current && state.done),
+    refresh,
   };
 
   return <ClubContext.Provider value={value}>{children}</ClubContext.Provider>;

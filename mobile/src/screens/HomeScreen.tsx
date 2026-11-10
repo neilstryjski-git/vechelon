@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeProvider';
 import { PRIVACY_POLICY_URL } from '../lib/env';
 import { useClub } from '../club/ClubContext';
+import { clubAccess } from '../lib/clubResolution';
 import {
   isTrackingPingEnabled,
   loadTrackingPingFlag,
@@ -54,8 +55,12 @@ const HomeScreen: React.FC = () => {
   // ride creators are tenant admins. Show the control only to accounts that
   // can actually use it (PoC captains are seeded as tenant admins).
   // W303: admin of the rider's ACTIVE club (resolved at runtime) may start a ride.
-  const { club } = useClub();
-  const canCreate = club?.role === 'admin';
+  // W304: only an AFFILIATED member sees the club's rides; a pending member gets the
+  // awaiting-approval state (RLS enforces the same line server-side for Rail 3 data).
+  const { club, resolving, refresh: refreshClub } = useClub();
+  const access = clubAccess(club, resolving);
+  const canCreate = access === 'member' && club?.role === 'admin';
+  const [checking, setChecking] = useState(false);
   // W231: opt-in audible tracking-ping toggle (closed-test field-QA aid). Off by
   // default; hydrate from storage on mount. Source of truth lives in trackingPing.ts.
   const [pingOn, setPingOn] = useState(false);
@@ -106,6 +111,11 @@ const HomeScreen: React.FC = () => {
   }, []);
 
   const loadRides = useCallback(async () => {
+    if (access !== 'member') {
+      setRides([]);
+      setLoaded(access !== 'loading');
+      return;
+    }
     const { data, error } = await supabase
       .from('rides')
       .select('id, name, status, scheduled_start')
@@ -114,7 +124,7 @@ const HomeScreen: React.FC = () => {
       .limit(20);
     if (!error && data) setRides(data as ActiveRide[]);
     setLoaded(true);
-  }, []);
+  }, [access]);
 
   // Refetch on every focus (not just mount) so returning from an ended ride drops it
   // off the list right away — no manual pull-to-refresh needed (field-test UX fix).
@@ -129,6 +139,13 @@ const HomeScreen: React.FC = () => {
     await loadRides();
     setRefreshing(false);
   }, [loadRides]);
+
+  // W304: a pending rider re-checks whether an organiser has approved them.
+  const onCheckApproval = useCallback(async () => {
+    setChecking(true);
+    await refreshClub();
+    setChecking(false);
+  }, [refreshClub]);
 
   return (
     <View style={styles.container}>
@@ -221,47 +238,95 @@ const HomeScreen: React.FC = () => {
         {versionLabel()}
       </Text>
 
-      <Text style={styles.sectionTitle}>Live rides</Text>
-      <FlatList
-        data={rides}
-        keyExtractor={(r) => r.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.primaryColor}
-          />
-        }
-        ListEmptyComponent={
-          loaded ? (
-            <View>
-              <Text style={styles.empty}>
-                No live rides right now. Pull to refresh when your ride starts.
-              </Text>
-              {/* Feature 3: Ad Hoc creation is available when no ride is Active. */}
-              {canCreate ? <AdHocCreator /> : null}
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
+      {access === 'pending' ? (
+        <View style={styles.statusCard} accessibilityLiveRegion="polite">
+          <Text style={styles.statusTitle}>Membership pending</Text>
+          <Text style={styles.statusBody}>
+            Your club organiser approves new members. Once you're approved, your club's live
+            rides will appear here.
+          </Text>
           <TouchableOpacity
-            style={styles.rideCard}
-            onPress={() => navigation.navigate('RideMap', { rideId: item.id })}
+            style={[styles.statusButton, { borderColor: theme.primaryColor }]}
+            onPress={onCheckApproval}
+            disabled={checking}
+            accessibilityRole="button"
+            accessibilityLabel="Check approval status"
           >
-            <View style={styles.liveDot} />
-            <View style={styles.rideMeta}>
-              <Text style={styles.rideName}>{item.name}</Text>
-              <Text style={styles.rideSub}>LIVE — open fleet map</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={[styles.statusButtonText, { color: theme.primaryColor }]}>
+              {checking ? 'Checking…' : 'Check again'}
+            </Text>
           </TouchableOpacity>
-        )}
-      />
+        </View>
+      ) : access === 'none' ? (
+        <View style={styles.statusCard}>
+          <Text style={styles.statusTitle}>No club yet</Text>
+          <Text style={styles.statusBody}>
+            This account isn't an active member of a club. Ask your club organiser for an
+            invite to Vechelon.
+          </Text>
+        </View>
+      ) : (
+        <>
+        <Text style={styles.sectionTitle}>Live rides</Text>
+        <FlatList
+          data={rides}
+          keyExtractor={(r) => r.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.primaryColor}
+            />
+          }
+          ListEmptyComponent={
+            loaded ? (
+              <View>
+                <Text style={styles.empty}>
+                  No live rides right now. Pull to refresh when your ride starts.
+                </Text>
+                {/* Feature 3: Ad Hoc creation is available when no ride is Active. */}
+                {canCreate ? <AdHocCreator /> : null}
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.rideCard}
+              onPress={() => navigation.navigate('RideMap', { rideId: item.id })}
+            >
+              <View style={styles.liveDot} />
+              <View style={styles.rideMeta}>
+                <Text style={styles.rideName}>{item.name}</Text>
+                <Text style={styles.rideSub}>LIVE — open fleet map</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+          )}
+        />
+        </>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  statusCard: {
+    borderWidth: 1,
+    borderColor: '#2A2A2E',
+    borderRadius: 12,
+    padding: 18,
+    marginTop: 8,
+  },
+  statusTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginBottom: 8 },
+  statusBody: { color: '#B5B5B8', fontSize: 14, lineHeight: 20 },
+  statusButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  statusButtonText: { fontSize: 14, fontWeight: '700' },
   container: { flex: 1, backgroundColor: '#0E0E10', paddingHorizontal: 20, paddingTop: 64 },
   club: {
     fontSize: 22,

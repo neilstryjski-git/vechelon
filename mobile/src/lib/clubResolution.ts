@@ -35,16 +35,40 @@ export function chooseActiveClub(
   fallbackSlug: string,
 ): ClubChoice {
   const active = memberships.filter(isActiveMembership);
-  const find = (slug: string) => (slug ? active.find((m) => m.slug === slug) : undefined);
-  const primary = find(primarySlug);
-  if (primary) return { kind: 'member', membership: primary };
-  const fallback = find(fallbackSlug);
-  if (fallback) return { kind: 'member', membership: fallback };
-  const other = active.find((x) => x.role === 'admin') ?? active[0];
-  if (other) return { kind: 'member', membership: other };
+  // W304: an APPROVED (affiliated) membership anywhere beats a pending one, so a rider
+  // affiliated to one club is never stuck on "Membership pending" by a pending row in
+  // the primary/fallback club. Within each tier the W303 order applies.
+  const pick = (pool: readonly Membership[]): Membership | undefined => {
+    const find = (slug: string) => (slug ? pool.find((m) => m.slug === slug) : undefined);
+    return (
+      find(primarySlug) ??
+      find(fallbackSlug) ??
+      pool.find((x) => x.role === 'admin') ??
+      pool[0]
+    );
+  };
+  const chosen = pick(active.filter((m) => m.status === 'affiliated')) ?? pick(active);
+  if (chosen) return { kind: 'member', membership: chosen };
   // Never auto-join a club the rider was removed from (inactive row present).
   if (fallbackSlug && !memberships.some((m) => m.slug === fallbackSlug)) {
     return { kind: 'join-fallback', slug: fallbackSlug };
   }
   return { kind: 'none' };
+}
+
+// W304 — what the home screen may show for the resolved club. Only an AFFILIATED member
+// sees the club's rides; a pending ('initiated') member gets the "awaiting approval" state,
+// and a rider with no usable club gets the "no club" state. The server enforces the same
+// line (rail3_is_affiliated RLS) — this only decides which screen to render.
+export type ClubAccess = 'loading' | 'member' | 'pending' | 'none';
+
+export function clubAccess(
+  club: { status: string } | null,
+  resolving: boolean,
+): ClubAccess {
+  if (resolving) return 'loading';
+  if (!club) return 'none';
+  if (club.status === 'affiliated') return 'member';
+  if (club.status === 'initiated') return 'pending';
+  return 'none';
 }

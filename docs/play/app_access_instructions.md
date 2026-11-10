@@ -1,4 +1,4 @@
-# Google Play — App Access instructions (draft, W303)
+# Google Play — App Access instructions (W303 draft, re-checked for W304)
 
 Paste into Play Console → App content → App access → "All or some functionality is
 restricted" → Add instructions. The **password is not in this file**: copy it from
@@ -23,3 +23,10 @@ restricted" → Add instructions. The **password is not in this file**: copy it 
 >
 > This reviewer club contains no real riders. Other people who install the app join a
 > separate club as pending members until a club organiser approves them.
+
+**W304 re-check (2026-11-09):** the reviewer path is unchanged. The reviewer is an
+*affiliated* organiser of the reviewer club, so the W304 rule that only affiliated
+members see club data doesn't affect it. A stranger who signs in sees the
+"Membership pending" screen (Bikes and Beers) until an organiser approves them, which
+matches the last paragraph above.
+
