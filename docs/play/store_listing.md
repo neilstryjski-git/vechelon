@@ -79,8 +79,7 @@ Rules this copy follows:
    deleted within 5 hours of the ride ending, and Beacon location after 30 days. privacy.html
    is amended to match, and the line above states it.
 
-1. **Naming the clubs.** The ticket asks for Racer Sportif and Bikes and Beers to be
-   named. Does Racer Sportif agree to be named in a public listing?
+1. **Naming the clubs: DECIDED 2026-11-10.** Racer Sportif and Bikes and Beers are named
+   (Sr PM confirmed).
 2. **"Car back": DECIDED 2026-11-10.** Replaced with "All In" (Sr PM edit).
-3. **Beacon.** The line describes it as a help signal to the group. Confirm that matches
-   how Beacon should be positioned publicly before Voice & Tone signs off the Beacon copy.
+3. **Beacon: DECIDED 2026-11-10.** Positioned as a help signal to the group (Sr PM confirmed).
