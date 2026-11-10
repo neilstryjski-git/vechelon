@@ -53,7 +53,8 @@
       "name": "vechelon-web-staging",
       "workers_dev": true,
       "routes": [
-        { "pattern": "racer-sportif.staging.vechelon.ca", "custom_domain": true }
+        { "pattern": "racer-sportif.staging.vechelon.ca", "custom_domain": true },
+        { "pattern": "bikes-and-beers.staging.vechelon.ca", "custom_domain": true }
       ]
     }
   }
