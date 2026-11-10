@@ -33,7 +33,7 @@ Rules this copy follows:
 >
 > When your ride starts, your Captain and support crew see everyone on one live map:
 > who's ahead, who's dropped off the back, who needs help. You see where your Captain
-> is. There's no group chat to scroll and nobody needs to shout "All In" down the line
+> and support crew are. There's no group chat to scroll and nobody needs to shout "All In" down the line
 > to find out who's missing.
 >
 > **Made for clubs, not strangers**
