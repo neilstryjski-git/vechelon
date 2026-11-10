@@ -57,12 +57,14 @@ Shots, in order:
 1. **Phone A:** open Vechelon (signed in as a club member) and join the active ride that
    Phone B (Captain) started.
 2. **Phone A:** the "Keep your ride visible" explainer appears. Tap "Got it".
-3. **Phone A: the disclosure screen.** Hold for about 3 seconds so the full sentence is readable:
+3. **Phone A:** the Android location prompt. Choose "While using the app". It may already
+   have appeared when the ride opened; if so, it won't appear again here.
+4. **Phone A: the disclosure screen.** Hold for about 3 seconds so the full sentence is readable:
    "Vechelon collects location data to show your position to your club during a ride, even
    when the app is closed or not in use." Then tap **Allow**.
-4. **Phone A:** the Android location prompt. Choose "While using the app".
-5. **Phone A:** Android opens the location permission page. Select **"Allow all the time"**,
-   then go back to the app.
+5. **Phone A:** the "Stay on the map when pocketed" dialog appears. Tap **Open Settings**,
+   then Permissions → Location → **"Allow all the time"**, then go back to the app. (On
+   Android 11+ the system only offers "Allow all the time" from Settings.)
 6. **Phone A:** pull down the notification shade and show "Vechelon — sharing your position".
 7. **Phone A:** lock the screen and put the phone away. Walk.
 8. **Phone B (Captain):** film Phone A's marker moving on the map while Phone A stays locked
