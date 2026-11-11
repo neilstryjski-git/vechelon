@@ -38,7 +38,7 @@ device is quoted exactly.
 > background location, the core safety function (the Captain finding a rider who has
 > fallen behind or needs help) fails during the ride.
 
-**Video link:** `<unlisted YouTube URL>`
+**Video link:** https://youtu.be/56HKtCnGRxg (Unlisted; uploaded 2026-11-10)
 
 ---
 
