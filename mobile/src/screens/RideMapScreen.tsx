@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  AppState,
+  Linking,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import MapView from 'react-native-map-clustering';
 import { PROVIDER_GOOGLE, Marker, Polyline, Region } from 'react-native-maps';
 import type RNMapView from 'react-native-maps';
@@ -32,6 +42,7 @@ import { canEndRide } from '../lib/rideControlsLogic';
 import { deriveRenderState } from '../state/riderState';
 import { initialBearingDeg, regionContains } from '../lib/geo';
 import { logMeasurement } from '../lib/measure';
+import { ensureNotificationPermission } from '../lib/notificationPermission';
 import RiderMarker from '../components/RiderMarker';
 import SelfHealthBadge from '../components/SelfHealthBadge';
 import { useSelfHealth, isSelfHealthPromptActiveNow } from '../hooks/useSelfHealth';
@@ -268,6 +279,16 @@ const RideMapScreen: React.FC = () => {
       () => ({ status: 'denied' as Location.PermissionStatus }),
     );
     if (fg !== 'granted') return;
+    // D101 — Android 13+ hides the tracking foreground-service notification unless
+    // POST_NOTIFICATIONS is granted (it defaults to denied on a fresh install). Ask once
+    // here, in the ride context the explainer just described. Advisory: it never throws
+    // and the join continues whatever the answer. It is NOT a location permission, so
+    // the W302 disclosure below still precedes the only background-location request.
+    const notif = await ensureNotificationPermission({
+      os: Platform.OS,
+      apiLevel: Platform.Version,
+      request: (p) => PermissionsAndroid.request(p as typeof PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS),
+    });
     // W302 — Google Play prominent disclosure. If BACKGROUND isn't already granted, show
     // the disclosure and request it ONLY on an affirmative Allow. Not now (or back) skips
     // the request entirely: the ride continues foreground-only, nothing throws.
@@ -293,7 +314,7 @@ const RideMapScreen: React.FC = () => {
     }
     // PoC/staging instrumentation: capture the actual grant result so the sink shows
     // — per device/OS — whether riders are reaching "Allow all the time" at all.
-    void logMeasurement({ rideId, kind: 'ux_explainer_shown', payload: { fg, bg, consented } });
+    void logMeasurement({ rideId, kind: 'ux_explainer_shown', payload: { fg, bg, consented, notif } });
     // Android 11+ reality: requestBackgroundPermissionsAsync does NOT show an inline
     // dialog after foreground is granted — the OS only grants "Allow all the time"
     // from the app's system Settings. So a silent `denied` here is the EXPECTED first

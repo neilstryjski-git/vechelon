@@ -149,6 +149,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // Android 8+ uses the ADAPTIVE icon over the top-level `icon`, so the ca.vechelon
     // variant must override it too (overriding only `icon` left the rs78 adaptive icon
     // showing). Keep the dark backdrop; the chainring is masked to the launcher shape.
+    // D101 — Android 13+ runtime permission for the tracking notification. Additive
+    // under CNG: library-declared permissions (location, FGS, activity recognition)
+    // are merged in as before. Requested at ride join in RideMapScreen.
+    permissions: [...(config.android?.permissions ?? []), 'android.permission.POST_NOTIFICATIONS'],
     adaptiveIcon: isProd
       ? { foregroundImage: './assets/icon.png', backgroundColor: '#1A1A1A' }
       : config.android?.adaptiveIcon,
