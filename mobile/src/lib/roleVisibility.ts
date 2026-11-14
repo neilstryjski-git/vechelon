@@ -41,6 +41,27 @@ export function visibleParticipants(
   return others.filter((p) => isCommand(p.role));
 }
 
+// §4.1 ROSTER (list view). Same access matrix as the map, but a LIST rather than
+// markers, so it differs from visibleParticipants in two deliberate ways:
+//   * SELF is KEPT — on the map "self" is the OS blue dot (never a marker); in a
+//     roster you are a row like everyone else.
+//   * entries need no live position — the roster lists people who are IN the ride
+//     but not broadcasting (added, or haven't opened the app), which the map, being
+//     ping-driven, can never surface. That inclusion is the roster's whole point.
+// Command (Captain/SAG) → everyone. Rider/Guest → Captain + SAG + self.
+// NOTE: for affiliated tenants the RLS-gated roster returns ALL participants to a
+// Rider (the RP-16 caveat in useFleetPositions), so this predicate — not the
+// server — is what enforces §4.1 on the roster. Keep it authoritative.
+export function rosterVisible(
+  myRole: RideRole,
+  myRiderId: string,
+  entry: { riderId: string; role: RideRole },
+): boolean {
+  if (entry.riderId === myRiderId) return true; // you always see yourself
+  if (isCommand(myRole)) return true; // Captain/SAG see the whole roster
+  return isCommand(entry.role); // Rider/Guest see command riders only
+}
+
 // §4.1 Bottom Sheet rows:
 //   Captain → riders + SAG (not other captains; '—' in the matrix is self).
 //   SAG     → riders + Captain.

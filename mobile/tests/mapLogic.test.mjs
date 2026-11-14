@@ -18,6 +18,7 @@ import {
 } from '../src/lib/geo.ts';
 import {
   visibleParticipants,
+  rosterVisible,
   canOpenSheet,
   canSeePhone,
   canExpandCluster,
@@ -58,6 +59,27 @@ test('guest rider has identical visibility to member rider (role gates, not acco
 test('R3-08/R3-09: Captain and SAG see the full fleet (minus self)', () => {
   assert.equal(visibleParticipants('captain', 'cap', FLEET).length, 4);
   assert.equal(visibleParticipants('support', 'sag', FLEET).length, 4);
+});
+
+// ── §4.1 roster (list) visibility ───────────────────────────────────────────
+// Same matrix as the map, but SELF is kept (a roster row, not the OS blue dot)
+// and entries need no live position (off-app people are listed).
+
+test('roster: Rider sees Captain + SAG + SELF (never other riders)', () => {
+  const visible = FLEET.filter((p) => rosterVisible('member', 'r1', p)).map((p) => p.riderId).sort();
+  assert.deepEqual(visible, ['cap', 'r1', 'sag']);
+});
+
+test('roster: guest visibility equals member visibility (role gates, not account type)', () => {
+  const member = FLEET.filter((p) => rosterVisible('member', 'r1', p)).map((p) => p.role).sort();
+  const guest = FLEET.filter((p) => rosterVisible('guest', 'g1', p)).map((p) => p.role).sort();
+  // Both see the two command roles + their own rider row.
+  assert.deepEqual(member, guest);
+});
+
+test('roster: Captain and SAG see EVERYONE, self included', () => {
+  assert.equal(FLEET.filter((p) => rosterVisible('captain', 'cap', p)).length, FLEET.length);
+  assert.equal(FLEET.filter((p) => rosterVisible('support', 'sag', p)).length, FLEET.length);
 });
 
 test('R3-17: Rider cannot open the sheet for other riders, only Captain/SAG', () => {

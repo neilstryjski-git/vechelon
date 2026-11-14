@@ -27,6 +27,7 @@ import { logMeasurement } from '../lib/measure';
 import RiderMarker from '../components/RiderMarker';
 import EdgeIndicator from '../components/EdgeIndicator';
 import RiderBottomSheet from '../components/RiderBottomSheet';
+import RosterPanel from '../components/RosterPanel';
 import SupportBeacon from '../components/SupportBeacon';
 import FullScreenQR from '../components/FullScreenQR';
 import RideControls from './RideControls';
@@ -233,6 +234,7 @@ const RideMapScreen: React.FC = () => {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selected, setSelected] = useState<FleetParticipant | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const myRole = ride?.myRole ?? 'member';
 
@@ -482,6 +484,17 @@ const RideMapScreen: React.FC = () => {
           <Text style={styles.chipText}>‹ {ride?.name ?? 'Ride'}</Text>
         </TouchableOpacity>
         <View style={styles.topRight}>
+          {/* Roster (§4.1 list): the full participant list, INCLUDING riders who
+              aren't broadcasting and so never appear as map markers. Same role-gated
+              visibility as the map; opens over the map so the position send never
+              pauses. */}
+          <TouchableOpacity
+            style={styles.rosterChip}
+            onPress={() => setRosterOpen(true)}
+            accessibilityLabel="Show ride roster"
+          >
+            <Text style={styles.chipText}>Roster</Text>
+          </TouchableOpacity>
           {channelStatus !== 'SUBSCRIBED' ? (
             <View style={styles.statusChip}>
               <Text style={styles.chipText}>
@@ -512,6 +525,16 @@ const RideMapScreen: React.FC = () => {
       {ride && myRole === 'captain' ? (
         <RideControls rideId={ride.id} getMyCoords={getMyCoords} channel={channel} />
       ) : null}
+
+      <RosterPanel
+        visible={rosterOpen}
+        onClose={() => setRosterOpen(false)}
+        roster={roster}
+        fleet={fleet}
+        myRole={myRole}
+        myRiderId={myRiderId}
+        rideName={ride?.name ?? 'Ride'}
+      />
 
       {ride ? (
         <FullScreenQR
@@ -622,6 +645,15 @@ const styles = StyleSheet.create({
   },
   topRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   qrChip: {
+    backgroundColor: '#0E0E10E6',
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  rosterChip: {
     backgroundColor: '#0E0E10E6',
     borderColor: '#FFFFFF',
     borderWidth: 1,
