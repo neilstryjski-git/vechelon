@@ -1,5 +1,6 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 import {
+  withAndroidManifest,
   withAppBuildGradle,
   withGradleProperties,
   withProjectBuildGradle,
@@ -37,6 +38,22 @@ allprojects {
     }
 }
 `;
+    return cfg;
+  });
+
+// D102: keep Android back handling working at targetSdk 36. Targeting Android 16
+// turns predictive back ON by default, and then the system no longer calls
+// Activity.onBackPressed() or dispatches KEYCODE_BACK. React Native 0.76 still routes
+// hardware/gesture back through ReactActivity.onBackPressed() (-> JS BackHandler, which
+// react-navigation and RN <Modal onRequestClose> rely on), so without this opt-out the
+// back gesture would skip JS entirely: closing the app from the ride map instead of
+// going back, and bypassing the W302 disclosure's "back = Not now" path. The manifest
+// opt-out is still honoured at target 36. Remove it when RN moves to
+// OnBackPressedCallback (Expo SDK upgrade at the production move).
+const withLegacyBackHandling: ConfigPlugin = (config) =>
+  withAndroidManifest(config, (cfg) => {
+    const app = cfg.modResults.manifest.application?.[0];
+    if (app) app.$['android:enableOnBackInvokedCallback'] = 'false';
     return cfg;
   });
 
@@ -197,10 +214,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         googlePlayServicesLocationVersion: '21.3.0',
         // Align bg-geo's library module to the app's SDK levels (its defaults are
         // compileSdk 31 — too low for the FOREGROUND_SERVICE_LOCATION API-34 surface).
-        // target 35 = Google Play's minimum target API for new submissions (2026);
-        // must match the app module's expo-build-properties targetSdkVersion.
+        // D102: target 36 = Google Play's minimum target API for submissions (Play Console
+        // rejected the target-35 AAB on 2026-11-14). Must match the app module's
+        // expo-build-properties targetSdkVersion in app.json. compileSdk deliberately
+        // stays 35: Expo SDK 52's AGP 8.6.0 is only tested up to compileSdk 35, the app
+        // calls no API 36 APIs, and AGP has no rule requiring compileSdk >= targetSdk.
+        // Raise compileSdk with the Expo SDK upgrade at the production move.
         compileSdkVersion: 35,
-        targetSdkVersion: 35,
+        targetSdkVersion: 36,
         minSdkVersion: 24,
       },
     ],
@@ -208,9 +229,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   };
   // Pin tsbackgroundfetch to its resolved version (kills the jitpack version-listing,
   // resolves from mavenCentral) and keep the longer maven HTTP timeouts as
-  // belt-and-suspenders. Both are harmless on every build.
-  const hardened = withLongHttpTimeouts(
-    withPinnedTsBackgroundFetch(base),
+  // belt-and-suspenders. Both are harmless on every build. D102's back-handling
+  // opt-out applies to every profile (all share the app.json target SDK).
+  const hardened = withLegacyBackHandling(
+    withLongHttpTimeouts(withPinnedTsBackgroundFetch(base)),
   ) as ExpoConfig;
   // Only the 'trial' profile builds the standalone DEBUG APK (unlicensed Transistorsoft).
   return process.env.EAS_BUILD_PROFILE === 'trial'
