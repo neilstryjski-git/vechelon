@@ -1639,3 +1639,10 @@ tsc clean (pre-existing deepLinkAuth.ts only). Validation construct — producti
   recovery clears the badge silently with no message; join with Saver ON → no badge/prompt inside the window, Saver advisory
   alone while healthy, suppressed when self-health fires; 6+ min stationary → no warning; exactly one `warning_fired` row per
   episode in rail3_telemetry_events.
+
+## [2026-11-14 13:15] — Pillar V Amendment: SD-011 beacon ride-end close (D81)
+Action: Initiated and approved Amendment for Pillar IV Ledger §1 SD-011
+Files Modified: productdocuments/rail3/pillar_v_amendment_sd011-beacon-ride-end-close_2026-11-14.md (uncommitted, main checkout), productdocuments/rail3/vechelon_rail3_pillar_4_ledger_v1_1_3.md (PROPOSED amendment row), supabase/migrations/20261114000000_d81_close_beacons_on_ride_end.sql
+Libraries Installed: None
+Deviation from HLD: See pillar_v_amendment_sd011-beacon-ride-end-close_2026-11-14.md
+Notes: Strategic Re-engagement with The Brain required to enshrine the amended SD-011 text. Known deferred side effect: W299 deletion NULLs beacon_cancelled_by on a deleted user's cancels.
