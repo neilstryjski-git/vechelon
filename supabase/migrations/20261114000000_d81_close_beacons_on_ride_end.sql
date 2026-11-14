@@ -10,7 +10,8 @@
 -- auto-closes it after 24 hours), close every open Beacon on that ride and clear the riders'
 -- ride_participants.beacon_active flag (W282 current state).
 --
--- Audit semantics. SD-011 (Ledger, 2026-05-12) reserves beacon_cancelled_by NULL for SYSTEM
+-- Audit semantics (SD-011 amendment APPROVED by the Sr PM 2026-11-14, pending Brain ratification; see
+-- productdocuments/rail3/pillar_v_amendment_sd011-beacon-ride-end-close_2026-11-14.md). SD-011 (Ledger, 2026-05-12) reserves beacon_cancelled_by NULL for SYSTEM
 -- ERROR, because a bare NULL can't be told apart from a failed write. To keep that guarantee:
 --   * a new column, beacon_cancel_reason, records WHY a Beacon was closed. A ride-end close
 --     writes 'ride_ended'. A person's cancel from the app leaves it NULL (unchanged app path).
