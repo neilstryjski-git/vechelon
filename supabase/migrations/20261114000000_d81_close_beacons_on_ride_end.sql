@@ -31,7 +31,8 @@
 --   * Pattern 1 (recursion): no RLS policy is created or changed. The trigger function is
 --     SECURITY DEFINER with search_path pinned, so it closes Beacons for every rider regardless
 --     of the ender's own row access, and it writes to beacon_alerts and ride_participants only.
---     Neither table has a trigger that writes back to rides, so there is no trigger loop.
+--     Neither table has a trigger that writes back to rides, so there is no trigger loop. The
+--     late-raise guard on beacon_alerts only reads rides and edits its own NEW row.
 --     ride_participants_guard_role passes SECURITY DEFINER callers through, and the update
 --     touches only beacon_active anyway.
 --   * Pattern 5 (idempotency): ADD COLUMN IF NOT EXISTS, CREATE OR REPLACE FUNCTION,
@@ -68,9 +69,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- Actor = the ender's account, resolved through accounts so an auth user without an
+  -- accounts row (FK) can never block ending a ride. NULL when the system ended it.
   UPDATE public.beacon_alerts
      SET beacon_cancelled_at  = now(),
-         beacon_cancelled_by  = auth.uid(),   -- NULL when the system ended the ride
+         beacon_cancelled_by  = (SELECT a.id FROM public.accounts a WHERE a.id = auth.uid()),
          beacon_cancel_reason = 'ride_ended'
    WHERE ride_id = NEW.id
      AND beacon_cancelled_at IS NULL;
@@ -93,18 +96,45 @@ CREATE TRIGGER trg_rail3_close_beacons_on_ride_end
   WHEN (OLD.status = 'active' AND NEW.status IS DISTINCT FROM 'active')
   EXECUTE FUNCTION public.rail3_close_beacons_on_ride_end();
 
+-- Late raise: a Beacon inserted after its ride already ended (a delayed write from a device
+-- that was out of signal) would otherwise be a new orphan. It is still recorded (the audit row
+-- matters, and the alert broadcast has already gone out first), but it arrives closed.
+CREATE OR REPLACE FUNCTION public.rail3_close_late_beacon()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.beacon_cancelled_at IS NULL AND EXISTS (
+       SELECT 1 FROM public.rides r WHERE r.id = NEW.ride_id AND r.status = 'saved') THEN
+    NEW.beacon_cancelled_at  := now();
+    NEW.beacon_cancel_reason := 'ride_ended';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rail3_close_late_beacon() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_rail3_close_late_beacon ON public.beacon_alerts;
+CREATE TRIGGER trg_rail3_close_late_beacon
+  BEFORE INSERT ON public.beacon_alerts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.rail3_close_late_beacon();
+
 -- Backfill: Beacons already orphaned on ended rides (9 on staging at 2026-11-14).
 UPDATE public.beacon_alerts b
    SET beacon_cancelled_at  = COALESCE(r.actual_end, now()),
        beacon_cancel_reason = 'ride_ended'
   FROM public.rides r
  WHERE r.id = b.ride_id
-   AND r.status <> 'active'
+   AND r.status = 'saved'   -- same semantics as the trigger: rides that ended
    AND b.beacon_cancelled_at IS NULL;
 
 UPDATE public.ride_participants rp
    SET beacon_active = false
   FROM public.rides r
  WHERE r.id = rp.ride_id
-   AND r.status <> 'active'
+   AND r.status = 'saved'
    AND rp.beacon_active;
