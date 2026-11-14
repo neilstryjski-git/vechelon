@@ -594,7 +594,7 @@ const TABS: { key: ActiveTab; label: string }[] = [
 
 /** Ready-to-send SMS/WhatsApp copy wrapping a completion link. */
 const inviteMessage = (url: string) =>
-  `Complete your Vechelon profile here: ${url}`;
+  `Hey, you mentioned joining a ride. Complete your Vechelon account here: ${url}`;
 
 /** Pull the human-readable reason out of a supabase-js functions.invoke error. */
 async function invokeErrorMessage(error: unknown): Promise<string> {
@@ -778,12 +778,12 @@ const Members: React.FC = () => {
   // Email a member a sign-in link so they can complete a missing detail (e.g.
   // their phone) themselves — reuses send-magic-link (lands on /auth).
   const { mutate: sendLoginLink, isPending: isSendingLogin } = useMutation({
-    mutationFn: async (email: string) => {
+    mutationFn: async ({ email, purpose }: { email: string; purpose: 'request_phone' | 'guest_complete' }) => {
       const redirectTo = `${window.location.origin}${AUTH_HREF}`;
-      const { error } = await supabase.functions.invoke('send-magic-link', { body: { email, redirectTo } });
+      const { error } = await supabase.functions.invoke('send-magic-link', { body: { email, redirectTo, purpose } });
       if (error) throw new Error(await invokeErrorMessage(error));
     },
-    onSuccess: () => addToast('Sign-in link emailed — they can add their phone once signed in.', 'success'),
+    onSuccess: () => addToast('Sign-in link emailed — they can add their details once signed in.', 'success'),
     onError: (e: Error) => addToast(e.message, 'error'),
   });
 
@@ -1713,7 +1713,7 @@ const Members: React.FC = () => {
                 )}
                 {(m.status === 'affiliated' || m.status === 'initiated' || m.status === 'rsvpd') && m.accounts?.email && !m.accounts?.phone && (
                   <button
-                    onClick={() => sendLoginLink(m.accounts!.email)}
+                    onClick={() => sendLoginLink({ email: m.accounts!.email, purpose: m.status === 'rsvpd' ? 'guest_complete' : 'request_phone' })}
                     disabled={isSendingLogin}
                     title={m.status === 'rsvpd'
                       ? 'Email a sign-in link — they confirm their email, get affiliated per your club policy, and add their details'

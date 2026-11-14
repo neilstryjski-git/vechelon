@@ -299,9 +299,16 @@ serve(async (req) => {
         </tr>
         <tr>
           <td style="padding:40px 40px 32px;">
-            <h2 style="margin:0 0 16px;font-size:24px;font-weight:800;color:#1c1c1c;letter-spacing:-0.02em;">You're all set.</h2>
+            <h2 style="margin:0 0 16px;font-size:24px;font-weight:800;color:#1c1c1c;letter-spacing:-0.02em;">You're in</h2>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#444;">
+              Your <strong>${clubName}</strong> account is ready. Sign in any time to:
+            </p>
+            <ul style="margin:0 0 20px;padding-left:20px;font-size:15px;line-height:1.7;color:#444;">
+              <li>See our scheduled rides and grab the <strong>GPX for your Garmin</strong></li>
+              <li>Get organized-ride details — and stay reachable by the ride captain and support if they ever need you on a ride</li>
+            </ul>
             <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#444;">
-              Your profile for <strong>${clubName}</strong> is complete. Tap below to sign in — no password needed.
+              Welcome aboard, see you on the road.
             </p>
             <table cellpadding="0" cellspacing="0">
               <tr>
@@ -328,7 +335,7 @@ serve(async (req) => {
 </html>`
       const { error: resendError } = await sendResendEmail({
         to: normalizedEmail,
-        subject: `You're in | ${clubName} on Vechelon`,
+        subject: `You're all set — welcome to ${clubName} on Vechelon`,
         html: emailHtml,
       })
       emailSent = !resendError

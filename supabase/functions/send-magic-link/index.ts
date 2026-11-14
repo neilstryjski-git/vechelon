@@ -19,7 +19,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { email, redirectTo, slug: bodySlug } = await req.json()
+    const { email, redirectTo, slug: bodySlug, purpose } = await req.json()
     if (!email) throw new Error('Email is required')
     if (!redirectTo) throw new Error('redirectTo is required')
 
@@ -104,11 +104,43 @@ serve(async (req) => {
     // email is unmistakably a test; it is unset on production (so prod is unchanged).
     const testBanner = Deno.env.get('EMAIL_TEST_BANNER') === 'true'
 
-    // Native (deep-link) callers get a 6-digit code to type into the app; web
-    // callers get the click-through "Authorize Session" button (unchanged).
+    // Purpose-specific copy for the WEB click-through email. Native (deep-link /
+    // Rail 3 OTP) callers keep the unchanged session-authorization copy regardless
+    // of purpose. The caller (admin portal) sets `purpose` per action.
+    const purposeKey = purpose === 'request_phone' || purpose === 'guest_complete' ? purpose : 'signin'
+    const purposeCopy: Record<string, { heading: string; intro: string; cta: string; subject: string; note: string }> = {
+      signin: {
+        heading: 'Authorization Required',
+        intro: `Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.`,
+        cta: 'Authorize Session',
+        subject: `Sign in to ${clubName}`,
+        note: `This link will expire in 60 minutes. If you didn't request this email, you can safely ignore it.`,
+      },
+      request_phone: {
+        heading: 'Add your mobile number',
+        intro: `Adding your mobile number helps make our group rides safer — your ride captain, and a support vehicle when one's out with the group, will have it handy in case they ever need to reach you while you're on a <strong>${clubName}</strong> ride.<br><br>You'll also have a chance to complete or change the rest of your profile and your emergency contacts.`,
+        cta: 'Add my number',
+        subject: `Add your mobile number for ${clubName} rides`,
+        note: `Tap the button to sign in. This link expires in 60 minutes. If this email wasn't meant for you, you can safely ignore it.`,
+      },
+      guest_complete: {
+        heading: 'Add your mobile number',
+        intro: `Thanks for joining a <strong>${clubName}</strong> ride! Let's finish getting you set up.<br><br>Adding your mobile number helps make our group rides safer — your ride captain, and a support vehicle when one's out with the group, will have it handy in case they ever need to reach you while you're on a <strong>${clubName}</strong> ride.<br><br>You'll also confirm your email, and you can see our scheduled rides, grab the <strong>GPX for your Garmin</strong>, and complete your profile and emergency contacts.`,
+        cta: 'Add my number',
+        subject: `Finish setting up for ${clubName} rides — add your mobile number`,
+        note: `Tap the button to sign in. This link expires in 60 minutes. If this email wasn't meant for you, you can safely ignore it.`,
+      },
+    }
+    const copy = purposeCopy[purposeKey]
+
+    const heading = isDeepLink ? 'Authorization Required' : copy.heading
     const introCopy = isDeepLink
       ? `Enter the code below in the <strong>${clubName}</strong> Rail 3 app to authorize your session.`
-      : `Click the secure button below to authorize your session and enter the <strong>${clubName}</strong> Tactical Portal.`
+      : copy.intro
+    const noteCopy = isDeepLink
+      ? `This code will expire in 60 minutes. If you didn't request this email, you can safely ignore it.`
+      : copy.note
+    const emailSubject = isDeepLink ? `Sign in to ${clubName}` : copy.subject
 
     const ctaBlock = isDeepLink
       ? `<div style="margin-bottom: 32px;">
@@ -118,7 +150,7 @@ serve(async (req) => {
           </div>`
       : `<div style="margin-bottom: 32px;">
             <a href="${clickThroughUrl}" style="background-color: ${brandColor}; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; text-transform: uppercase; letter-spacing: 0.1em;">
-              Authorize Session
+              ${copy.cta}
             </a>
           </div>`
 
@@ -129,7 +161,7 @@ serve(async (req) => {
         <div style="background-color: #ffffff; padding: 40px; border-radius: 16px; shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee;">
           ${clubLogo ? `<img src="${clubLogo}" alt="${clubName}" style="height: 40px; margin-bottom: 24px;">` : `<h1 style="font-style: italic; font-weight: 800; letter-spacing: -0.05em; margin: 0 0 24px 0;">${clubName.toUpperCase()}</h1>`}
 
-          <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Authorization Required</h2>
+          <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">${heading}</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #444; margin-bottom: 32px;">
             ${introCopy}
           </p>
@@ -137,7 +169,7 @@ serve(async (req) => {
           ${ctaBlock}
 
           <p style="font-size: 12px; color: #888; margin-bottom: 0;">
-            This ${isDeepLink ? 'code' : 'link'} will expire in 60 minutes. If you didn't request this email, you can safely ignore it.
+            ${noteCopy}
           </p>
         </div>
         
@@ -151,7 +183,7 @@ serve(async (req) => {
 
     const { error: resendError } = await sendResendEmail({
       to: inputEmail,
-      subject: `${testBanner ? '[Rail 3 TEST] ' : ''}Sign in to ${clubName}`,
+      subject: `${testBanner ? '[Rail 3 TEST] ' : ''}${emailSubject}`,
       html: emailHtml
     })
 
