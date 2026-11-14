@@ -7,10 +7,10 @@ name: Web Build Gate
 # `tsc -b` and assembles dist_production) on every PR that touches the web app,
 # and verifies the portal bundle is actually emitted. A type error or an
 # empty-portal build fails the PR here instead of shipping a green-looking,
-# portal-less deploy to Vercel.
+# portal-less deploy to production (Cloudflare Worker `vechelon-web`).
 #
-# Origin: a single missing import passed at runtime but failed `tsc`, and Vercel
-# shipped an EMPTY /portal as a "successful" deploy — a total prod outage
+# Origin: a single missing import passed at runtime but failed `tsc`, and the
+# then-host (Vercel) shipped an EMPTY /portal as a "successful" deploy — a total prod outage
 # (2026-06-29). This gate makes that class of failure impossible to merge.
 #
 # NOTE: for this to BLOCK merges (not just report), add "Build admin/web portal +
@@ -31,7 +31,9 @@ on:
       - 'echelon-logo-v10.html'
       - 'package.json'
       - 'package-lock.json'
-      - 'vercel.json'
+      - 'wrangler.jsonc'
+      - 'worker/**'
+      - 'static/**'
       - '.github/workflows/web-build.yml'
   push:
     branches: [master]
@@ -45,7 +47,9 @@ on:
       - 'echelon-logo-v10.html'
       - 'package.json'
       - 'package-lock.json'
-      - 'vercel.json'
+      - 'wrangler.jsonc'
+      - 'worker/**'
+      - 'static/**'
       - '.github/workflows/web-build.yml'
   workflow_dispatch:
 
@@ -69,7 +73,7 @@ jobs:
 
       - name: Install dependencies
         # Root is an npm workspace ("workspaces": ["admin"]), so a root install
-        # also installs admin's deps — the same way Vercel builds it.
+        # also installs admin's deps — the same way deploy-cloudflare.yml builds it.
         run: npm install --legacy-peer-deps
 
       - name: Production build (admin tsc + vite + assemble dist_production)

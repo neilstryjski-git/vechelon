@@ -299,8 +299,11 @@ function BrandingStep({ tenant, onSaved }: { tenant: Tenant; onSaved: () => void
 }
 
 // ---------------------------------------------------------------------------
-// Step 3 — Subdomain DNS
+// Step 3 — Subdomain verification
 // ---------------------------------------------------------------------------
+// No per-club DNS record: the wildcard `*.vechelon.ca` route on the Cloudflare
+// Worker serves every slug (hosting migration Phase 4, 2026-09-24). A per-club
+// CNAME would shadow the wildcard, so this step must never ask for one.
 
 function SubdomainStep({ tenant, onToggle }: { tenant: Tenant; onToggle: () => void }) {
   const [saving, setSaving] = useState(false);
@@ -318,28 +321,10 @@ function SubdomainStep({ tenant, onToggle }: { tenant: Tenant; onToggle: () => v
   return (
     <div className="space-y-4">
       <p className="font-body text-sm text-on-surface-variant/70">
-        Add this DNS record at your domain registrar, then verify the subdomain loads.
+        No DNS record needed — every <span className="font-mono">*.vechelon.ca</span> subdomain is
+        served automatically. Open the club's subdomain, check it shows this club's branding, then
+        mark it verified. Don't add a DNS record for the club: it would override the automatic routing.
       </p>
-
-      {/* DNS script */}
-      <div className="bg-surface-container-high rounded-lg border border-outline-variant/20 overflow-hidden">
-        <div className="px-4 py-2 border-b border-outline-variant/20 flex items-center justify-between">
-          <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant">DNS Record</span>
-        </div>
-        <div className="divide-y divide-outline-variant/10">
-          {[
-            { key: 'Type',  val: 'CNAME' },
-            { key: 'Host',  val: tenant.slug },
-            { key: 'Value', val: 'cname.vercel-dns.com' },
-            { key: 'TTL',   val: 'Auto (or 3600)' },
-          ].map(({ key, val }) => (
-            <div key={key} className="flex items-center px-4 py-2.5 gap-6">
-              <span className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant w-12 flex-shrink-0">{key}</span>
-              <span className="font-mono text-sm text-on-background select-all">{val}</span>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {msg && <p className="font-label text-[9px] text-error uppercase tracking-wide">{msg}</p>}
 

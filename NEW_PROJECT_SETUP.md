@@ -5,8 +5,7 @@ Steps to add a new project under `productdelivered.ca` based on the itin-wizard/
 ---
 
 ## Prerequisites
-- Access to your DNS provider
-- Access to Vercel dashboard
+- Access to the Cloudflare account (`neil@productdelivered.ca`) — the `productdelivered.ca` zone lives there
 - SSH key setup already done for neil-branding (reuse the same pattern)
 
 ---
@@ -15,21 +14,28 @@ Steps to add a new project under `productdelivered.ca` based on the itin-wizard/
 
 1. Create the project directory: `~/your-project-name`
 2. Build the app (with AI or manually)
-3. In `vite.config.ts` set the base path:
+3. In `vite.config.ts` keep the base path at the root — the app is served from its own subdomain:
    ```ts
-   base: '/your-project-name/'
+   base: '/'
    ```
-4. Create `vercel.json` for SPA client-side routing:
-   ```json
+4. Create `wrangler.jsonc` so Cloudflare serves the build as static assets with SPA fallback:
+   ```jsonc
    {
-     "rewrites": [
-       {
-         "source": "/your-project-name/(.*)",
-         "destination": "/index.html"
-       }
-     ]
+     "name": "your-project-name",
+     "compatibility_date": "2026-09-01",
+     "workers_dev": true,
+     "routes": [
+       { "pattern": "your-project-name.productdelivered.ca", "custom_domain": true }
+     ],
+     "assets": {
+       "directory": "./dist",
+       // every unknown path serves the SPA shell
+       "not_found_handling": "single-page-application"
+     }
    }
    ```
+   Add a deploy script to `package.json`: `"deploy:cloudflare": "vite build && npx --yes wrangler@4 deploy"`.
+   Don't add a `public/_redirects` catch-all — it loops on Cloudflare, and `not_found_handling` already covers it.
 
 ---
 
@@ -64,26 +70,24 @@ Steps to add a new project under `productdelivered.ca` based on the itin-wizard/
 
 ---
 
-## Step 3 — Vercel Setup
+## Step 3 — Deploy to Cloudflare
 
-1. Vercel dashboard → **Add New Project** → Import from GitHub
-2. Grant Vercel access to the new repo if needed (GitHub App Permissions)
-3. Select the repo → Framework: depends on project → **Deploy**
-4. Once deployed, note the `*.vercel.app` URL
+1. `npx wrangler login` (once per machine), then `npm run deploy:cloudflare`
+2. Note the `your-project-name.<account>.workers.dev` preview URL and check it loads
+3. Optional — deploy on push: copy `.github/workflows/deploy-cloudflare.yml` from neil-branding and add a
+   `CLOUDFLARE_API_TOKEN` repo secret
 
 ---
 
 ## Step 4 — Subdomain Setup
 
-1. In your DNS provider, add a CNAME record:
-   - **Name:** `your-project-name`
-   - **Target:** `cname.vercel-dns.com`
-2. In Vercel → your project → Settings → Domains → add `your-project-name.productdelivered.ca`
-3. Wait for DNS propagation, then verify:
-   ```bash
-   curl -I https://your-project-name.productdelivered.ca
-   ```
-   Should return `HTTP/2 200`
+The `routes` entry with `"custom_domain": true` creates the DNS record and certificate on deploy — no manual
+CNAME. If a DNS record with that name already exists in the Cloudflare zone, delete it first (Cloudflare refuses
+a custom domain over an existing record). Then verify:
+```bash
+curl -I https://your-project-name.productdelivered.ca
+```
+Should return `HTTP/2 200` with `server: cloudflare`
 
 ---
 
@@ -112,7 +116,7 @@ git push
 ---
 
 ## Notes
-- Each project gets its own SSH deploy key, GitHub repo, and Vercel project
-- Subdomains (`your-project-name.productdelivered.ca`) work on Vercel's free plan
-- Path-based routing (`productdelivered.ca/your-project-name`) requires Vercel Pro
-- The `base` path in `vite.config.ts` and the `vercel.json` rewrite must match exactly
+- Each project gets its own SSH deploy key, GitHub repo, and Cloudflare Worker
+- Subdomains (`your-project-name.productdelivered.ca`) are free on Cloudflare Workers static assets; static requests aren't metered
+- Hosting moved from Vercel to Cloudflare in 2026-09 (Vercel's Hobby plan forbids commercial use) — see `docs/hosting-migration/` in the vechelon repo
+- Path-based hosting (`productdelivered.ca/your-project-name`) would need a non-root `base` plus a route on the marketing Worker — prefer a subdomain
