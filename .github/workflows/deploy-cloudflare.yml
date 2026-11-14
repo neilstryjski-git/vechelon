@@ -23,6 +23,8 @@ on:
       - 'prototype.html'
       - 'roadmap.html'
       - 'privacy.html'
+      - 'terms.html'
+      - 'delete-account.html'
       - 'echelon-logo-v10.html'
       - 'package.json'
       - '.github/workflows/deploy-cloudflare.yml'

@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendResendEmail } from '../_shared/resend.ts'
 import { hashToken } from '../_shared/completion-token.ts'
+import { classifyRedirect } from '../_shared/redirectAllowlist.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -164,7 +166,16 @@ serve(async (req) => {
         if (mlError || !mlData?.user) {
           throw new Error(`Could not create account: ${(inviteError ?? mlError)?.message ?? 'unknown error'}`)
         }
-        accountId = mlData.user.id
+        // D96 (review r1+r2): 'invite' failing means an auth identity for this
+        // email already exists (e.g. a Rail 3 OTP-only sign-in with no accounts
+        // row). An unauthenticated token holder has not proven they own it, so do
+        // NOT write contacts, link it to this club, or bypass the W127 cross-club
+        // rule — refuse exactly as the existing-account branch does.
+        void mlData
+        return new Response(
+          JSON.stringify({ error: CROSS_CLUB_MESSAGE }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 },
+        )
       } else {
         accountId = inviteData.user.id
       }
@@ -180,12 +191,20 @@ serve(async (req) => {
     // account (e.g. a prior guest RSVP / member sharing this email) must only get
     // the rider's explicitly-submitted phone — never the seeded fallback — so a
     // blank phone field can't overwrite their real number (mirrors admin-complete-guest).
-    const phoneToWrite = isNewAccount ? (v_phone ?? shellPhone) : v_phone
+    //
+    // D96: an EXISTING account's contact details are never written here. The
+    // caller is an unauthenticated token holder who merely TYPED this email, so
+    // they have not proven they own it — writing would let any completion-link
+    // holder overwrite a same-club member's name/phone/emergency contacts. The
+    // real owner receives the sign-in email below and edits their own profile.
+    const phoneToWrite = isNewAccount ? (v_phone ?? shellPhone) : null
     const patch: Record<string, string> = {}
-    if (v_name) patch.name = v_name
-    if (phoneToWrite) patch.phone = phoneToWrite
-    if (v_ec_name) patch.emergency_contact_name = v_ec_name
-    if (v_ec_phone) patch.emergency_contact_phone = v_ec_phone
+    if (isNewAccount) {
+      if (v_name) patch.name = v_name
+      if (phoneToWrite) patch.phone = phoneToWrite
+      if (v_ec_name) patch.emergency_contact_name = v_ec_name
+      if (v_ec_phone) patch.emergency_contact_phone = v_ec_phone
+    }
     if (Object.keys(patch).length > 0) {
       const { error: updError } = await adminClient
         .from('accounts')
@@ -207,11 +226,19 @@ serve(async (req) => {
     if (currentLinkError) throw currentLinkError
 
     const wantAffiliated = !!v_name && !!phoneToWrite
-    const newStatus: 'affiliated' | 'initiated' =
-      currentLink?.status === 'affiliated'
-        ? 'affiliated'
-        : (wantAffiliated ? 'affiliated' : 'initiated')
-    const keepRole = currentLink?.role === 'admin' ? 'admin' : 'member'
+    // D96: an existing same-club member's membership is left exactly as it is —
+    // an unauthenticated token holder must not be able to move a suspended /
+    // archived member back to initiated, or change their role.
+    const newStatus: string =
+      !isNewAccount && currentLink?.status
+        ? currentLink.status
+        : currentLink?.status === 'affiliated'
+          ? 'affiliated'
+          : (wantAffiliated ? 'affiliated' : 'initiated')
+    const keepRole: string =
+      !isNewAccount && currentLink?.role
+        ? currentLink.role
+        : currentLink?.role === 'admin' ? 'admin' : 'member'
 
     const { error: linkUpsertError } = await adminClient
       .from('account_tenants')
@@ -248,7 +275,8 @@ serve(async (req) => {
       .select('name')
       .eq('id', tenantId)
       .maybeSingle()
-    const clubName = tenant?.name || 'Vechelon'
+    const clubName = escapeHtml(tenant?.name || 'Vechelon')
+    const plainClubName = (tenant?.name || 'Vechelon').replace(/[\r\n]+/g, ' ')
 
     // Host-aware portal base (mirrors invite-member): legacy productdelivered.ca
     // serves the SPA under /portal; *.vechelon.ca hosts run at root.
@@ -259,6 +287,10 @@ serve(async (req) => {
         try { origin = new URL(referer).origin } catch { /* ignore */ }
       }
     }
+    // D96: the emailed sign-in link wraps the real token under this origin, and
+    // Origin/Referer are caller-controlled (curl can send anything). Only trust an
+    // origin that is one of our web hosts; otherwise use the configured portal.
+    if (origin && classifyRedirect(`${origin}/auth`) !== 'web') origin = null
     let portalUrl: string
     if (origin) {
       let hostname = ''
@@ -283,7 +315,7 @@ serve(async (req) => {
     if (!mlError && mlData?.properties?.action_link) {
       // Wrap the raw verify URL in the /auth ?c= click-through so email scanners
       // (Gmail/Outlook) can't pre-consume the one-time token (mirrors send-magic-link).
-      const signInLink = `${portalAuthBase}?c=${encodeURIComponent(btoa(mlData.properties.action_link))}`
+      const signInLink = escapeHtml(`${portalAuthBase}?c=${encodeURIComponent(btoa(mlData.properties.action_link))}`)
       const emailHtml = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -328,7 +360,7 @@ serve(async (req) => {
 </html>`
       const { error: resendError } = await sendResendEmail({
         to: normalizedEmail,
-        subject: `You're in | ${clubName} on Vechelon`,
+        subject: `You're in | ${plainClubName} on Vechelon`,
         html: emailHtml,
       })
       emailSent = !resendError

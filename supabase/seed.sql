@@ -21,6 +21,48 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
+-- 0b. The blanket function grant above must NOT undo revokes that migrations made on
+-- purpose — hosted prod doesn't have them (verified 2026-11-08: anon cannot EXECUTE
+-- get_rider_hash_secret on prod). Re-apply them so local matches prod and the CI gates
+-- test the real grants (W299). Keep in step with the REVOKEs in supabase/migrations.
+DO $$
+DECLARE
+  f text;
+  service_only text[] := ARRAY[
+    'public.get_github_voc_pat()', 'public.get_rider_hash_secret()', 'public.reverse_rider_hash(text)',
+    'public.account_deletion_preflight(uuid)',
+    'public.delete_account_data(uuid)', 'public.register_system_owner(uuid)'
+  ];
+  authenticated_only text[] := ARRAY[
+    'public.is_ride_tenant_admin(uuid)', 'public.can_assign_ride_command(uuid)',
+    'public.get_ride_roster_contacts(uuid)', 'public.get_member_directory(uuid)'
+  ];
+BEGIN
+  FOREACH f IN ARRAY service_only LOOP
+    IF to_regprocedure(f) IS NOT NULL THEN
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', f);
+    END IF;
+  END LOOP;
+  FOREACH f IN ARRAY authenticated_only LOOP
+    IF to_regprocedure(f) IS NOT NULL THEN
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', f);
+    END IF;
+  END LOOP;
+  -- Service-only table (W299): RLS with no policies is the real gate; drop the blanket grant too.
+  IF to_regclass('public.tenant_system_owners') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_system_owners FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;
+
+-- 0c. D97: the blanket table grant above would hand anon/authenticated the service-only AI
+-- key table. Re-apply the migration's revoke so CI tests the real grants.
+DO $$
+BEGIN
+  IF to_regclass('public.tenant_ai_secrets') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;
+
 -- 1. Create a Primary Tenant (Racer Sportif)
 INSERT INTO tenants (id, name, slug, primary_color, accent_color)
 VALUES (

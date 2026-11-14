@@ -19,13 +19,15 @@ name: Web Build Gate
 
 on:
   pull_request:
-    branches: [master]
+    # W306: also gate the Rail 3 app line, which carries its own admin/ changes.
+    branches: [master, rail3-integration]
     paths:
       - 'admin/**'
       - 'index.html'
       - 'prototype.html'
       - 'roadmap.html'
       - 'privacy.html'
+      - 'terms.html'
       - 'echelon-logo-v10.html'
       - 'package.json'
       - 'package-lock.json'
@@ -41,6 +43,7 @@ on:
       - 'prototype.html'
       - 'roadmap.html'
       - 'privacy.html'
+      - 'terms.html'
       - 'echelon-logo-v10.html'
       - 'package.json'
       - 'package-lock.json'
@@ -77,6 +80,11 @@ jobs:
         # `npm run build` includes the build guard that fails if the portal
         # bundle is missing, so a broken/empty admin build fails this step.
         run: npm run build
+
+      - name: Admin unit tests (vitest)
+        # W306: the admin unit tests used to run only when someone remembered to.
+        working-directory: admin
+        run: npm test
 
       - name: Verify portal bundle emitted
         run: |

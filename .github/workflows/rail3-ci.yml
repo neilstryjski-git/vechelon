@@ -14,7 +14,8 @@ name: Rail 3 CI
 
 on:
   pull_request:
-    branches: [master]
+    # W306: rail3-integration is where the Rail 3 app lands; its PRs ran no CI before.
+    branches: [master, rail3-integration]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
@@ -39,7 +40,8 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: CLI v3.0.0 (2026-11-06) rejects [inbucket] in config.toml; matches the local CLI.
+          version: 2.89.1
 
       - name: Start local Supabase stack (applies all migrations)
         # `supabase start` brings up a local Postgres + Auth + Realtime in Docker
@@ -57,6 +59,10 @@ jobs:
             *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
           esac
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rail3_rls_isolation.test.sql
+          # W299: account self-deletion (grants, last-admin block, reassign/anonymise, idempotency).
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/w299_account_deletion.test.sql
+          # D97: tenants.ai_api_key is service-role only; branding stays readable.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/d97_tenant_key_grants.test.sql
 
       - name: Stop local Supabase stack
         if: always()
