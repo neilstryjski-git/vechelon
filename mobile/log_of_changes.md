@@ -1646,3 +1646,10 @@ Files Modified: productdocuments/rail3/pillar_v_amendment_sd011-beacon-ride-end-
 Libraries Installed: None
 Deviation from HLD: See pillar_v_amendment_sd011-beacon-ride-end-close_2026-11-14.md
 Notes: Strategic Re-engagement with The Brain required to enshrine the amended SD-011 text. Known deferred side effect: W299 deletion NULLs beacon_cancelled_by on a deleted user's cancels.
+
+## [2026-11-15 17:40] — Pillar V Amendment: D100 retention purge (retroactive)
+Action: Initiated and approved a retroactive Amendment for D100, owed under Ledger v1.2.0 §14 item 24 (process finding F-17)
+Files Modified: productdocuments/rail3/pillar_v_amendment_d100-retention-purge_2026-11-15.md
+Libraries Installed: None
+Deviation from HLD: See pillar_v_amendment_d100-retention-purge_2026-11-15.md. D100 (20261109010000) shipped four departures with no amendment: the 24-hour ride sweep, 30-day beacon retention, breadcrumb deletion, and clearing the per-ride phone copy.
+Notes: No code change and no Ledger row (item 24 already records it). The first three departures were ruled at the Brain session of 2026-11-14/15 (Ledger §16.2); the rework stays out of Sprint 2 (§14 items 27, 28, 35). Open for the Brain: write the per-ride phone rule into Pillar II §2 and reconcile R3-36 (§16.12 U-7).
