@@ -70,7 +70,8 @@ BEGIN
   PERFORM pg_temp.count_as('authenticated', m, '04 member lists rides of own club', '>0',
     format($q$SELECT count(*) FROM rides WHERE tenant_id = %L$q$, t));
 
-  -- Join (lib/rideJoin.ts): the same insert the app sends
+  -- Join (lib/rideJoin.ts): the columns the insert policy and the role guard read. The app
+  -- also sends display_name, email and phone, which no policy looks at.
   PERFORM pg_temp.count_as('authenticated', m, '05 member joins a ride', '1',
     format($q$WITH i AS (INSERT INTO ride_participants (ride_id, account_id, role, status, rail3_joined_at)
                          VALUES (%L, %L, 'member', 'rsvpd', now()) RETURNING 1) SELECT count(*) FROM i$q$, r, m));
