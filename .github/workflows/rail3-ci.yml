@@ -48,33 +48,6 @@ jobs:
         # and applies supabase/migrations. Nothing here touches the hosted project.
         run: supabase start
 
-      # ── W308: publish the schema of a database built from migrations alone ──
-      # Taken before any test runs, so it is exactly "all migrations, from empty".
-      # A hosted database (staging) is compared against these two files to prove it
-      # carries no drift. The workstation has no Docker, so CI is the only place a
-      # trunk-built database exists.
-      - name: Dump trunk-built schema (W308)
-        run: |
-          eval "$(supabase status -o env)"
-          DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
-          case "$DB_URL" in
-            *127.0.0.1*|*localhost*) : ;;  # ok — local only
-            *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
-          esac
-          mkdir -p schema-out
-          supabase db dump --local -f schema-out/trunk_schema.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -At -f supabase/tests/schema_fingerprint.sql > schema-out/trunk_fingerprint.json
-          wc -l schema-out/trunk_schema.sql
-          test -s schema-out/trunk_schema.sql && test -s schema-out/trunk_fingerprint.json
-
-      - name: Upload trunk-built schema (W308)
-        uses: actions/upload-artifact@v4
-        with:
-          name: trunk-schema
-          path: schema-out/
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Run Rail 3 RLS isolation gate
         run: |
           # Resolve the LOCAL stack's DB connection string from the CLI itself.
@@ -128,6 +101,36 @@ jobs:
       - name: Run DoD-12 isolation matrix (W182)
         working-directory: mobile
         run: npm test
+
+      # ── W308: publish the schema of a database built from migrations alone ──
+      # A hosted database (staging) is compared against these two files to prove it
+      # carries no drift. The workstation has no Docker, so CI is the only place a
+      # trunk-built database exists. The stack is rebuilt WITHOUT seed.sql first:
+      # the seed's local-only blanket grants (D49) would otherwise show up as
+      # differences that no migration made. Runs last because the reset wipes the
+      # seeded data the tests above rely on.
+      - name: Rebuild from migrations only and dump the schema (W308)
+        run: |
+          eval "$(supabase status -o env)"
+          DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
+          case "$DB_URL" in
+            *127.0.0.1*|*localhost*) : ;;  # ok — local only
+            *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
+          esac
+          supabase db reset --local --no-seed
+          mkdir -p schema-out
+          supabase db dump --local -f schema-out/trunk_schema.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -At -f supabase/tests/schema_fingerprint.sql > schema-out/trunk_fingerprint.json
+          wc -l schema-out/trunk_schema.sql
+          test -s schema-out/trunk_schema.sql && test -s schema-out/trunk_fingerprint.json
+
+      - name: Upload trunk-built schema (W308)
+        uses: actions/upload-artifact@v4
+        with:
+          name: trunk-schema
+          path: schema-out/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Stop local Supabase stack
         if: always()
