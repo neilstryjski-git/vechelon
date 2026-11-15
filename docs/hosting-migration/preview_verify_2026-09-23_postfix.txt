@@ -1,0 +1,22 @@
+== post-fix matrix
+  legacy.preview.vechelon.ca     /                            http=200 loc=
+  legacy.preview.vechelon.ca     /ride                        http=307 loc=https://legacy.preview.vechelon.ca/portal/ride/
+  legacy.preview.vechelon.ca     /ride/abc                    http=307 loc=https://legacy.preview.vechelon.ca/portal/ride/abc
+  legacy.preview.vechelon.ca     /admin/                      http=308 loc=https://legacy.preview.vechelon.ca/portal/
+  legacy.preview.vechelon.ca     /portal/rides                http=200 loc=
+  legacy.preview.vechelon.ca     /prototype                   http=200 loc=
+  legacy.preview.vechelon.ca     /.well-known/assetlinks.json http=200 loc=
+  racer-sportif.preview.vechelon.ca /                            http=200 loc=
+  racer-sportif.preview.vechelon.ca /ride                        http=200 loc=
+  racer-sportif.preview.vechelon.ca /ride/abc                    http=200 loc=
+  racer-sportif.preview.vechelon.ca /admin/                      http=308 loc=https://racer-sportif.preview.vechelon.ca/portal/
+  racer-sportif.preview.vechelon.ca /portal/rides                http=200 loc=
+  racer-sportif.preview.vechelon.ca /prototype                   http=200 loc=
+  racer-sportif.preview.vechelon.ca /.well-known/assetlinks.json http=200 loc=
+== production /ride bare for comparison
+  vercel legacy /ride http=307 loc=https://vechelon.productdelivered.ca/portal/ride/
+== static files bypass the Worker (cf-cache-status present = asset store)
+  /portal/sw.js                  HTTP/2 200  cf-cache-status: HIT 
+  /portal/registerSW.js          HTTP/2 200  cf-cache-status: HIT 
+  /portal/manifest.webmanifest   HTTP/2 200  cf-cache-status: HIT 
+  /racer-sportif-logo.png        HTTP/2 200  cf-cache-status: HIT 

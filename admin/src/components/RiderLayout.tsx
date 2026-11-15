@@ -9,6 +9,7 @@ import MobileMenu from './MobileMenu';
 import ToastContainer from './ToastContainer';
 import RideDetailSideSheet from './RideDetailSideSheet';
 import VocFeedbackModal from './VocFeedbackModal';
+import ProfileCompletionPrompt from './ProfileCompletionPrompt';
 
 function useCurrentAvatar() {
   return useQuery<{ name: string | null; avatar_url: string | null } | null>({
@@ -75,7 +76,9 @@ const RiderLayout: React.FC = () => {
     ...(userTier !== 'guest' ? [{ to: '/calendar', label: 'Calendar' }] : []),
     ...(userTier !== 'guest' ? [{ to: '/routes', label: 'Routes' }] : []),
     ...(userTier === 'affiliated' ? [{ to: '/members', label: 'Members' }] : []),
-    ...(userTier !== 'guest' ? [{ to: '/profile', label: 'Profile' }] : []),
+    // W301: every signed-in account can reach Profile (and Delete account there), including one
+    // whose club membership was archived or removed — the public deletion page sends them here.
+    ...(userTier !== 'guest' || currentUser ? [{ to: '/profile', label: 'Profile' }] : []),
   ];
 
   return (
@@ -97,6 +100,9 @@ const RiderLayout: React.FC = () => {
           Membership Pending — Awaiting admin approval
         </div>
       )}
+
+      {/* Profile-completion nudge (W264) — any logged-in rider missing a name */}
+      <ProfileCompletionPrompt />
 
       {/* HUD / Navigation Header */}
       <header className="sticky top-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-surface-container-low transition-colors duration-500">
@@ -160,7 +166,7 @@ const RiderLayout: React.FC = () => {
                   role="menu"
                   className="absolute right-0 mt-2 w-48 bg-surface-container-lowest border border-outline-variant/15 rounded-xl shadow-ambient overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
                 >
-                  {userTier !== 'guest' && (
+                  {(userTier !== 'guest' || currentUser) && (
                     <button
                       role="menuitem"
                       onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }}

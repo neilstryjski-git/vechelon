@@ -13,16 +13,12 @@ function useMemberDirectory(tenantId: string | null) {
   return useQuery<MemberRow[]>({
     queryKey: ['rider-member-directory', tenantId],
     queryFn: async () => {
+      // D96: names-only SECURITY DEFINER RPC — co-members can no longer SELECT
+      // each other's full accounts rows (phone, email, emergency contacts).
       const { data, error } = await supabase
-        .from('account_tenants')
-        .select('accounts(id, name, avatar_url)')
-        .eq('tenant_id', tenantId!)
-        .in('status', ['affiliated', 'initiated'])
-        .order('joined_at', { ascending: true });
+        .rpc('get_member_directory', { p_tenant_id: tenantId! });
       if (error) throw error;
-      return (data ?? [])
-        .map((r: any) => r.accounts as MemberRow | null)
-        .filter((a): a is MemberRow => !!a);
+      return ((data ?? []) as MemberRow[]).filter((a) => !!a?.id);
     },
     enabled: !!tenantId,
   });

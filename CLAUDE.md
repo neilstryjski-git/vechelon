@@ -7,7 +7,7 @@ This file holds **Vechelon-specific bindings only.** Product Trio Agentic govern
 - **Sr PM (Neil) is in the loop only for** strategic ambiguity, Pillar/MACD ratifications, and UAT-style validation of grouped UX flows.
 
 ## Stack
-- **Frontend:** React + Vite (`admin/`), Vercel-hosted, deployed on push to `master`
+- **Frontend:** React + Vite (`admin/`), Cloudflare Worker `vechelon-web` (static assets + `worker/index.ts` router, config `wrangler.jsonc`), deployed by GitHub Actions (`deploy-cloudflare.yml`) on push to `master`. Preview hosts `*.preview.vechelon.ca`; staging `racer-sportif.staging.vechelon.ca` (`--env staging`). Migration record: `docs/hosting-migration/`.
 - **Backend:** Supabase (PostgreSQL + RLS + Edge Functions in Deno)
 - **Auth:** Supabase magic-link (no passwords)
 - **Project tracking:** Stride board **116** (https://www.stridelikeaboss.com/boards/116)
@@ -44,6 +44,7 @@ Run the task lifecycle via the `stride:stride-workflow` skill (don't hand-assemb
 3. Then file the proper fix migration with **defensive `DROP IF EXISTS`** so fresh deploys don't reintroduce the bug
 4. Three-Amigos review the fix with explicit "incident postmortem" framing — reviewer should look for the root cause, not just the patch
 5. Update memory under `feedback_*` or `project_*incident*` so future sessions don't repeat
+6. **Bad web deploy** (empty portal, broken bundle): roll the Worker back, don't wait for a fix — `npx wrangler versions list` then `npx wrangler rollback <last-good-version-id>` (replaces the old `vercel promote`). Needs `CLOUDFLARE_API_TOKEN` in the environment (`~/.cloudflare/api-token`).
 
 ## Useful one-liners
 ```sh

@@ -1,0 +1,20 @@
+# W298 Phase 5 close-out verification, 2026-11-14T20:36:04Z
+www.productdelivered.ca                                    HTTP/2 200  server: cloudflare 
+productdelivered.ca                                        HTTP/2 307  server: cloudflare 
+itin-wizard.productdelivered.ca                            HTTP/2 200  server: cloudflare 
+vechelon.productdelivered.ca                               HTTP/2 200  server: cloudflare 
+vechelon.productdelivered.ca/privacy                       HTTP/2 200  server: cloudflare 
+vechelon.productdelivered.ca/terms                         HTTP/2 200  server: cloudflare 
+vechelon.productdelivered.ca/delete-account                HTTP/2 200  server: cloudflare 
+vechelon.productdelivered.ca/.well-known/assetlinks.json   HTTP/2 200  server: cloudflare 
+vechelon.ca                                                HTTP/2 308  server: cloudflare 
+admin.vechelon.ca                                          HTTP/2 200  server: cloudflare 
+racer-sportif.vechelon.ca                                  HTTP/2 200  server: cloudflare 
+bikes-and-beers.vechelon.ca                                HTTP/2 200  server: cloudflare 
+lakeside-wheelers.vechelon.ca                              HTTP/2 200  server: cloudflare 
+racer-sportif.staging.vechelon.ca                          HTTP/2 200  server: cloudflare 
+bikes-and-beers.staging.vechelon.ca                        HTTP/2 200  server: cloudflare 
+vechelon.vercel.app                                        HTTP/2 404  server: Vercel x-vercel-error: DEPLOYMENT_NOT_FOUND 
+neil-branding.vercel.app                                   HTTP/2 404  server: Vercel x-vercel-error: DEPLOYMENT_NOT_FOUND 
+itin-wizard.vercel.app                                     HTTP/2 404  server: Vercel x-vercel-error: DEPLOYMENT_NOT_FOUND 
+vechelon-rail3-staging.vercel.app                          HTTP/2 404  server: Vercel x-vercel-error: NOT_FOUND 

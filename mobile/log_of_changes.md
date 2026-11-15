@@ -1653,3 +1653,11 @@ Files Modified: productdocuments/rail3/pillar_v_amendment_d100-retention-purge_2
 Libraries Installed: None
 Deviation from HLD: See pillar_v_amendment_d100-retention-purge_2026-11-15.md. D100 (20261109010000) shipped four departures with no amendment: the 24-hour ride sweep, 30-day beacon retention, breadcrumb deletion, and clearing the per-ride phone copy.
 Notes: No code change and no Ledger row (item 24 already records it). The first three departures were ruled at the Brain session of 2026-11-14/15 (Ledger §16.2); the rework stays out of Sprint 2 (§14 items 27, 28, 35). Open for the Brain: write the per-ride phone rule into Pillar II §2 and reconcile R3-36 (§16.12 U-7).
+
+## [2026-11-15 18:00] — W307: merge master into rail3-integration (Sprint 2 item 1)
+Action: Merged origin/master (115 commits) into rail3-integration so one branch holds all 77 migrations in a single order (Ledger v1.2.0 §16.1 Gate A). Code only; nothing applied to any database.
+Files Modified: merge commit. Conflicts resolved by hand in three files: `.github/workflows/rail3-ci.yml` (PR base filter is `[master, rail3-integration]`; the `W*` hold-stack filter is retired with the stack), `.github/workflows/web-build.yml` (master's Cloudflare version taken whole), `supabase/seed.sql` (both grant re-apply blocks kept: W284 telemetry tables and D97 `tenant_ai_secrets`).
+Libraries Installed: None
+Deviation from HLD: None
+Notes: The merge changes no file under `mobile/`, so the mobile type-check result is unchanged by construction. Web production build passes on the merged tree; admin unit tests 67/67. No Docker on the workstation, so the "builds from empty" proof is the Rail 3 CI job on the pull request (local Supabase stack, all migrations).
+Found, not fixed (Gate A work, W259 pitfall 2): migration `20260917000000_rail3_any_captain_end_ride.sql` says no RESTRICTIVE policy exists on `rides`. The D96 fix on master added `rides_tenant_scope_update` (RESTRICTIVE), now on this branch too. The Captain end-ride policy is AND-ed with it: a Captain who is neither an approved member nor an admin of the ride's club cannot end an active Rail 3 ride.
