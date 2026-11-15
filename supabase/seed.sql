@@ -69,6 +69,12 @@ BEGIN
     REVOKE ALL ON public.rail3_operator_config FROM PUBLIC, anon, authenticated;
     GRANT SELECT ON public.rail3_operator_config TO authenticated;
   END IF;
+  -- W308 (20261115030000_w308_rail3_breadcrumb_grants.sql): authenticated reads and upserts,
+  -- never deletes; anon gets nothing.
+  IF to_regclass('public.rail3_breadcrumb') IS NOT NULL THEN
+    REVOKE ALL ON public.rail3_breadcrumb FROM PUBLIC, anon, authenticated;
+    GRANT SELECT, INSERT, UPDATE ON public.rail3_breadcrumb TO authenticated;
+  END IF;
   -- D97: the service-only AI key table must stay unreadable to anon/authenticated.
   IF to_regclass('public.tenant_ai_secrets') IS NOT NULL THEN
     REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;

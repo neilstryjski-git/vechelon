@@ -24,6 +24,9 @@ DO $$
 DECLARE
   n bigint;
 BEGIN
+  -- The table has RLS on and no policies. A role subject to RLS would count 0 rows
+  -- whatever the table holds; with row_security off it gets an error instead.
+  SET LOCAL row_security = off;
   IF to_regclass('public.rail3_sag_allowlist') IS NOT NULL THEN
     EXECUTE 'SELECT count(*) FROM public.rail3_sag_allowlist' INTO n;
     IF n > 0 THEN

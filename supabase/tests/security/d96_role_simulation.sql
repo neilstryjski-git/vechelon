@@ -48,11 +48,16 @@ SELECT (SELECT v FROM _fx WHERE k=x.r), (SELECT v FROM _fx WHERE k=x.t), 'd96 ' 
        (SELECT v FROM _fx WHERE k=x.c), 'created', 'adhoc', point(0,0), ''
 FROM (VALUES ('r2','t','a'), ('r3','t','m'), ('r4','t2','a')) AS x(r,t,c);
 
--- participant_update_policy only lets the row owner or ride CREW update rows, so
--- admin A must be crew on r2 for cases 09/10 to reach the trigger at all
--- (otherwise RLS filters the UPDATE to 0 rows and nothing is tested).
+-- Cases 09/10 were written when participant_update_policy admitted only the row
+-- owner or ride CREW, so admin A is crew on r2 and reaches the trigger that way.
+-- W308 put the club-admin branch on the trunk (20261115010000); cases 10a/10b
+-- cover it on r3 and r4, where A is NOT crew.
 INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
 VALUES ((SELECT v FROM _fx WHERE k='r2'), (SELECT v FROM _fx WHERE k='a'), 'captain', 'rsvpd', 'd96-fx-admin@test.invalid');
+
+-- W308 case 10b: a participant row on the foreign-club ride r4 for admin A to aim at.
+INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
+VALUES ((SELECT v FROM _fx WHERE k='r4'), (SELECT v FROM _fx WHERE k='b'), 'member', 'rsvpd', 'd96-fx-b@test.invalid');
 
 -- Round-3 hardening: T2 gets a real affiliated member, so case 18 can only be 0
 -- because of the authz gate; and gpx-routes gets a seeded object, so case 25
@@ -130,6 +135,13 @@ BEGIN
     format($q$UPDATE ride_participants SET role='captain' WHERE ride_id=%L AND account_id=%L$q$, r2, m));
   PERFORM pg_temp.try_as('authenticated', a, '10 club admin moves a captain row to a FOREIGN-club ride', 'GUARD',
     format($q$UPDATE ride_participants SET ride_id=%L WHERE ride_id=%L AND account_id=%L$q$, r4, r2, m));
+  -- W308: club-admin branch of participant_update_policy. A is not crew on r3 or r4.
+  PERFORM pg_temp.try_as('authenticated', a, '10a club admin (not crew) updates a participant on an OWN-club ride', 'ALLOWED',
+    format($q$UPDATE ride_participants SET status=status WHERE ride_id=%L AND account_id=%L$q$, r3, m));
+  PERFORM pg_temp.try_as('authenticated', a, '10b club admin updates a participant on a FOREIGN-club ride', 'NO-OP (0 rows — RLS filtered, guard not exercised)',
+    format($q$UPDATE ride_participants SET status=status WHERE ride_id=%L AND account_id=%L$q$, r4, b));
+  INSERT INTO _r SELECT '10c precondition: the foreign-club participant row exists (service view, >0)', '>0',
+    (SELECT count(*) FROM ride_participants WHERE ride_id = r4 AND account_id = b)::text;
 
   -- (c) rides tenant scope
   PERFORM pg_temp.try_as('authenticated', m, '11 member creates a ride in a FOREIGN club', 'BLOCKED',
