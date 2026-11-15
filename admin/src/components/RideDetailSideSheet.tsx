@@ -83,6 +83,8 @@ const RideDetailSideSheet: React.FC = () => {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showAllParticipants, setShowAllParticipants] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<ParticipantDetail | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [showQrOverlay, setShowQrOverlay] = useState(false);
   const ROSTER_LIMIT = 8;
 
@@ -310,6 +312,31 @@ const RideDetailSideSheet: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: ['ride-participants', selectedRideId] });
   };
 
+  // Rider cancels their OWN RSVP. Mirrors handleRemoveParticipant (delete the
+  // ride_participants row by id) but scoped to the current user's own row — the
+  // participant_delete_policy `account_id = auth.uid()` branch authorizes it.
+  const handleCancelOwnRsvp = async () => {
+    setShowCancelConfirm(false);
+    const own = participants.find(p => p.account_id === currentUser?.id);
+    if (!own) return;
+    setIsCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('ride_participants')
+        .delete()
+        .eq('id', own.id);
+      if (error) {
+        addToast(`Could not cancel your RSVP: ${error.message}`, 'error');
+        return;
+      }
+      addToast('RSVP cancelled.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['ride-participants', selectedRideId] });
+      queryClient.invalidateQueries({ queryKey: ['my-participation', selectedRideId] });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -337,6 +364,16 @@ const RideDetailSideSheet: React.FC = () => {
         title="Remove from Roster"
         message={`Remove ${removeTarget?.display_name ?? 'this rider'} from the roster? They will need to RSVP again to rejoin.`}
         confirmLabel="Remove"
+        type="danger"
+      />
+
+      <Modal
+        isOpen={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={handleCancelOwnRsvp}
+        title="Cancel RSVP"
+        message="Cancel your RSVP for this ride? You can RSVP again anytime before it starts."
+        confirmLabel="Cancel RSVP"
         type="danger"
       />
 
@@ -561,7 +598,10 @@ const RideDetailSideSheet: React.FC = () => {
                   ) : participants.length > 0 ? (
                     <>
                       {(showAllParticipants ? participants : participants.slice(0, ROSTER_LIMIT)).map((p) => {
-                        const canRemove = isAdmin;
+                        // Admins can remove anyone; a rider can cancel their own RSVP —
+                        // same affordance (the roster trash icon), scoped to their own row.
+                        const isOwnRow = !!currentUser && p.account_id === currentUser.id;
+                        const canRemove = isAdmin || isOwnRow;
                         return (
                           <div key={p.id} className="flex items-center justify-between p-3 bg-surface-container-lowest hover:bg-surface-container-low rounded-xl border border-outline-variant/5 transition-colors">
                             <div className="flex items-center gap-3">
@@ -587,9 +627,10 @@ const RideDetailSideSheet: React.FC = () => {
                               <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-tertiary' : 'bg-outline-variant'}`} />
                               {canRemove && (
                                 <button
-                                  onClick={() => setRemoveTarget(p)}
-                                  aria-label={`Remove ${p.display_name} from roster`}
-                                  className="p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors"
+                                  onClick={() => (isAdmin ? setRemoveTarget(p) : setShowCancelConfirm(true))}
+                                  disabled={!isAdmin && isCancelling}
+                                  aria-label={isAdmin ? `Remove ${p.display_name} from roster` : 'Cancel your RSVP'}
+                                  className="p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                                 >
                                   <span className="material-symbols-outlined text-base">person_remove</span>
                                 </button>

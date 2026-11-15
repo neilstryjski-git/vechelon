@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 import { extractSlug } from '../../lib/extractSlug';
+import { decodeVerifyLink, safeInternalPath } from '../../lib/authLinks';
 
 type Stage = 'idle' | 'sending' | 'sent' | 'error' | 'verifying';
 
@@ -36,19 +37,19 @@ const AuthPage: React.FC = () => {
   });
 
   // Contextual Deep-Linking: Capture where the user wanted to go
-  const redirectTo = searchParams.get('redirectTo') || '/';
+  // D96: same-site paths only — never an absolute or protocol-relative URL.
+  const redirectTo = safeInternalPath(searchParams.get('redirectTo'));
 
   // 0. CLICK-THROUGH REDIRECT: Auto-forward to Supabase OTP URL.
   // Email scanners follow HTML links but don't execute JS, so the OTP is safe
   // until the real user's browser runs this effect and redirects them instantly.
   const encodedLink = searchParams.get('c');
   useEffect(() => {
-    if (!encodedLink) return;
-    try {
-      window.location.replace(atob(encodedLink));
-    } catch {
-      // malformed base64 — fall through to normal auth form
-    }
+    // D96: only ever forward to this project's own Supabase verify endpoint —
+    // never an arbitrary decoded URL (open redirect / javascript: XSS).
+    const target = decodeVerifyLink(encodedLink, import.meta.env.VITE_SUPABASE_URL);
+    if (target) window.location.replace(target);
+    // otherwise: malformed or foreign link — fall through to the normal auth form
   }, [encodedLink]);
 
   // 1. SILENT TOKEN EXCHANGE: Handle inbound email link tokens (PKCE ?code= or legacy #access_token=)
@@ -239,6 +240,13 @@ const AuthPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6">
 
+      {/* W301: landing here after a web account deletion. Static copy only. */}
+      {searchParams.get('deleted') === '1' && (
+        <p role="status" className="mb-8 w-full max-w-sm rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-center font-body text-sm text-on-background">
+          Your account has been deleted.
+        </p>
+      )}
+
       {/* Club mark - Dynamic Branding */}
       <div className="mb-12 text-center animate-in slide-in-from-top-4 duration-700 w-full max-w-sm">
         {tenant?.banner_url ? (
@@ -358,6 +366,25 @@ const AuthPage: React.FC = () => {
           </div>
         </form>
       )}
+
+      {/* D95 — who runs this page and what the link does. Google Safe Browsing read the
+          club-branded sign-in on a third domain as a deceptive page; a crawler needs the
+          operator's identity on the page, not just the club's mark. */}
+      <footer className="w-full max-w-sm mt-12 pt-6 border-t border-outline-variant/20 text-center space-y-3">
+        <p className="font-body text-xs text-on-surface-variant leading-relaxed">
+          Vechelon is a ride-organizing platform for cycling clubs{tenant?.name ? <>, used here by <span className="font-semibold text-on-background">{tenant.name}</span></> : null}.
+          It is made and operated by Product Delivered Inc., Toronto.
+        </p>
+        <p className="font-body text-xs text-on-surface-variant leading-relaxed">
+          Signing in sends a one-time link to your email. We never ask for a password, and we never
+          ask for payment or card details here.
+        </p>
+        <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant/70 flex items-center justify-center gap-4">
+          <a href="https://vechelon.productdelivered.ca/privacy" className="hover:text-brand-primary transition-colors">Privacy</a>
+          <a href="https://www.productdelivered.ca/vechelon" className="hover:text-brand-primary transition-colors">About Vechelon</a>
+          <a href="https://www.productdelivered.ca" className="hover:text-brand-primary transition-colors">Product Delivered</a>
+        </p>
+      </footer>
     </div>
   );
 };

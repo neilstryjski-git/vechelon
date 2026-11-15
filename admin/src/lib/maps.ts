@@ -36,8 +36,48 @@ export const encodePolyline = (points: { lat: number; lon: number }[]) => {
 };
 
 /**
- * Generates a Google Static Maps URL for a given set of coordinates.
+ * Google Static Maps rejects any request whose URL exceeds 16,384 characters
+ * (HTTP 400). We keep a safety margin below that so the assembled URL — base +
+ * params + API key + encoded path — is always accepted. A dense GPX (e.g. a
+ * gravel route) can otherwise blow past the limit and render a broken image
+ * (defect D68).
+ */
+export const MAX_STATIC_MAP_URL_LENGTH = 16000;
+
+/**
+ * Evenly downsamples a polyline to `count` points, always keeping the first and
+ * last. Returns a NEW array — the caller's points (and the stored GPX they came
+ * from) are never mutated. Uniform sampling at high retention (the common case,
+ * where only a few percent must be trimmed to fit the URL) is visually
+ * indistinguishable from the original.
+ */
+const sampleToCount = (
+  points: { lat: number; lon: number }[],
+  count: number,
+): { lat: number; lon: number }[] => {
+  const n = points.length;
+  if (count >= n) return points.slice();
+  if (count < 2) return [points[0], points[n - 1]];
+  const out: { lat: number; lon: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(points[Math.round((i * (n - 1)) / (count - 1))]);
+  }
+  return out;
+};
+
+/**
+ * Generates a Google Static Maps URL for a route polyline.
  * Fulfills G11 / Decision D-Design.
+ *
+ * Full fidelity by default: if the all-points URL already fits under the limit
+ * (the common case) the points are used unchanged. Only when the URL would
+ * overflow do we downsample — and then only as much as necessary: a binary
+ * search on the kept-point COUNT finds the MOST points whose URL still fits, so
+ * the thumbnail keeps the maximum detail the limit allows (typically 90%+ of
+ * the points) rather than collapsing to an aggressively low resolution (D68).
+ *
+ * Returns null for fewer than 2 points — callers should fall back to a pin map
+ * or placeholder for degenerate input.
  */
 export const getStaticMapUrl = (points: { lat: number; lon: number }[], options: { width?: number; height?: number; color?: string; weight?: number } = {}) => {
   const {
@@ -53,11 +93,33 @@ export const getStaticMapUrl = (points: { lat: number; lon: number }[], options:
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   if (!apiKey) return null;
+  if (!points || points.length < 2) return null;
 
-  // For complex routes, we encode the polyline to avoid URL length limits
-  const encodedPath = encodePolyline(points);
-  
-  return `https://maps.googleapis.com/maps/api/staticmap?size=${width}x${height}&path=color:${color}|weight:${weight}|enc:${encodedPath}&key=${apiKey}`;
+  const build = (pts: { lat: number; lon: number }[]) =>
+    `https://maps.googleapis.com/maps/api/staticmap?size=${width}x${height}&path=color:${color}|weight:${weight}|enc:${encodePolyline(pts)}&key=${apiKey}`;
+
+  // Full fidelity by default.
+  const fullUrl = build(points);
+  if (fullUrl.length <= MAX_STATIC_MAP_URL_LENGTH) return fullUrl;
+
+  // Over budget. URL length rises with point count, so binary-search the LARGEST
+  // kept-count whose URL still fits — the maximum detail the limit allows.
+  // Every accepted candidate is length-checked, so `best` is always valid.
+  let lo = 2;
+  let hi = points.length - 1;
+  let best = build(sampleToCount(points, 2));
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const candidate = build(sampleToCount(points, mid));
+    if (candidate.length <= MAX_STATIC_MAP_URL_LENGTH) {
+      best = candidate; // fits — record, then try to keep even more points
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return best;
 };
 
 /**

@@ -1,0 +1,92 @@
+[
+ {
+  "id": "9a0783f843979b514157abed20598c74",
+  "type": "A",
+  "name": "productdelivered.ca",
+  "content": "216.198.79.1",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "ac359a51b483590179df2b752c29d149",
+  "type": "CNAME",
+  "name": "googlee64237846d8ffe72.productdelivered.ca",
+  "content": "google.com",
+  "proxied": false,
+  "ttl": 600,
+  "priority": null
+ },
+ {
+  "id": "8ab37c59153cbebdacc4262a2d1ca81d",
+  "type": "CNAME",
+  "name": "itin-wizard.productdelivered.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "0eaa2035b9646c67c6137332df282b5e",
+  "type": "CNAME",
+  "name": "vechelon.productdelivered.ca",
+  "content": "cname.vercel-dns.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "c2d848c16464f589fc64ffd75d593928",
+  "type": "CNAME",
+  "name": "www.productdelivered.ca",
+  "content": "32741a363a8128ad.vercel-dns-017.com",
+  "proxied": false,
+  "ttl": 60,
+  "priority": null
+ },
+ {
+  "id": "c868c358dfa7c9d456f784541dc93cf6",
+  "type": "MX",
+  "name": "productdelivered.ca",
+  "content": "smtp.google.com",
+  "proxied": false,
+  "ttl": 3600,
+  "priority": 1
+ },
+ {
+  "id": "f543bcf9538e7cee2cb966c13ea2a539",
+  "type": "TXT",
+  "name": "_dmarc.productdelivered.ca",
+  "content": "v=DMARC1; p=none; rua=mailto:neil@productdelivered.ca",
+  "proxied": false,
+  "ttl": 3600,
+  "priority": null
+ },
+ {
+  "id": "c1fb5f08e62cf9546b9ca11d40675640",
+  "type": "TXT",
+  "name": "google._domainkey.productdelivered.ca",
+  "content": "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxi6y2RWmoGtc745GeXkWwNzrJebN1I1QUoJxXFd4n332gh9UGjF4gks1S86re7k0plh+VtSqN4VJMhXT1axQ64LzEDdaYs6Uvthw0bf1Hfyc4kbdxKNyf9BU3rM/q6EuXSUkTPuBNoM8jUgJnf1H3u1rBQ381h+GezKjJdSUj4ArQuDyn+RdvxXJs59QPKS7u5wbwEkKSdfaQHk+OC4DYU0Lht1fDMhVHuHx5q1QBrLZmMbqbIQamQYGKjWDyFlXvX37LSDLfbdO6OjzTppPG45O4qNC9/LPXWA2hzs3plphyFyAmmmtsChqm8hHfIlLeHm2LOypAHOhzISm7g6oHwIDAQAB",
+  "proxied": false,
+  "ttl": 3600,
+  "priority": null
+ },
+ {
+  "id": "167e24a80f718f025f22ecbce2a7e434",
+  "type": "TXT",
+  "name": "productdelivered.ca",
+  "content": "google-site-verification=xQd0ioM4Gi7bp9raGPdMhlajZ_6NZUdA372wT65PP9Y",
+  "proxied": false,
+  "ttl": 600,
+  "priority": null
+ },
+ {
+  "id": "2dd17e76607f1826002effae83a99196",
+  "type": "TXT",
+  "name": "productdelivered.ca",
+  "content": "v=spf1 include:_spf.google.com ~all",
+  "proxied": false,
+  "ttl": 3600,
+  "priority": null
+ }
+]

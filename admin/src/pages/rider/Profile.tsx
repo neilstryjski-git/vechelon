@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { AUTH_HREF } from '../../lib/portalBase';
 import { useToast } from '../../store/useToast';
+import DeleteAccountPanel from '../../components/DeleteAccountPanel';
 
 const MAX_AVATAR_BYTES  = 10 * 1024 * 1024; // 10 MB hard reject
 const TARGET_AVATAR_BYTES = 500 * 1024;     // 500 KB target after compression
@@ -208,7 +209,7 @@ const Profile: React.FC = () => {
   if (!profile) {
     return (
       <div className="text-center pt-16 text-on-surface-variant font-label text-sm">
-        Not signed in. <a href={AUTH_HREF} className="text-primary underline">Sign in</a>
+        Not signed in. <a href={`${AUTH_HREF}?redirectTo=${encodeURIComponent('/profile')}`} className="text-primary underline">Sign in</a>
       </div>
     );
   }
@@ -399,6 +400,9 @@ const Profile: React.FC = () => {
           Sign Out
         </button>
       </div>
+
+      {/* W301: web account deletion (Play User Data policy). */}
+      <DeleteAccountPanel />
 
     </div>
   );

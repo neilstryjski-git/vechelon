@@ -1,0 +1,4 @@
+name,email,phone,role,emergency_contact_name,emergency_contact_phone
+Jane Rider,jane.rider@example.com,+1-416-555-0100,member,John Rider,+1-416-555-0101
+Sam Captain,sam.captain@example.com,+1-416-555-0102,admin,,
+Pat Member,pat.member@example.com,+1-416-555-0103,member,,

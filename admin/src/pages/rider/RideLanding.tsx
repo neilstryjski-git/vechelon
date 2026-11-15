@@ -218,6 +218,7 @@ const RideLanding: React.FC = () => {
   }, [isSocialSource]);
 
   const [isJoining, setIsJoining] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [rsvpDone, setRsvpDone] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -457,6 +458,36 @@ const RideLanding: React.FC = () => {
       addToast(`Failed: ${e.message}`, 'error');
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  // Guest cancels the RSVP they made from this browser. anon has no DELETE on
+  // ride_participants, so this routes through the guest-cancel-rsvp Edge Function
+  // (service role), mirroring the guest-rsvp create path. Ownership is proven by
+  // session_cookie_id — the same token the "already joined" check reads.
+  const handleGuestCancel = async () => {
+    if (!ride) return;
+    setIsCancelling(true);
+    try {
+      const sessionCookieId = useAppStore.getState().sessionCookieId;
+      const { error } = await supabase.functions.invoke('guest-cancel-rsvp', {
+        body: { ride_id: ride.id, session_cookie_id: sessionCookieId },
+      });
+      if (error) {
+        let message = 'Unable to cancel RSVP. Please try again.';
+        try {
+          const body = await (error as { context?: Response }).context?.json?.();
+          if (body?.error) message = body.error;
+        } catch { /* ignore */ }
+        throw new Error(message);
+      }
+      setRsvpDone(false);
+      addToast('RSVP cancelled.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['my-participation', ride.id] });
+    } catch (e: any) {
+      addToast(`Failed: ${e.message}`, 'error');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -918,6 +949,14 @@ const RideLanding: React.FC = () => {
                     >
                       <span className="material-symbols-outlined text-lg">login</span>
                       Sign in to save your ride history
+                    </button>
+                    <button
+                      onClick={handleGuestCancel}
+                      disabled={isCancelling}
+                      className="w-full py-3 rounded-xl font-label text-[10px] uppercase tracking-[0.2em] font-bold flex items-center justify-center gap-2 text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">event_busy</span>
+                      {isCancelling ? 'Cancelling…' : 'Cancel RSVP'}
                     </button>
                   </div>
                 )

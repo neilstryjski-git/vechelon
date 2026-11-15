@@ -1,0 +1,95 @@
+{
+ "domain": "productdelivered.ca",
+ "exported": "2026-09-22",
+ "source": "POST https://api.porkbun.com/api/json/v3/dns/retrieve/productdelivered.ca",
+ "records": [
+  {
+   "name": "productdelivered.ca",
+   "type": "A",
+   "content": "216.198.79.1",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "vercel"
+  },
+  {
+   "name": "googlee64237846d8ffe72.productdelivered.ca",
+   "type": "CNAME",
+   "content": "google.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "itin-wizard.productdelivered.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "subdomain for trip wizard"
+  },
+  {
+   "name": "vechelon.productdelivered.ca",
+   "type": "CNAME",
+   "content": "cname.vercel-dns.com",
+   "ttl": "600",
+   "prio": "0",
+   "notes": "vechelon app"
+  },
+  {
+   "name": "www.productdelivered.ca",
+   "type": "CNAME",
+   "content": "32741a363a8128ad.vercel-dns-017.com.",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "MX",
+   "content": "smtp.google.com",
+   "ttl": "3600",
+   "prio": "1",
+   "notes": ""
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "NS",
+   "content": "curitiba.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "NS",
+   "content": "fortaleza.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "NS",
+   "content": "maceio.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "NS",
+   "content": "salvador.porkbun.com",
+   "ttl": "86400",
+   "prio": null,
+   "notes": null
+  },
+  {
+   "name": "productdelivered.ca",
+   "type": "TXT",
+   "content": "google-site-verification=xQd0ioM4Gi7bp9raGPdMhlajZ_6NZUdA372wT65PP9Y",
+   "ttl": "600",
+   "prio": "0",
+   "notes": ""
+  }
+ ]
+}

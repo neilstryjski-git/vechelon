@@ -54,7 +54,7 @@ BEGIN
   END IF;
 END $$;
 
--- 0c. Same problem for TABLES (W306): the blanket table grant above hands anon/authenticated
+-- 0c. Same problem for TABLES (W306, D97): the blanket table grant above hands anon/authenticated
 -- privileges the migrations deliberately withhold, so CI could never see a grant regression.
 -- Re-apply each migration's intended table grants. Keep in step with supabase/migrations.
 DO $$
@@ -68,6 +68,10 @@ BEGIN
   IF to_regclass('public.rail3_operator_config') IS NOT NULL THEN
     REVOKE ALL ON public.rail3_operator_config FROM PUBLIC, anon, authenticated;
     GRANT SELECT ON public.rail3_operator_config TO authenticated;
+  END IF;
+  -- D97: the service-only AI key table must stay unreadable to anon/authenticated.
+  IF to_regclass('public.tenant_ai_secrets') IS NOT NULL THEN
+    REVOKE ALL ON public.tenant_ai_secrets FROM PUBLIC, anon, authenticated;
   END IF;
 END $$;
 
