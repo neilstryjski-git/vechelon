@@ -1,8 +1,8 @@
 -- D96 security regression: role-simulated checks for the 2026-10-30 audit findings.
 --
 -- SAFE TO RUN AGAINST ANY PROJECT: everything runs in ONE transaction that ends
--- in ROLLBACK. It needs one tenant with an affiliated admin AND an affiliated
--- non-admin member; it creates a throwaway second tenant inside the transaction.
+-- in ROLLBACK. It needs one tenant with an affiliated admin AND two affiliated
+-- members, one of them an admin of no club; it creates a throwaway second tenant inside the transaction.
 --
 -- Run (returns one row per case: test | expected | outcome | pass):
 --   Management API  POST /v1/projects/<ref>/database/query  {"query": <this file>}
@@ -22,7 +22,13 @@ INSERT INTO _fx
 SELECT 't', a.tenant_id FROM public.account_tenants a
 WHERE a.role = 'admin' AND a.status = 'affiliated'
   AND EXISTS (SELECT 1 FROM public.account_tenants m
-              WHERE m.tenant_id = a.tenant_id AND m.role = 'member' AND m.status = 'affiliated')
+              WHERE m.tenant_id = a.tenant_id AND m.role = 'member' AND m.status = 'affiliated'
+                AND m.account_id NOT IN (SELECT account_id FROM public.account_tenants WHERE role = 'admin'))
+  -- W308: M and B are two different members, so the club needs at least two. Without
+  -- this the pick could land on a one-member club and the fixtures below fail on NULL.
+  AND (SELECT count(*) FROM public.account_tenants m
+       WHERE m.tenant_id = a.tenant_id AND m.role = 'member' AND m.status = 'affiliated') >= 2
+ORDER BY a.tenant_id
 LIMIT 1;
 INSERT INTO _fx SELECT 'a', account_id FROM public.account_tenants
   WHERE tenant_id = (SELECT v FROM _fx WHERE k='t') AND role='admin' AND status='affiliated' LIMIT 1;
@@ -48,19 +54,27 @@ SELECT (SELECT v FROM _fx WHERE k=x.r), (SELECT v FROM _fx WHERE k=x.t), 'd96 ' 
        (SELECT v FROM _fx WHERE k=x.c), 'created', 'adhoc', point(0,0), ''
 FROM (VALUES ('r2','t','a'), ('r3','t','m'), ('r4','t2','a')) AS x(r,t,c);
 
--- participant_update_policy only lets the row owner or ride CREW update rows, so
--- admin A must be crew on r2 for cases 09/10 to reach the trigger at all
--- (otherwise RLS filters the UPDATE to 0 rows and nothing is tested).
+-- Cases 09/10 were written when participant_update_policy admitted only the row
+-- owner or ride CREW, so admin A is crew on r2 and reaches the trigger that way.
+-- W308 put the club-admin branch on the trunk (20261115010000); cases 10a/10b
+-- cover it on r3 and r4, where A is NOT crew.
 INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
 VALUES ((SELECT v FROM _fx WHERE k='r2'), (SELECT v FROM _fx WHERE k='a'), 'captain', 'rsvpd', 'd96-fx-admin@test.invalid');
+
+-- W308 case 10b: a participant row on the foreign-club ride r4 for admin A to aim at.
+INSERT INTO public.ride_participants (ride_id, account_id, role, status, email)
+VALUES ((SELECT v FROM _fx WHERE k='r4'), (SELECT v FROM _fx WHERE k='b'), 'member', 'rsvpd', 'd96-fx-b@test.invalid');
 
 -- Round-3 hardening: T2 gets a real affiliated member, so case 18 can only be 0
 -- because of the authz gate; and gpx-routes gets a seeded object, so case 25
 -- cannot pass merely because the bucket is empty (18a/25a assert both).
 INSERT INTO public.account_tenants (tenant_id, account_id, role, status)
 VALUES ((SELECT v FROM _fx WHERE k='t2'), (SELECT v FROM _fx WHERE k='b'), 'member', 'affiliated');
+-- W308: the gpx-routes bucket exists on production only (no migration creates it), so
+-- on staging or a trunk-built database there is nothing to seed and case 25a says so.
 INSERT INTO storage.objects (bucket_id, name)
-VALUES ('gpx-routes', (SELECT v FROM _fx WHERE k='t')::text || '/d96-regression-fixture.gpx');
+SELECT 'gpx-routes', (SELECT v FROM _fx WHERE k='t')::text || '/d96-regression-fixture.gpx'
+WHERE EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'gpx-routes');
 
 -- Run `stmt` as an API role with `uid` as auth.uid(); record ALLOWED/BLOCKED.
 CREATE FUNCTION pg_temp.try_as(p_role text, p_uid uuid, p_test text, p_expected text, p_stmt text)
@@ -130,6 +144,13 @@ BEGIN
     format($q$UPDATE ride_participants SET role='captain' WHERE ride_id=%L AND account_id=%L$q$, r2, m));
   PERFORM pg_temp.try_as('authenticated', a, '10 club admin moves a captain row to a FOREIGN-club ride', 'GUARD',
     format($q$UPDATE ride_participants SET ride_id=%L WHERE ride_id=%L AND account_id=%L$q$, r4, r2, m));
+  -- W308: club-admin branch of participant_update_policy. A is not crew on r3 or r4.
+  PERFORM pg_temp.try_as('authenticated', a, '10a club admin (not crew) updates a participant on an OWN-club ride', 'ALLOWED',
+    format($q$UPDATE ride_participants SET status=status WHERE ride_id=%L AND account_id=%L$q$, r3, m));
+  PERFORM pg_temp.try_as('authenticated', a, '10b club admin updates a participant on a FOREIGN-club ride', 'NO-OP (0 rows — RLS filtered, guard not exercised)',
+    format($q$UPDATE ride_participants SET status=status WHERE ride_id=%L AND account_id=%L$q$, r4, b));
+  INSERT INTO _r SELECT '10c precondition: the foreign-club participant row exists (service view, >0)', '>0',
+    (SELECT count(*) FROM ride_participants WHERE ride_id = r4 AND account_id = b)::text;
 
   -- (c) rides tenant scope
   PERFORM pg_temp.try_as('authenticated', m, '11 member creates a ride in a FOREIGN club', 'BLOCKED',
@@ -172,8 +193,13 @@ BEGIN
     $q$SELECT get_rider_hash_secret()$q$);
   PERFORM pg_temp.count_as('anon', NULL, '25 anon: gpx-routes objects visible', '0',
     $q$SELECT count(*) FROM storage.objects WHERE bucket_id='gpx-routes'$q$);
-  INSERT INTO _r SELECT '25a precondition: gpx-routes objects exist (service view, >0)', '>0',
-    (SELECT count(*) FROM storage.objects WHERE bucket_id='gpx-routes')::text;
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'gpx-routes') THEN
+    INSERT INTO _r SELECT '25a precondition: gpx-routes objects exist (service view, >0)', '>0',
+      (SELECT count(*) FROM storage.objects WHERE bucket_id='gpx-routes')::text;
+  ELSE
+    -- Case 25 proves nothing here: it reads 0 because the bucket is absent.
+    INSERT INTO _r VALUES ('25a NOT EXERCISED: no gpx-routes bucket on this database', 'no bucket', 'no bucket');
+  END IF;
 END $$;
 
 SELECT test, expected, outcome,
