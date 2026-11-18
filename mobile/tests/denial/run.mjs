@@ -1,0 +1,146 @@
+// W309 — runner for the denial suite.
+//
+//   npm run denial:local            local stack (CI); needs SUPABASE_URL / _ANON_KEY / _SERVICE_ROLE_KEY
+//   npm run denial:staging          the staging project (keys read at run time, never stored)
+//   ... -- --strict                 every rule must hold (the W317 cutover run)
+//   ... -- --sweep                  only remove anything a crashed run left behind
+//   ... -- --only T2,T5             run a subset
+//   ... -- --out <dir>              where the report goes (default tests/denial/out)
+//
+// Exit code. With baseline.json present the run must MATCH it: a rule that is red where the
+// baseline says green is a regression; a rule that is green where the baseline says red
+// means enforcement landed and the baseline must be updated in the same change. An `error`
+// (the suite could not judge a rule) or any leftover test row always fails the run.
+
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveTarget, makeAdmin, buildFixtures, sweep, leftovers, closeAll, Red, MARK } from './harness.mjs';
+import { cases } from './rules.mjs';
+import { LAYOUT } from './layout.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const args = process.argv.slice(2);
+const flag = (n) => args.includes(`--${n}`);
+const opt = (n, d) => (args.includes(`--${n}`) ? args[args.indexOf(`--${n}`) + 1] : d);
+
+const targetName = opt('target', 'local');
+const outDir = opt('out', join(here, 'out'));
+const only = opt('only', null)?.split(',');
+
+const target = await resolveTarget(targetName);
+const admin = makeAdmin(target);
+const log = (m) => console.log(m);
+
+if (flag('sweep')) {
+  const left = await sweep(admin, log);
+  console.log(`sweep (${targetName}) leftovers:`, JSON.stringify(left));
+  process.exit(Object.values(left).some((n) => n > 0) ? 1 : 0);
+}
+
+const before = await leftovers(admin);
+if (Object.values(before).some((n) => n > 0)) {
+  console.log(`found rows from an earlier run (${JSON.stringify(before)}); removing them first`);
+  await sweep(admin, log);
+}
+
+const run = `${MARK}${Date.now().toString(36)}`;
+const ctx = { target, admin, run, open: new Set(), state: {}, fx: null };
+const results = [];
+let fatal = null;
+
+try {
+  await buildFixtures(ctx);
+  for (const c of cases) {
+    if (only && !only.includes(c.rule) && !only.includes(c.id)) continue;
+    const t0 = Date.now();
+    let status = 'green';
+    let detail = '';
+    try {
+      await c.run(ctx);
+    } catch (e) {
+      status = e instanceof Red ? 'red' : 'error';
+      detail = e.message;
+    } finally {
+      await closeAll(ctx);
+    }
+    results.push({ id: c.id, rule: c.rule, title: c.title, status, detail, provisional: c.provisional ?? null, ms: Date.now() - t0 });
+    console.log(`${status.toUpperCase().padEnd(5)} ${c.id.padEnd(6)} ${c.title}${detail ? `\n        ${detail}` : ''}`);
+  }
+} catch (e) {
+  fatal = e;
+  console.error(`FATAL: ${e.message}`);
+} finally {
+  await closeAll(ctx);
+}
+
+const left = await sweep(admin, log);
+const dirty = Object.values(left).some((n) => n > 0);
+
+// ── Compare with the recorded baseline ───────────────────────────────────────
+const baselinePath = join(here, 'baseline.json');
+const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
+const expected = (id) => baseline?.targets?.[targetName]?.[id] ?? baseline?.cases?.[id] ?? null;
+const drift = [];
+if (baseline && !only) {
+  for (const r of results) {
+    const want = expected(r.id);
+    if (want == null) drift.push(`${r.id}: not in the baseline (ran ${r.status})`);
+    else if (want !== r.status) drift.push(`${r.id}: baseline ${want}, ran ${r.status}`);
+  }
+  for (const id of Object.keys(baseline.cases ?? {})) {
+    if (!results.find((r) => r.id === id)) drift.push(`${id}: in the baseline but did not run`);
+  }
+}
+
+// ── Report ───────────────────────────────────────────────────────────────────
+const rules = [...new Set(cases.map((c) => c.rule))].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+const ruleStatus = (r) => {
+  const rs = results.filter((x) => x.rule === r);
+  if (!rs.length) return 'not run';
+  if (rs.some((x) => x.status === 'error')) return 'error';
+  return rs.some((x) => x.status === 'red') ? 'FAILS' : 'passes';
+};
+const report = {
+  target: targetName,
+  layout: LAYOUT,
+  ran_at: new Date().toISOString(),
+  commit: process.env.GITHUB_SHA ?? null,
+  rules: Object.fromEntries(rules.map((r) => [r, ruleStatus(r)])),
+  cases: results,
+  leftovers: left,
+  drift,
+  fatal: fatal?.message ?? null,
+};
+mkdirSync(outDir, { recursive: true });
+writeFileSync(join(outDir, `denial-${targetName}.json`), JSON.stringify(report, null, 2));
+const md = [
+  `# Denial suite — ${targetName} — ${report.ran_at}`,
+  '',
+  `Channel layout under test: ${LAYOUT}`,
+  '',
+  '| Rule | Result | Case | What was tested | Finding |',
+  '|---|---|---|---|---|',
+  ...results.map((r) => `| ${r.rule} | ${r.status} | ${r.id} | ${r.title}${r.provisional ? ' (provisional)' : ''} | ${r.detail.replaceAll('|', '/')} |`),
+  '',
+  `Per rule: ${rules.map((r) => `${r} ${ruleStatus(r)}`).join(', ')}`,
+  '',
+  `Leftover test rows after cleanup: ${JSON.stringify(left)}`,
+  ...(drift.length ? ['', 'Differences from baseline.json:', ...drift.map((d) => `- ${d}`)] : []),
+].join('\n');
+writeFileSync(join(outDir, `denial-${targetName}.md`), `${md}\n`);
+
+console.log(`\nPer rule: ${rules.map((r) => `${r} ${ruleStatus(r)}`).join(', ')}`);
+console.log(`Leftover test rows: ${JSON.stringify(left)}`);
+console.log(`Report: ${join(outDir, `denial-${targetName}.md`)}`);
+
+let code = 0;
+if (fatal || dirty) code = 1;
+if (results.some((r) => r.status === 'error')) code = 1;
+if (flag('strict') && results.some((r) => r.status !== 'green')) code = 1;
+if (drift.length) {
+  console.log(`\nDiffers from baseline.json:\n${drift.map((d) => `  ${d}`).join('\n')}`);
+  code = 1;
+}
+if (!baseline) console.log('\nNo baseline.json yet: report only.');
+process.exit(code);

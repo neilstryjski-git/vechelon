@@ -132,6 +132,32 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # ── W309: denial suite T1 to T16 against the migration-only database ──
+      # Runs after the seed-free rebuild above, so the database carries exactly what the
+      # migrations grant (seed.sql adds local-only grants a hosted database never has).
+      # The run must match mobile/tests/denial/baseline.json: a rule that turns red where
+      # the baseline says green is a regression, and a rule that turns green must have its
+      # baseline entry updated in the same change.
+      - name: Run denial suite T1-T16 (W309)
+        working-directory: mobile
+        run: |
+          eval "$(supabase status -o env)"
+          case "$API_URL" in
+            *127.0.0.1*|*localhost*) : ;;  # ok — local only
+            *) echo "::error::Refusing to run: API_URL is not a local address ($API_URL)"; exit 1 ;;
+          esac
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+            npm run denial:local -- --out ../denial-out
+
+      - name: Upload denial report (W309)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: denial-report
+          path: denial-out/
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Stop local Supabase stack
         if: always()
         run: supabase stop --no-backup
