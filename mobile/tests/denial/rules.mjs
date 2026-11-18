@@ -681,8 +681,9 @@ export const cases = [
           const l = await listen(ctx, who, allTopics(id));
           if (l.joined.length) got.push(`${who.key}: joined a channel`);
         }
-        const { data: planted } = await ctx.admin.from('beacon_alerts').select('id').eq('ride_id', id).in('rider_id', [u.otherAdmin.id, u.otherMember.id]);
-        if (planted?.length) got.push('a beacon row was inserted from another club');
+        const { data: planted } = await ctx.admin.from('beacon_alerts').select('id, tenant_id').eq('ride_id', id).in('rider_id', [u.otherAdmin.id, u.otherMember.id]);
+        if (planted?.some((r) => r.tenant_id === tenants.x.id)) got.push('a beacon row was inserted into this club from another club');
+        if (planted?.some((r) => r.tenant_id === tenants.y.id)) got.push('another club\'s member attached a beacon row (under their own club) to this club\'s ride');
         if ((await beaconTruth(ctx, b.id))?.beacon_cancelled_at) got.push('a beacon was cancelled from another club');
         const { data: ride } = await ctx.admin.from('rides').select('status').eq('id', id).single();
         if (ride?.status !== 'active') got.push('the ride was ended from another club');

@@ -102,12 +102,6 @@ jobs:
         working-directory: mobile
         run: npm test
 
-      # W309 diagnostic (temporary): the same suite on the seeded database, before the reset.
-      - name: Denial suite on the seeded database (W309, diagnostic)
-        working-directory: mobile
-        continue-on-error: true
-        run: npm run denial:local -- --out ../denial-out-seeded
-
       # ── W308: publish the schema of a database built from migrations alone ──
       # A hosted database (staging) is compared against these two files to prove it
       # carries no drift. The workstation has no Docker, so CI is the only place a
