@@ -101,8 +101,12 @@ export const needle = () => `w309n${randomBytes(6).toString('hex')}`;
 // Open a fresh connection as `user` and try to join each topic. Collects every broadcast.
 export async function listen(ctx, user, topics, { priv = true } = {}) {
   const client = freshClient(ctx.target, user);
+  // Authenticate the socket explicitly as this user before any join (the proven pattern in
+  // tests/rlsIsolation.test.mjs); a private channel joined as anon is refused for everyone.
+  if (user) await client.realtime.setAuth(user.token);
   const msgs = [];
   const statuses = {};
+  const reasons = {};
   const channels = {};
   await Promise.all(
     topics.map(
@@ -115,8 +119,9 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
             statuses[topic] ??= 'TIMED_OUT';
             resolve();
           }, ctx.target.timeouts.join);
-          ch.subscribe((status) => {
+          ch.subscribe((status, err) => {
             if (statuses[topic]) return;
+            if (err?.message) reasons[topic] = err.message;
             if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
               statuses[topic] = status;
               clearTimeout(timer);
@@ -131,6 +136,8 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
     msgs,
     statuses,
     joined,
+    // Why a join did not succeed, for the report (status plus the server's reason if any).
+    why: () => topics.map((t) => `${statuses[t]}${reasons[t] ? ` (${reasons[t]})` : ''}`).join(', '),
     saw: (n) => JSON.stringify(msgs).includes(n),
     // Send over this socket (only meaningful on a joined topic).
     sendSocket: async (topic, event, payload) => {

@@ -58,7 +58,7 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const topics = allTopics(rides.main.id);
       const cap = await listen(ctx, u.captain, [...new Set([...receiveTopics('captain', rides.main.id), ...topics])]);
-      control(cap.joined.length > 0, 'captain could not join');
+      control(cap.joined.length > 0, `captain could not join: ${cap.why()}`);
       // Control: a rider on the ride reaches the captain.
       const c = needle();
       await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, rides.main.id), EVENTS.pos, posPayload(u.riderA, c));
@@ -93,7 +93,7 @@ export const cases = [
       const id = rides.main.id;
       const cap = await listen(ctx, u.captain, receiveTopics('captain', id));
       const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
-      control(rb.joined.length > 0, 'rider B (on the ride) could not join the rider channels');
+      control(rb.joined.length > 0, `rider B (on the ride) could not join the rider channels: ${rb.why()}`);
       const n = needle();
       const got = await deliver(ctx, {
         sender: u.riderA, topics: sendTopics('rider', EVENTS.pos, id), event: EVENTS.pos,
@@ -318,7 +318,7 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
       const adm = await listen(ctx, u.clubAdmin, receiveTopics('admin', id));
-      rule(adm.joined.length > 0, 'the club admin could not subscribe');
+      rule(adm.joined.length > 0, `the club admin could not subscribe: ${adm.why()}`);
       const n = needle();
       await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
         beaconPayload(u.riderA, true, '00000000-0000-4000-8000-000000000002', n));
