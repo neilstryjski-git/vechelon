@@ -706,7 +706,7 @@ export const cases = [
     },
   },
   {
-    id: 'T14.2', rule: 'T14',
+    id: 'T14.2', rule: 'T14', needs: ['T14.1'],
     title: 'A beacon raised by a rider after the ride ended is still recorded, closed with ride_ended (W311 guard order)',
     run: async (ctx) => {
       const { users: u, rides, tenants } = ctx.fx;
