@@ -26,7 +26,7 @@ const opt = (n, d) => (args.includes(`--${n}`) ? args[args.indexOf(`--${n}`) + 1
 
 const targetName = opt('target', 'local');
 const outDir = opt('out', join(here, 'out'));
-const only = opt('only', null)?.split(',');
+const only = opt('only', null)?.split(',').map((x) => x.trim().toUpperCase());
 
 const target = await resolveTarget(targetName);
 const admin = makeAdmin(target);
@@ -38,19 +38,18 @@ if (flag('sweep')) {
   process.exit(Object.values(left).some((n) => n > 0) ? 1 : 0);
 }
 
-// Ctrl-C or a kill still cleans up.
+// Ctrl-C or a kill only raises a flag. Fixture building and the case loop stop at their next
+// step, and the one verified cleanup below runs as usual, so nothing is created while rows
+// are being removed. A second signal exits at once.
 let interrupted = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, async () => {
-    if (interrupted) process.exit(1);
-    interrupted = true;
-    console.error(`\n${sig}: removing test rows before exit`);
-    try {
-      console.error('leftovers:', JSON.stringify(await sweep(admin, log)));
-    } catch (e) {
-      console.error(`CLEANUP NOT VERIFIED (${e.message}). Run again with --sweep against ${targetName}.`);
+  process.on(sig, () => {
+    if (interrupted) {
+      console.error(`\nStopped before cleanup finished. Run again with --sweep against ${targetName}.`);
+      process.exit(1);
     }
-    process.exit(1);
+    interrupted = true;
+    console.error(`\n${sig}: stopping, then removing test rows`);
   });
 }
 
@@ -61,13 +60,17 @@ if (Object.values(before).some((n) => n > 0)) {
 }
 
 const run = `${MARK}${Date.now().toString(36)}`;
-const ctx = { target, admin, run, open: new Set(), state: {}, fx: null };
+const ctx = { target, admin, run, open: new Set(), state: {}, fx: null, interrupted: () => interrupted };
 const results = [];
 let fatal = null;
 
 // --only picks rules or cases; a case another one builds on is pulled in with it.
 const selected = new Set(cases.filter((c) => !only || only.includes(c.rule) || only.includes(c.id)).map((c) => c.id));
 for (const c of cases) if (selected.has(c.id)) for (const dep of c.needs ?? []) selected.add(dep);
+if (selected.size === 0) {
+  console.error(`--only ${only.join(',')} matches no rule or case (use ids such as T5 or T5.1)`);
+  process.exit(2);
+}
 
 try {
   await buildFixtures(ctx);
@@ -94,6 +97,8 @@ try {
   console.error(`FATAL: ${e.message}`);
 } finally {
   await closeAll(ctx);
+  // The connection T14.1 hands to T4.4 is closed here if T4.4 never took it.
+  await ctx.state.endingRideListener?.close();
 }
 
 // Cleanup. If it cannot be completed or verified, the run fails and says so: an unverified
@@ -175,7 +180,7 @@ console.log(`Leftover test rows: ${JSON.stringify(left)}`);
 console.log(`Report: ${join(outDir, `denial-${targetName}.md`)}`);
 
 let code = 0;
-if (fatal || dirty) code = 1;
+if (fatal || dirty || interrupted) code = 1;
 if (results.some((r) => r.status === 'error')) code = 1;
 if (flag('strict') && results.some((r) => r.status !== 'green')) code = 1;
 if (drift.length) {

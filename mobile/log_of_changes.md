@@ -1714,6 +1714,10 @@ Notes:
   never-opened participants added as senders and readers; a guest row added; T16 now restates
   the DoD-12 checks the local-only matrix makes (rides, rider_states, telemetry, unknown ride,
   cross-tenant send) with in-club controls.
+- REVIEW r2 (0 critical, 2 important, 5 minor), all addressed: an interrupt now only raises a
+  flag so the one verified cleanup runs (no sweep racing fixture creation); the Realtime
+  readiness check takes its topics from `layout.mjs`; only the server's authorization refusal
+  counts as a refused join; reads that fail for any reason but permission are errors.
 - RESULT: 6 rules pass, 10 fail (18 cases green, 20 red). Per-rule table and findings: `qa_log.md`.
 - NOT A PILLAR DEPARTURE: nothing here changes behaviour.
 

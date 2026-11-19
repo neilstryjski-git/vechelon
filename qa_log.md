@@ -39,7 +39,7 @@ Six rules pass and ten fail (18 cases green, 20 red, 0 errors).
 | Target | Result |
 |---|---|
 | Local stack, migration-only database (Rail 3 CI run 44426316001) | Baseline above |
-| Local stack, seeded database (run 44423732591, diagnostic step since removed) | Identical for the 36 cases then present |
+| Local stack, seeded database (run 44423732591, an early version of the suite; diagnostic step since removed) | Same result per rule |
 | Staging | Not yet run |
 
 ### Findings beyond the expected baseline

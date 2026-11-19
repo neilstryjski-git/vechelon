@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import { EVENTS, receiveTopics, sendTopics } from './layout.mjs';
 
 export const PROD_REF = 'drktcxggaizkbvqccfhp';
 export const STAGING_REF = 'xybgtbybdhxuwqjfcfkc';
@@ -146,6 +147,13 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
     msgs,
     statuses,
     joined,
+    // Topics whose join neither succeeded nor was refused BY POLICY. Only the server's
+    // authorization refusal counts as a denial; a timeout, a dropped socket or a bare CLOSED
+    // proves nothing.
+    unclear: () =>
+      topics.filter(
+        (t) => statuses[t] !== 'SUBSCRIBED' && !(statuses[t] === 'CHANNEL_ERROR' && /unauthori[sz]ed|permission/i.test(reasons[t] ?? '')),
+      ),
     // Why a join did not succeed, for the report (status plus the server's reason if any).
     why: () => topics.map((t) => `${statuses[t]}${reasons[t] ? ` (${reasons[t]})` : ''}`).join(', '),
     saw: (n) => JSON.stringify(msgs).includes(n),
@@ -199,29 +207,26 @@ export async function joinAttempt(ctx, user, topics, permitted, permittedTopics)
   const c = await listen(ctx, permitted, permittedTopics);
   control(c.joined.length === permittedTopics.length, `a permitted user could not join: ${c.why()}`);
   const l = await listen(ctx, user, topics);
-  const timedOut = topics.filter((t) => l.statuses[t] === 'TIMED_OUT');
-  control(timedOut.length === 0, `a join was neither accepted nor refused (timed out): ${timedOut.join(', ')}`);
+  control(l.unclear().length === 0, `a join was neither accepted nor refused by policy: ${l.why()}`);
   return l;
 }
 
 // Realtime restarts after a database reset and can take a while to answer. Wait until a
 // permitted user can join their ride's channel and a message sent to it arrives.
 export async function waitForRealtime(ctx, ms = 120000) {
+  // Uses a delivery every layout must allow (T3): a rider on the ride receives the Captain's
+  // position. Topics come from layout.mjs, so this follows the layout when it changes.
   const { users: u, rides } = ctx.fx;
-  const topic = `rail3:ride:${rides.main.id}`;
+  const id = rides.main.id;
   const end = Date.now() + ms;
   let last = 'not tried';
   while (Date.now() < end) {
     try {
-      const l = await listen(ctx, u.captain, [topic]);
+      const l = await listen(ctx, u.riderB, receiveTopics('rider', id));
       if (l.joined.length) {
         const n = needle();
-        const sent = await restSend(ctx, u.captain, [topic], 'w309-ready', { marker: n });
-        // self:false, so the captain's own send does not echo; a second listener receives it.
-        const l2 = await listen(ctx, u.coCaptain, [topic]);
-        const n2 = needle();
-        await restSend(ctx, u.captain, [topic], 'w309-ready', { marker: n2 });
-        const got = accepted(sent) && (await arrives(ctx, l2, n2, 4000));
+        const sent = await restSend(ctx, u.captain, sendTopics('captain', EVENTS.pos, id), EVENTS.pos, posPayload(u.captain, n));
+        const got = accepted(sent) && (await arrives(ctx, l, n, 4000));
         await closeAll(ctx);
         if (got) return;
         last = `joined, but a message did not arrive (HTTP ${sent.join(', ')})`;
@@ -310,6 +315,7 @@ export async function buildFixtures(ctx) {
 
   let i = 0;
   for (const [key, club, role] of USERS) {
+    if (ctx.interrupted?.()) throw new HarnessError('interrupted while building fixtures');
     i += 1;
     const email = `${run}-${key.toLowerCase()}@${EMAIL_DOMAIN}`;
     const created = ok(await admin.auth.admin.createUser({ email, email_confirm: true }), `createUser ${key}`);

@@ -29,6 +29,13 @@ const leaks = (data, ...values) => {
   return values.filter((v) => v != null && s.includes(String(v)));
 };
 const iso = () => new Date().toISOString();
+// Rows a user can read. A permission refusal is an empty answer; any other failure (network,
+// 5xx, a mistyped name) is an error in the suite and never counts as a denial.
+const read = async (q) => {
+  const { data, error } = await q;
+  control(!error || error.code === '42501', `a read failed for a reason other than permission: ${error?.code} ${error?.message}`);
+  return data ?? [];
+};
 // A permitted joiner for a ride, used to show Realtime is answering before a refusal is believed.
 const permitted = (ctx, ride) =>
   ride.id === ctx.fx.rides.other.id
@@ -41,8 +48,7 @@ const refused = (ctx, user, ride) => joinAttempt(ctx, user, allTopics(ride.id), 
 // mistake for a denial.
 async function deliver(ctx, { sender, topics, event, payload, n, allowed, denied }) {
   for (const l of denied) {
-    const timedOut = Object.values(l.statuses).filter((st) => st === 'TIMED_OUT');
-    control(timedOut.length === 0, 'a listener\'s join timed out, so its silence proves nothing');
+    control(l.unclear().length === 0, `a listener's join was neither accepted nor refused by policy (${l.why()}), so its silence proves nothing`);
   }
   const sent = await restSend(ctx, sender, topics, event, payload);
   control(accepted(sent), `the server did not accept the send (HTTP ${sent.join(', ')})`);
@@ -262,8 +268,8 @@ export const cases = [
       const { data: truth } = await ctx.admin.from('ride_participants').select('phone, last_lat, last_long, last_ping')
         .eq('ride_id', rides.main.id).eq('account_id', u.riderA.id).single();
       control(truth?.phone && truth?.last_lat != null && truth?.last_ping, 'rider A\'s row has no phone / position to protect');
-      const { data } = await db(ctx, u.riderB).from('ride_participants').select('*').eq('ride_id', rides.main.id).eq('account_id', u.riderA.id);
-      const row = data?.[0];
+      const data = await read(db(ctx, u.riderB).from('ride_participants').select('*').eq('ride_id', rides.main.id).eq('account_id', u.riderA.id));
+      const row = data[0];
       const got = [];
       if (row?.phone) got.push('phone');
       if (row?.last_lat != null || row?.last_long != null) got.push('last position');
@@ -310,8 +316,7 @@ export const cases = [
           ride_participants_pa_view: c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id),
         };
         for (const [label, q] of Object.entries(probes)) {
-          const { data } = await q;
-          if (leaks(data, ...secrets).length) found.push(`${who.key}: ${label}`);
+          if (leaks(await read(q), ...secrets).length) found.push(`${who.key}: ${label}`);
         }
       }
       rule(found.length === 0, `rider A's phone or position was read by: ${found.join(', ')}`);
@@ -446,10 +451,10 @@ export const cases = [
         const got = [];
         for (const who of [u.offRide, u.departed]) {
           const c = db(ctx, who);
-          const rows = await c.from('beacon_alerts').select('id').eq('ride_id', rides.main.id);
-          const flags = await c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', rides.main.id).eq('beacon_active', true);
-          if (rows.data?.length) got.push(`${who.key}: beacon rows`);
-          if (flags.data?.length) got.push(`${who.key}: which rider has an active beacon`);
+          const rows = await read(c.from('beacon_alerts').select('id').eq('ride_id', rides.main.id));
+          const flags = await read(c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', rides.main.id).eq('beacon_active', true));
+          if (rows.length) got.push(`${who.key}: beacon rows`);
+          if (flags.length) got.push(`${who.key}: which rider has an active beacon`);
         }
         rule(got.length === 0, `read from off the ride: ${got.join(', ')}`);
       } finally {
@@ -467,12 +472,12 @@ export const cases = [
         await adminBeacon(ctx, rides.main, u.riderA);
         await setBeaconFlag(ctx, rides.main, u.riderA, true);
         const c = db(ctx, u.neverOpened);
-        const rows = await c.from('beacon_alerts').select('id').eq('ride_id', id);
-        const flags = await c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', id).eq('beacon_active', true);
+        const rows = await read(c.from('beacon_alerts').select('id').eq('ride_id', id));
+        const flags = await read(c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', id).eq('beacon_active', true));
         const l = await refused(ctx, u.neverOpened, rides.main);
         const paths = [];
-        if (rows.data?.length) paths.push('beacon rows');
-        if (flags.data?.length) paths.push('beacon flags');
+        if (rows.length) paths.push('beacon rows');
+        if (flags.length) paths.push('beacon flags');
         if (l.joined.length) paths.push(`channels (${l.joined.join(', ')})`);
         rule(paths.length === 0, `a participant who never opened the ride reached: ${paths.join('; ')}`);
       } finally {
@@ -675,6 +680,12 @@ export const cases = [
       // confirmed it was receiving. Rider A now keeps sending on every path a rider has.
       const rb = ctx.state.endingRideListener;
       const fresh = await listen(ctx, u.riderB, allTopics(id));
+      control(fresh.unclear().length === 0, `a fresh join was neither accepted nor refused by policy: ${fresh.why()}`);
+      // Realtime is delivering right now: on the live ride, rider B receives the Captain.
+      const live = await listen(ctx, u.riderB, receiveTopics('rider', rides.main.id));
+      const c = needle();
+      await restSend(ctx, u.captain, sendTopics('captain', EVENTS.pos, rides.main.id), EVENTS.pos, posPayload(u.captain, c));
+      control(await arrives(ctx, live, c), 'Realtime was not delivering when the case ran');
       const topics = [...new Set([
         ...sendTopics('rider', EVENTS.pos, id, { beaconActive: false }),
         ...sendTopics('rider', EVENTS.pos, id, { beaconActive: true }),
@@ -727,7 +738,7 @@ export const cases = [
       const up = await listen(ctx, u.captain, receiveTopics('captain', rides.main.id));
       control(up.joined.length > 0, `Realtime is not answering: ${up.why()}`);
       const anon = await listen(ctx, null, [topic], { priv: false });
-      control(anon.statuses[topic] !== 'TIMED_OUT', 'the public channel join timed out, so silence proves nothing');
+      control(anon.unclear().length === 0, `the public channel join was neither accepted nor refused: ${anon.why()}`);
       const n = needle();
       const payload = { participantId: u.riderA.id, lastLat: POS.lat, lastLong: POS.lng, marker: n };
       await restSend(ctx, null, [topic], PUBLIC_WEB_POSITION_EVENT, payload, { priv: false });
@@ -810,7 +821,7 @@ export const cases = [
           await restSend(ctx, who, allTopics(id), EVENTS.pos, posPayload(who, n));
           needles.push([who, n]);
           const l = await listen(ctx, who, allTopics(id));
-          control(!Object.values(l.statuses).includes('TIMED_OUT'), 'a cross-tenant join timed out, so it proves nothing');
+          control(l.unclear().length === 0, `a cross-tenant join was neither accepted nor refused by policy: ${l.why()}`);
           if (l.joined.length) got.push(`${who.key}: joined a channel`);
         }
         // The captain's connection is live: an in-club position still arrives.
