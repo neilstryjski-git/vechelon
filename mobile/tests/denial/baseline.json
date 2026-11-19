@@ -35,15 +35,17 @@
     "T12.1": "green",
     "T14.1": "green",
     "T4.4": "red",
-    "T13.1": "red",
+    "T13.1": "green",
     "T15.1": "green",
     "T16.1": "green",
     "T16.2": "red",
     "T16.3": "green",
     "T5.3": "red",
     "T16.4": "green",
-    "T15.2": "red"
+    "T15.2": "red",
+    "T13.2": "green"
   },
   "targets": {},
-  "_advisory": "T15.2 is advisory (outside rule T15): it stays red until the Supabase project is set to private realtime channels only."
+  "_advisory": "T15.2 is advisory (outside rule T15): it stays red until the Supabase project is set to private realtime channels only.",
+  "_w312": "W312 (2026-11-18): T13.1 turned green; T13.2 added."
 }
