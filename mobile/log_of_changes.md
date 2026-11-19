@@ -1780,6 +1780,10 @@ Notes:
   rationale and tracking notification); row 2.3's proposal no longer promises that a leader was
   alerted; the W311 insert refusal added (four messages, not three); the app-only limit of
   "everyone on the ride" stated and put to Voice & Tone.
+- REVIEW r2 approved; r3 assessed the ticket's security consideration (wording must not promise
+  narrower visibility than the server enforces) and failed rows 4.2 to 4.4 for leaving out club
+  admins, who see beacons in Race Control. Those proposals now name the club's organisers, and
+  question 1 puts the same point for the in-app rows.
 - HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; seven
   questions for the pass are at the foot of the list.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.

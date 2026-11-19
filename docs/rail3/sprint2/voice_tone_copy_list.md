@@ -58,14 +58,16 @@ Nothing is shown when a cancel changes no row (someone else cancelled first, or 
 
 ## 4. Play-facing sentences that need new wording when the widened build ships
 
+**Club admins.** Pillar II gives club admins sight of beacons in Race Control. The proposals in rows 4.2 to 4.4 name them (as "the club's organisers", the listing's existing word), so the Play text does not promise fewer viewers than the server will allow. The in-app rows 1.3, 1.5 and 1.6 do not name them yet: that is question 1, and whatever is ruled there applies to every who-sees sentence. Web Race Control is not built this sprint, but the server grants the access in this sprint (W193).
+
 **Do not change these now.** The build on Play (versionCode 4) still behaves as they say. They change in the same release as section 1. Proposed wording is offered so the Play update is not a second copy round.
 
 | # | Current text (exact) | Where | Proposed placeholder | Note |
 |-|-|-|-|-|
 | 4.1 | `A live map while the ride is on: Captains and support crew see every rider, and riders see their Captain and support crew` | Store listing, "On the ride" · `docs/play/store_listing.md:50-51` | (no change) | Still true |
-| 4.2 | `A Beacon lets a rider signal they need help, so the Captain and support crew know to look for them` | Store listing · `store_listing.md:54-55` | `A Beacon lets a rider signal they need help. Everyone on the ride sees where they are until it's cancelled` | |
-| 4.3 | `Vechelon uses your location only while you're in an active ride. It's shared live with your ride's Captain and support crew.` | Store listing, "Your location, plainly" · `store_listing.md:58-59` | `Vechelon uses your location only while you're in an active ride. It's shared live with your ride's Captain and support crew, and with everyone on the ride if you raise a Beacon.` | |
-| 4.4 | `Live group-ride map. While a club ride is active, Vechelon shares each rider's position with the ride's Captain and support crew so they can keep the group together, see who has dropped off the back, and find a rider who needs help.` | Background-location declaration, "Which feature uses background location?" · `docs/play/background_location_declaration.md:14-16` | Add: `If a rider raises a Beacon, their position is also shown to the other riders on that ride until it is cancelled.` | The declaration video shows the disclosure screen; if row 1.3 changes, the video is re-recorded |
+| 4.2 | `A Beacon lets a rider signal they need help, so the Captain and support crew know to look for them` | Store listing · `store_listing.md:54-55` | `A Beacon lets a rider signal they need help. Everyone on the ride, and the club's organisers, can see where they are until it's cancelled` | |
+| 4.3 | `Vechelon uses your location only while you're in an active ride. It's shared live with your ride's Captain and support crew.` | Store listing, "Your location, plainly" · `store_listing.md:58-59` | `Vechelon uses your location only while you're in an active ride. It's shared live with your ride's Captain and support crew, and with everyone on the ride and your club's organisers if you raise a Beacon.` | |
+| 4.4 | `Live group-ride map. While a club ride is active, Vechelon shares each rider's position with the ride's Captain and support crew so they can keep the group together, see who has dropped off the back, and find a rider who needs help.` | Background-location declaration, "Which feature uses background location?" · `docs/play/background_location_declaration.md:14-16` | Add: `If a rider raises a Beacon, their position is also shown to the other riders on that ride, and to the club's organisers, until it is cancelled.` | The declaration video shows the disclosure screen; if row 1.3 changes, the video is re-recorded |
 | 4.5 | Data Safety form, Precise location: `Shared with third parties: No` · purpose `App functionality (live group ride map, safety)` | `docs/play/data_safety.md:11` | (form answer, not copy; no change proposed) | Other riders on the same ride are users of the app, not third parties, so the answer should stand. Worth one look by the Senior PM when the form is next opened, since more people now receive a position |
 | 4.6 | `Beacon location … Coordinates cleared after 30 days; the alert record stays` | Data Safety retention table · `data_safety.md:29` | `Beacon record, with its location: deleted 30 days after it was raised` | **Not a wording question.** Pillar II v1.2.0 §2 now says the whole beacon row is deleted 30 days after raise. Our own note says the record stays. The privacy policy and this table need to match whichever the retention job does at the time of the Play update |
 
@@ -81,7 +83,7 @@ Ledger §16.11 names three items for this pass. Two are not built in Sprint 2 bu
 
 ## Questions for the Voice & Tone pass
 
-1. **Row 1.3** is the one that blocks the build. Is the proposed sentence acceptable, and should it name club admins?
+1. **Row 1.3** is the one that blocks the build. Is the proposed sentence acceptable? **Club admins:** they will be able to see beacons (Race Control), so a sentence that lists who sees a beacon and leaves them out promises too little. Should rows 1.3, 1.5 and 1.6 name them, as the proposals for 4.2 to 4.4 do? The Hands' recommendation is yes for 1.3; the policy sentence 1.2 already says "to your club".
 2. **Row 2.3:** what does a rider see where the phone number would be: a reassurance, or nothing?
 3. **Row 2.2:** the rider-facing label for a beacon on someone else.
 4. **Rows 3.3 to 3.6:** agree the rule that the app never prints server error text to a rider. If agreed, the Hands replace those strings in the item 10 build.
