@@ -40,7 +40,20 @@ Six rules pass and ten fail (18 cases green, 20 red, 0 errors).
 |---|---|
 | Local stack, migration-only database (Rail 3 CI run 44426316001) | Baseline above |
 | Local stack, seeded database (run 44423732591, an early version of the suite; diagnostic step since removed) | Same result per rule |
-| Staging | Not yet run |
+| Staging `xybgtbybdhxuwqjfcfkc`, 2026-11-18 (Senior PM approved the run) | Identical to the baseline, case for case. No staging exception was needed |
+
+### Staging run
+
+One run, about two minutes. It created two test clubs, twelve test users (one more deleted by
+T13 as designed), three test rides and their rows, all marked `w309`, and removed them. Counted
+afterwards by the runner and again by a separate `--sweep`: zero test clubs, accounts, rides,
+participant rows and auth users. No real club, member or ride was read into a test or written
+to; the only rows created on staging since 2026-11-15 are two real ad hoc rides and one real
+sign-in, none from today. Report copy: `~/vechelon-backups/w309-denial/`.
+
+The hydration trigger that staging still carries (recorded exception until W313 / W317) did
+not change any result: the fixtures write name and phone on participant rows the way the app
+does at join, so local and staging start from the same data.
 
 ### Findings beyond the expected baseline
 

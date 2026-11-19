@@ -1719,5 +1719,13 @@ Notes:
   readiness check takes its topics from `layout.mjs`; only the server's authorization refusal
   counts as a refused join; reads that fail for any reason but permission are errors.
 - RESULT: 6 rules pass, 10 fail (18 cases green, 20 red). Per-rule table and findings: `qa_log.md`.
+- CI: Realtime sometimes never answers again after `supabase db reset`; the step restarts the
+  Realtime container before the suite, and the suite waits until a message is delivered.
+- STAGING RUN (2026-11-18, approved by the Senior PM in session): `npm run denial:staging`
+  against `xybgtbybdhxuwqjfcfkc`. Same 38 results as CI, zero test rows left (checked twice).
+  No migration, policy or function was changed on staging.
+- STRIDE HOOKS: claim and complete sent from python urllib, because the repo's `.stride.md`
+  hooks branch off `master` and open a pull request against `master`. Worktree and PR #164
+  (base `rail3-integration`) made by hand.
 - NOT A PILLAR DEPARTURE: nothing here changes behaviour.
 
