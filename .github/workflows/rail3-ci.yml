@@ -146,6 +146,10 @@ jobs:
             *127.0.0.1*|*localhost*) : ;;  # ok — local only
             *) echo "::error::Refusing to run: API_URL is not a local address ($API_URL)"; exit 1 ;;
           esac
+          # `supabase db reset` rebuilds the database under Realtime, which then sometimes never
+          # answers again (seen as "transport failure" for the whole run). Restart it so it
+          # boots against the rebuilt database; the suite waits until it delivers.
+          docker ps --filter name=supabase_realtime -q | xargs -r docker restart
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
             npm run denial:local -- --out ../denial-out
 
