@@ -758,7 +758,10 @@ export const cases = [
       const offenders = [];
       const calls = {};
       // Comments are removed first: a `// private: true` remark must never satisfy the check.
-      const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+      // Line comments go file-wide; block comments only inside a call's own arguments (a
+      // file-wide block strip is not string-aware and could swallow real code after a "/*").
+      const code = (t) => t.replace(/(^|[^:])\/\/.*$/gm, '$1');
+      const noBlocks = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
       for (const dir of SOURCE_DIRS) {
         calls[dir] = 0;
         const root = join(REPO_ROOT, dir);
@@ -778,7 +781,7 @@ export const cases = [
               if (text[end] === '(') depth += 1;
               else if (text[end] === ')') { depth -= 1; if (depth === 0) break; }
             }
-            const args = text.slice(at, end);
+            const args = noBlocks(text.slice(at, end));
             if (!/private:\s*true/.test(args) || /private:\s*false/.test(args)) {
               offenders.push(`${rel}: a channel is opened without private: true`);
             }
@@ -787,7 +790,10 @@ export const cases = [
           // REST broadcast (the mobile background sender): every message must be private.
           if (text.includes('/realtime/v1/api/broadcast')) {
             calls[dir] += 1;
-            if (!/private:\s*true/.test(text) || /private:\s*false/.test(text)) {
+            // One private: true for every message topic in the file, and never a false.
+            const topics = (text.match(/\btopic:/g) ?? []).length;
+            const privates = (noBlocks(text).match(/private:\s*true/g) ?? []).length;
+            if (privates < Math.max(1, topics) || /private:\s*false/.test(text)) {
               offenders.push(`${rel}: a REST broadcast is sent without private: true`);
             }
           }

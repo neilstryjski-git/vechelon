@@ -1753,6 +1753,8 @@ Notes:
   that phrase in a comment); it also checks the REST broadcast sender; a missing source
   directory is an error; Rail 3 CI now runs when `admin/src`, `worker` or `supabase/functions`
   change, so T15.1 guards a later Race Control merge; W190 named as a third Race Control branch.
+- REVIEW r2: approved, all 5 criteria met, 2 latent minors in the scanner (block-comment strip
+  not string-aware; REST check per file, not per message), both fixed after the verdict.
 - NOT DONE HERE: setting `private_only` on either project (a project setting, the Senior PM's
   call). Web Race Control is not on the trunk, so the manual Race Control check has no target.
 - BRIEF §8 ITEM 3: answered in `docs/rail3/sprint2/brief_section8_answers.md`.
