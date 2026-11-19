@@ -2,6 +2,28 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-18 — W311: beacon insert and cancel tightening, rules T10 to T12
+
+Change: one migration, `20261118000000_w311_beacon_write_guard.sql`. Results are filled in
+from the CI run on the pull request (local stack) and from staging once it is applied there.
+
+| Case | Before W311 | Expected after | What it proves |
+|---|---|---|---|
+| T10.1 | Fails | Passes | A rider cannot insert a beacon in another rider's name |
+| T10.2 (new) | — | Passes | A beacon cannot be inserted already cancelled |
+| T11.0 (control) | Passes | Passes | Own rider, Captain and SAG can each still cancel |
+| T11.1 | Fails | Passes | A club admin off the ride, or another rider, cannot cancel |
+| T11.2 | Fails | Passes | Position, time and rider columns cannot be rewritten |
+| T11.3 | Fails | Passes | A closed beacon cannot be re-opened or overwritten |
+| T11.4 | Fails | Passes | The canceller recorded is the caller, never blank or someone else |
+| T12.1 | Passes | Passes | No client writes `beacon_cancel_reason` |
+| T14.1 | Passes | Passes | Ride end still closes open beacons with `ride_ended` |
+| T16.2 | Fails | Passes | Another club's member cannot attach a beacon to this club's ride |
+
+Also recorded: staging was set to private realtime channels only on 2026-11-18 (Senior PM
+approved). Checked on staging the same day: T3, T4.1 and T8 pass (private channels work) and
+T15.2 passes (a public channel is refused). Production is owed the same setting at Gate B.
+
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
 Finding: the channel had one subscriber and one sender in the web app, both dead code (never

@@ -526,6 +526,24 @@ export const cases = [
     },
   },
 
+  {
+    id: 'T10.2', rule: 'T10',
+    title: 'A beacon cannot be inserted already cancelled (W311: a new beacon arrives open)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      try {
+        await db(ctx, u.riderA).from('beacon_alerts').insert({
+          tenant_id: tenants.x.id, ride_id: rides.main.id, rider_id: u.riderA.id,
+          beacon_cancelled_at: iso(), beacon_cancelled_by: u.captain.id,
+        });
+        const { data } = await ctx.admin.from('beacon_alerts').select('id').eq('ride_id', rides.main.id).eq('rider_id', u.riderA.id);
+        rule((data?.length ?? 0) === 0, 'a rider inserted a beacon that already names the Captain as its canceller');
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
+    },
+  },
+
   // ── T11 ────────────────────────────────────────────────────────────────────
   {
     id: 'T11.0', rule: 'T11',
