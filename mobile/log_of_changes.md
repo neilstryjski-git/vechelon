@@ -1761,3 +1761,22 @@ Notes:
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand (hooks
   branch off `master`).
 
+## 2026-11-18 — W312: `actor_deleted` reason on account deletion (T13)
+
+- MIGRATION `20261118010000_w312_beacon_actor_deleted.sql`: the reason check constraint now
+  allows `actor_deleted`; trigger `trg_rail3_beacon_actor_deleted` (BEFORE UPDATE OF
+  `beacon_cancelled_by`) sets it when the server removes the actor from a closed beacon that has
+  no reason. `ride_ended` rows are untouched.
+- LLD: a trigger, not an edit to `delete_account_data`. The rule holds in the statement that
+  blanks the actor, and the 280-line W299 function is not forked for one line. Consequence,
+  accepted: any server update that removes an actor from a closed, reasonless row is marked
+  `actor_deleted`, not only account deletion. The deletion function is the only such writer.
+- TICKET CORRECTION: the ticket says the foreign key on `beacon_cancelled_by` is ON DELETE SET
+  NULL. It is ON DELETE RESTRICT (schema migration and staging both); W299's function blanks
+  the actor itself before deleting the account.
+- SERVER-ONLY: the trigger returns at once for API roles. `delete_account_data` is SECURITY
+  DEFINER and unchanged, caller check included.
+- NO BACKFILL: staging has 0 closed rows with a blank actor and a blank reason (2026-11-18).
+- TESTS: baseline flips T13.1 to green; T13.2 added (no client can have the reason written).
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+

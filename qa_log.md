@@ -2,6 +2,19 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-18 — W312: the `actor_deleted` reason, rule T13
+
+Change: one migration, `20261118010000_w312_beacon_actor_deleted.sql`. Results below are from
+Rail 3 CI on the pull request (local stack). Staging is recorded when the migration is applied.
+
+| Case | Before W312 | After (CI) | What it proves |
+|---|---|---|---|
+| T13.1 | Fails | See the pull request's CI run | Deleting an account turns that person's past cancels into `actor_deleted`; a `ride_ended` row is unchanged |
+| T13.2 (new) | — | See the pull request's CI run | A client cannot get `actor_deleted` written, directly or by blanking the actor |
+
+Account deletion with no beacon history: covered by the existing W299 deletion tests in
+`mobile/tests/rlsIsolation.test.mjs`, which run in the same CI job.
+
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
 Finding: the channel had one subscriber and one sender in the web app, both dead code (never
