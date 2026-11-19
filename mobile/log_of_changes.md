@@ -1775,6 +1775,11 @@ Notes:
   guard's `permission_denied: ...` messages. Proposed rule: never show server text. (2)
   `docs/play/data_safety.md:29` says the beacon alert record stays after 30 days; Pillar II
   v1.2.0 §2 says the whole row is deleted 30 days after raise. Flagged in row 4.6, not changed.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 2 important, 2 minor; all 4 criteria met; every
+  quoted text and file:line verified): added the two who-sees strings in `bgGeo.ts` (permission
+  rationale and tracking notification); row 2.3's proposal no longer promises that a leader was
+  alerted; the W311 insert refusal added (four messages, not three); the app-only limit of
+  "everyone on the ride" stated and put to Voice & Tone.
 - HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; five
   questions for the pass are at the foot of the list.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
