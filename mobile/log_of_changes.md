@@ -1761,3 +1761,33 @@ Notes:
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand (hooks
   branch off `master`).
 
+## 2026-11-18 — W311: beacon write guard (T10 to T12)
+
+- MIGRATION `20261118000000_w311_beacon_write_guard.sql`:
+  - `beacon_alerts_tenant_insert`: `rider_id = auth.uid()`, affiliated with `tenant_id`, and the
+    ride belongs to `tenant_id` (new helper `rail3_ride_in_tenant`, SECURITY DEFINER, yes/no).
+    The last clause closes the W309 finding that a member of another club could attach a row
+    to this club's ride under their own club.
+  - `beacon_alerts_tenant_update`: the beacon's own rider or the ride's Captain or SAG
+    (`is_captain_or_support`), on both the old and the new row.
+  - Trigger `trg_rail3_beacon_audit_guard` (API roles only): a beacon is inserted open; an
+    update may change only `beacon_cancelled_at` and `beacon_cancelled_by`, from empty to set,
+    both together, with the caller as the actor. Server writers (D81 ride-end close, late-beacon
+    close, account deletion, retention purge) pass through.
+- LLD: column comparison uses `to_jsonb(NEW) - cancel fields` against the same of OLD, so a
+  column added later is guarded without touching the function. `ALTER POLICY`, not drop and
+  create, so the table is never without a policy mid-migration.
+- APP: no change. The app's raise and cancel already have the permitted shape
+  (`useBeacons.ts`, `buildCancelPatch`), so versionCode 4 is unaffected.
+- NOT CHANGED: who may read beacon rows (W193). A member not on the ride can still raise their
+  own beacon on a club ride; the ticket and brief item 6 do not ask for a participant check.
+- TESTS: baseline flips T10.1, T11.1 to T11.4 and T16.2 to green; T10.2 added.
+- STAGING SETTING (W310 follow-up): Realtime `private_only` set on staging (Senior PM approved
+  2026-11-18); `baseline.json` records T15.2 green for the staging target only.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 1 important, 2 minor; all 8 criteria met; no
+  finding in the migration, recursion traced clean): a `mobile/node_modules` symlink had been
+  committed by mistake (removed; `.gitignore` now also matches a link); T14.2 added for the one
+  client path that depends on trigger order (a rider's raise after ride end); qa_log records CI
+  results, not expectations.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+

@@ -2,6 +2,36 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-18 — W311: beacon insert and cancel tightening, rules T10 to T12
+
+Change: one migration, `20261118000000_w311_beacon_write_guard.sql`. The "After" column is the
+result of Rail 3 CI on pull request #166 (local stack, every migration replayed). Staging and
+the on-device check on the Play build are recorded below when run.
+
+| Case | Before W311 | After (CI) | What it proves |
+|---|---|---|---|
+| T10.1 | Fails | Passes | A rider cannot insert a beacon in another rider's name |
+| T10.2 (new) | — | Passes | A beacon cannot be inserted already cancelled |
+| T11.0 (control) | Passes | Passes | Own rider, Captain and SAG can each still cancel |
+| T11.1 | Fails | Passes | A club admin off the ride, or another rider, cannot cancel |
+| T11.2 | Fails | Passes | Position, time and rider columns cannot be rewritten |
+| T11.3 | Fails | Passes | A closed beacon cannot be re-opened or overwritten |
+| T11.4 | Fails | Passes | The canceller recorded is the caller, never blank or someone else |
+| T12.1 | Passes | Passes | No client writes `beacon_cancel_reason` |
+| T14.1 | Passes | Passes | Ride end still closes open beacons with `ride_ended` |
+| T14.2 (new) | — | Passes | A rider's delayed raise after ride end is still recorded, closed with `ride_ended` |
+| T16.2 | Fails | Passes | Another club's member cannot attach a beacon to this club's ride |
+
+Rules after W311 on the local stack: 10 pass (T3, T6, T7, T8, T10, T11, T12, T14, T15, T16),
+6 fail (T1, T2, T4, T5, T9, T13).
+
+Not yet run: the migration on staging; raise, self-cancel and Captain or SAG cancel on the
+Play build (versionCode 4).
+
+Also recorded: staging was set to private realtime channels only on 2026-11-18 (Senior PM
+approved). Checked on staging the same day: T3, T4.1 and T8 pass (private channels work) and
+T15.2 passes (a public channel is refused). Production is owed the same setting at Gate B.
+
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
 Finding: the channel had one subscriber and one sender in the web app, both dead code (never
