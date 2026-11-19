@@ -215,7 +215,7 @@ export async function joinAttempt(ctx, user, topics, permitted, permittedTopics)
 
 // Realtime restarts after a database reset and can take a while to answer. Wait until a
 // permitted user can join their ride's channel and a message sent to it arrives.
-export async function waitForRealtime(ctx, ms = 120000) {
+export async function waitForRealtime(ctx, ms = Number(process.env.DENIAL_READY_MS ?? 120000)) {
   // Uses a delivery every layout must allow (T3): a rider on the ride receives the Captain's
   // position. Topics come from layout.mjs, so this follows the layout when it changes.
   const { users: u, rides } = ctx.fx;
