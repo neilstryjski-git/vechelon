@@ -723,6 +723,9 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const topic = publicWebTopic(rides.main.id);
+      // Realtime is answering: a permitted private join works in this same case.
+      const up = await listen(ctx, u.captain, receiveTopics('captain', rides.main.id));
+      control(up.joined.length > 0, `Realtime is not answering: ${up.why()}`);
       const anon = await listen(ctx, null, [topic], { priv: false });
       control(anon.statuses[topic] !== 'TIMED_OUT', 'the public channel join timed out, so silence proves nothing');
       const n = needle();

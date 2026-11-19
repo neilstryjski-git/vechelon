@@ -132,6 +132,16 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
     ),
   );
   const joined = topics.filter((t) => statuses[t] === 'SUBSCRIBED');
+  // A join that failed because Realtime could not be reached is not a refusal. It makes the
+  // case an error, never a pass or a finding.
+  const transport = topics.filter((t) => /transport|unavailable|unreachable|websocket/i.test(reasons[t] ?? ''));
+  if (transport.length) {
+    try {
+      await client.removeAllChannels();
+      client.realtime.disconnect();
+    } catch { /* nothing to close */ }
+    throw new HarnessError(`Realtime could not be reached (${reasons[transport[0]]})`);
+  }
   const l = {
     msgs,
     statuses,
@@ -192,6 +202,40 @@ export async function joinAttempt(ctx, user, topics, permitted, permittedTopics)
   const timedOut = topics.filter((t) => l.statuses[t] === 'TIMED_OUT');
   control(timedOut.length === 0, `a join was neither accepted nor refused (timed out): ${timedOut.join(', ')}`);
   return l;
+}
+
+// Realtime restarts after a database reset and can take a while to answer. Wait until a
+// permitted user can join their ride's channel and a message sent to it arrives.
+export async function waitForRealtime(ctx, ms = 120000) {
+  const { users: u, rides } = ctx.fx;
+  const topic = `rail3:ride:${rides.main.id}`;
+  const end = Date.now() + ms;
+  let last = 'not tried';
+  while (Date.now() < end) {
+    try {
+      const l = await listen(ctx, u.captain, [topic]);
+      if (l.joined.length) {
+        const n = needle();
+        const sent = await restSend(ctx, u.captain, [topic], 'w309-ready', { marker: n });
+        // self:false, so the captain's own send does not echo; a second listener receives it.
+        const l2 = await listen(ctx, u.coCaptain, [topic]);
+        const n2 = needle();
+        await restSend(ctx, u.captain, [topic], 'w309-ready', { marker: n2 });
+        const got = accepted(sent) && (await arrives(ctx, l2, n2, 4000));
+        await closeAll(ctx);
+        if (got) return;
+        last = `joined, but a message did not arrive (HTTP ${sent.join(', ')})`;
+      } else {
+        last = l.why();
+        await closeAll(ctx);
+      }
+    } catch (e) {
+      last = e.message;
+      await closeAll(ctx);
+    }
+    await sleep(3000);
+  }
+  throw new HarnessError(`Realtime did not become ready in ${ms / 1000}s: ${last}`);
 }
 
 // Wait until `listener` has a message containing `n`, or time out.

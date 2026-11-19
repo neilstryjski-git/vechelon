@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveTarget, makeAdmin, buildFixtures, sweep, leftovers, closeAll, Red, MARK } from './harness.mjs';
+import { resolveTarget, makeAdmin, buildFixtures, waitForRealtime, sweep, leftovers, closeAll, Red, MARK } from './harness.mjs';
 import { cases } from './rules.mjs';
 import { LAYOUT } from './layout.mjs';
 
@@ -71,6 +71,7 @@ for (const c of cases) if (selected.has(c.id)) for (const dep of c.needs ?? []) 
 
 try {
   await buildFixtures(ctx);
+  await waitForRealtime(ctx);
   for (const c of cases) {
     if (!selected.has(c.id)) continue;
     if (interrupted) break;
