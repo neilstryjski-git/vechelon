@@ -1761,3 +1761,21 @@ Notes:
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand (hooks
   branch off `master`).
 
+## 2026-11-18 — W314: Sprint 2 Voice & Tone copy list, handed to the Senior PM
+
+- NEW `docs/rail3/sprint2/voice_tone_copy_list.md`, beside the Sprint 1 list (which is left
+  untouched: the main checkout has uncommitted edits to it). Five parts: the in-app disclosure
+  (row 1.3 blocks brief item 10), the reduced beacon bottom sheet a rider gets for another
+  rider, messages a rider can now see when the server refuses, the Play-facing sentences that
+  need new wording when the widened build ships, and the items carried from Sprint 1.
+- Every row: current text, where it appears (file:line), and a proposed placeholder. Proposals
+  are the Hands' wording; Voice & Tone decides. No app string, Play listing or Play form changed.
+- FOUND WHILE LISTING: (1) the app prints raw server error text to riders in three places
+  (`useBeacons.ts:338`, `:385`/`:450`, `RosterScreen.tsx:164`); after W311 that can include the
+  guard's `permission_denied: ...` messages. Proposed rule: never show server text. (2)
+  `docs/play/data_safety.md:29` says the beacon alert record stays after 30 days; Pillar II
+  v1.2.0 §2 says the whole row is deleted 30 days after raise. Flagged in row 4.6, not changed.
+- HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; five
+  questions for the pass are at the foot of the list.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+
