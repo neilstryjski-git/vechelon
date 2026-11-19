@@ -1682,3 +1682,50 @@ Notes:
 - **Review:** two rounds of `stride:task-reviewer` with an explicit RLS recursion check (no recursion path: every helper in `participant_update_policy` is SECURITY DEFINER and no `rides` policy reads `ride_participants` under RLS). Round 1: 0 critical, 7 important (five were "staging apply still pending", one the seed-contaminated CI dump, fixed), 2 minor (both fixed). Round 2: all 7 acceptance criteria met; 1 important recorded, not fixable here: the handset check of the Play-installed versionCode 4 app (sign-in, ride list, join, roster) is owed to the Senior PM; 1 minor fixed after the round (a test comment in `w308_app_data_paths.sql`).
 - **Handset check by the Senior PM (2026-11-15, evening, Play-installed versionCode 4 on staging, reviewer account):** signed in as `play-review@vechelon.ca`; opened ride "Ad Hoc Ride — Heron" in the Bikes and Beers Reviewer club; roster showed "Play Reviewer" as Captain, "you", "app tracked"; map rendered with the own-position dot at the right street; Captain ended the ride and it left the list. Staging confirms: joined stamp and position written by the app, ride `saved` with `actual_end` set, `auto_closed` false, no active ride left in the club. The ride itself was inserted by SQL at the Senior PM's request (reviewer as creator and Captain, empty QR code), so **creating a ride from the app and joining as a second rider were not exercised on a handset**.
 
+## 2026-11-18 — W309 Denial suite T1 to T16 and the baseline before enforcement
+
+- SCOPE: test code and CI only. No migration, no app code, no staging change in the build of
+  the suite. New: `mobile/tests/denial/` (harness, layout seam, rules, runner, baseline, README),
+  `qa_log.md` at the repo root (did not exist), two npm scripts, one Rail 3 CI step.
+- LLD: a plain Node runner, not `node:test`. The suite has to report red rules without failing
+  the build, and fail the build when a result differs from the recorded baseline in either
+  direction. `baseline.json` is that record; each enforcement ticket flips its own cases.
+- LLD: the channel layout and the rider roster path sit behind `layout.mjs`. Pillar II §2
+  leaves the layout to the Hands, so the rules ask the seam which topics a role sends and
+  receives on. W193, D94 and W313 edit that one file. The pre-W193 topic stays in the "every
+  channel" list for good.
+- LLD: users are created without a password and signed in with an admin-generated link token,
+  so no password ever exists on a staging user. One sign-in per user; every subscription opens
+  a fresh client because Realtime caches authorization per connection.
+- LLD: a denial counts only when a control in the same case shows the message reached someone
+  allowed, or the same write worked for someone allowed.
+- FOUND while building: `createClient({ accessToken })` alone does not authenticate the realtime
+  socket for a private channel in supabase-js 2.108; `realtime.setAuth(token)` is needed before
+  the join. Without it every private join is refused and every denial passes for the wrong reason.
+- CI: the suite runs after the seed-free rebuild, on the database the migrations alone produce.
+  A diagnostic run on the seeded database gave the same results and was removed.
+- FOUND while building: Realtime is unreachable for a short while after `supabase db reset`. The
+  runner waits until a permitted user can join and receive, and a join that fails on transport
+  makes its case an `error`, so an unreachable Realtime can never read as a denial.
+- REVIEW r1 (`stride:task-reviewer`, 0 critical, 7 important, 5 minor), all addressed: cleanup
+  no longer treats a failed read as "nothing left" and runs on Ctrl-C; every refused join has a
+  permitted join beside it and a timeout is an error; non-receipt needs an accepted send and a
+  live listener; T4.3 and T4.4 use a connection opened while the beacon was active; departed and
+  never-opened participants added as senders and readers; a guest row added; T16 now restates
+  the DoD-12 checks the local-only matrix makes (rides, rider_states, telemetry, unknown ride,
+  cross-tenant send) with in-club controls.
+- REVIEW r2 (0 critical, 2 important, 5 minor), all addressed: an interrupt now only raises a
+  flag so the one verified cleanup runs (no sweep racing fixture creation); the Realtime
+  readiness check takes its topics from `layout.mjs`; only the server's authorization refusal
+  counts as a refused join; reads that fail for any reason but permission are errors.
+- RESULT: 6 rules pass, 10 fail (18 cases green, 20 red). Per-rule table and findings: `qa_log.md`.
+- CI: Realtime sometimes never answers again after `supabase db reset`; the step restarts the
+  Realtime container before the suite, and the suite waits until a message is delivered.
+- STAGING RUN (2026-11-18, approved by the Senior PM in session): `npm run denial:staging`
+  against `xybgtbybdhxuwqjfcfkc`. Same 38 results as CI, zero test rows left (checked twice).
+  No migration, policy or function was changed on staging.
+- STRIDE HOOKS: claim and complete sent from python urllib, because the repo's `.stride.md`
+  hooks branch off `master` and open a pull request against `master`. Worktree and PR #164
+  (base `rail3-integration`) made by hand.
+- NOT A PILLAR DEPARTURE: nothing here changes behaviour.
+

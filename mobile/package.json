@@ -8,6 +8,8 @@
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "denial:local": "node tests/denial/run.mjs --target local",
+    "denial:staging": "node tests/denial/run.mjs --target staging",
     "ios": "expo run:ios"
   },
   "dependencies": {
