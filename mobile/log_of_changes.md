@@ -1703,7 +1703,17 @@ Notes:
   socket for a private channel in supabase-js 2.108; `realtime.setAuth(token)` is needed before
   the join. Without it every private join is refused and every denial passes for the wrong reason.
 - CI: the suite runs after the seed-free rebuild, on the database the migrations alone produce.
-  A diagnostic run on the seeded database gave the same 36 results and was removed.
-- RESULT: 8 rules pass, 8 fail (17 cases green, 19 red). Per-rule table and findings: `qa_log.md`.
+  A diagnostic run on the seeded database gave the same results and was removed.
+- FOUND while building: Realtime is unreachable for a short while after `supabase db reset`. The
+  runner waits until a permitted user can join and receive, and a join that fails on transport
+  makes its case an `error`, so an unreachable Realtime can never read as a denial.
+- REVIEW r1 (`stride:task-reviewer`, 0 critical, 7 important, 5 minor), all addressed: cleanup
+  no longer treats a failed read as "nothing left" and runs on Ctrl-C; every refused join has a
+  permitted join beside it and a timeout is an error; non-receipt needs an accepted send and a
+  live listener; T4.3 and T4.4 use a connection opened while the beacon was active; departed and
+  never-opened participants added as senders and readers; a guest row added; T16 now restates
+  the DoD-12 checks the local-only matrix makes (rides, rider_states, telemetry, unknown ride,
+  cross-tenant send) with in-club controls.
+- RESULT: 6 rules pass, 10 fail (18 cases green, 20 red). Per-rule table and findings: `qa_log.md`.
 - NOT A PILLAR DEPARTURE: nothing here changes behaviour.
 

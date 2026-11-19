@@ -1,7 +1,7 @@
 {
   "_": "W309 recorded baseline. One entry per case: the status the suite must report. When a ticket lands enforcement, it flips its cases to green here in the same change. `targets.<name>` overrides an entry for one target (a recorded exception).",
   "recorded": "2026-11-18",
-  "recorded_from": "Rail 3 CI run 44423732591 (migration-only local database; the seeded database gave the same result)",
+  "recorded_from": "Rail 3 CI run 44426316001 (migration-only local database). An earlier run on the seeded database gave the same result for every case then present.",
   "layout": "single-channel, club-wide (pre-W193)",
   "cases": {
     "T1.1": "red",
@@ -39,7 +39,9 @@
     "T15.1": "red",
     "T16.1": "green",
     "T16.2": "red",
-    "T16.3": "green"
+    "T16.3": "green",
+    "T5.3": "red",
+    "T16.4": "green"
   },
   "targets": {}
 }
