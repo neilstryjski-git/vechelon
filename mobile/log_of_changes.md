@@ -1780,7 +1780,7 @@ Notes:
   rationale and tracking notification); row 2.3's proposal no longer promises that a leader was
   alerted; the W311 insert refusal added (four messages, not three); the app-only limit of
   "everyone on the ride" stated and put to Voice & Tone.
-- HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; five
+- HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; seven
   questions for the pass are at the foot of the list.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
