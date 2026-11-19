@@ -756,32 +756,46 @@ export const cases = [
     title: 'No app code opens a public realtime channel: every channel is private, and the public ride:<id> topic is gone',
     run: async () => {
       const offenders = [];
-      let channelCalls = 0;
+      const calls = {};
+      // Comments are removed first: a `// private: true` remark must never satisfy the check.
+      const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
       for (const dir of SOURCE_DIRS) {
-        for (const file of sourceFiles(join(REPO_ROOT, dir))) {
-          const text = readFileSync(file, 'utf8');
+        calls[dir] = 0;
+        const root = join(REPO_ROOT, dir);
+        control(existsSync(root), `source directory missing: ${dir}`);
+        for (const file of sourceFiles(root)) {
+          const text = code(readFileSync(file, 'utf8'));
           const rel = relative(REPO_ROOT, file);
           // A topic literal that starts with `ride:` is the old public channel.
           if (/[`'"]ride:(\$\{|[`'"])/.test(text)) offenders.push(`${rel}: names a public ride: topic`);
+          // Socket channels: the call's own argument list must set private: true.
           let at = text.indexOf('.channel(');
           while (at !== -1) {
-            channelCalls += 1;
-            // The call's own argument list, up to its closing parenthesis.
+            calls[dir] += 1;
             let depth = 0;
             let end = at + '.channel'.length;
             for (; end < text.length; end += 1) {
               if (text[end] === '(') depth += 1;
               else if (text[end] === ')') { depth -= 1; if (depth === 0) break; }
             }
-            if (!/private:\s*true/.test(text.slice(at, end))) {
-              offenders.push(`${rel}:${text.slice(0, at).split('\n').length}: channel opened without private: true`);
+            const args = text.slice(at, end);
+            if (!/private:\s*true/.test(args) || /private:\s*false/.test(args)) {
+              offenders.push(`${rel}: a channel is opened without private: true`);
             }
             at = text.indexOf('.channel(', end);
           }
+          // REST broadcast (the mobile background sender): every message must be private.
+          if (text.includes('/realtime/v1/api/broadcast')) {
+            calls[dir] += 1;
+            if (!/private:\s*true/.test(text) || /private:\s*false/.test(text)) {
+              offenders.push(`${rel}: a REST broadcast is sent without private: true`);
+            }
+          }
         }
       }
-      // The scan must have found the app's own private channel, or it is not looking in the right place.
-      control(channelCalls > 0, 'the source scan found no realtime channel at all');
+      // The scan must see the app's own private channel and REST sender, or it is looking in
+      // the wrong place.
+      control(calls['mobile/src'] >= 2, `the scan found ${calls['mobile/src']} realtime uses in mobile/src; expected the ride channel and the REST sender`);
       rule(offenders.length === 0, offenders.join('; '));
     },
   },

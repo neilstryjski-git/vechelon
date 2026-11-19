@@ -32,8 +32,8 @@ a realtime channel without `private: true` or names a `ride:` topic.
    when it is set. Recommended for both projects; it is the Senior PM's call and it is not
    applied here.
 2. **Web Race Control is not on the trunk.** `admin/src/pages/RaceControl.tsx` and its hooks
-   exist only on two unmerged branches, `W192` and `w273-web-lastknown` (27 and 29 commits of
-   their own, 387 behind the trunk). They use the private `rail3:ride:<id>` channel, not the
-   public one. So W310 could not break Race Control, and equally there is no Race Control on
+   exist only on unmerged branches: `W190`, `W192` and `w273-web-lastknown` (the last two carry
+   27 and 29 commits of their own and sit 387 behind the trunk). They use the private
+   `rail3:ride:<id>` channel, not the public one, and none imports the deleted files. So W310 could not break Race Control, and equally there is no Race Control on
    the trunk for W193's club-admin channel access to be exercised by. T8 proves the
    server side with a club admin's token; the web page itself is outside this sprint's code.

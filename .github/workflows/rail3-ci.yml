@@ -22,6 +22,11 @@ on:
       - 'supabase/seed.sql'   # seed runs on `supabase start` — it can break the gate (D49, #56)
       - '.github/workflows/rail3-ci.yml'
       - 'mobile/**'
+      # W310: rule T15.1 scans these for a realtime channel opened without private: true,
+      # so a change there has to run the denial suite too.
+      - 'admin/src/**'
+      - 'worker/**'
+      - 'supabase/functions/**'
   workflow_dispatch:
 
 # Avoid piling up redundant runs on rapid pushes to the same PR.

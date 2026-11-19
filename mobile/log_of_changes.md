@@ -1748,6 +1748,11 @@ Notes:
   advisory: it shows Realtime still relays public channels at the project level
   (`private_only` unset on staging and production). The runner reports advisory cases and
   never gates on them, including under `--strict`.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 2 important, 3 minor; all 5 criteria met), all
+  addressed: the scan strips comments before looking for `private: true` (both call sites carry
+  that phrase in a comment); it also checks the REST broadcast sender; a missing source
+  directory is an error; Rail 3 CI now runs when `admin/src`, `worker` or `supabase/functions`
+  change, so T15.1 guards a later Race Control merge; W190 named as a third Race Control branch.
 - NOT DONE HERE: setting `private_only` on either project (a project setting, the Senior PM's
   call). Web Race Control is not on the trunk, so the manual Race Control check has no target.
 - BRIEF §8 ITEM 3: answered in `docs/rail3/sprint2/brief_section8_answers.md`.
