@@ -157,6 +157,8 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
     // Why a join did not succeed, for the report (status plus the server's reason if any).
     why: () => topics.map((t) => `${statuses[t]}${reasons[t] ? ` (${reasons[t]})` : ''}`).join(', '),
     saw: (n) => JSON.stringify(msgs).includes(n),
+    // True while every joined channel is still attached to the server.
+    attached: () => joined.length > 0 && joined.every((t) => channels[t].state === 'joined'),
     // Send over this socket (only meaningful on a joined topic).
     sendSocket: async (topic, event, payload) => {
       try {
@@ -221,6 +223,7 @@ export async function waitForRealtime(ctx, ms = 120000) {
   const end = Date.now() + ms;
   let last = 'not tried';
   while (Date.now() < end) {
+    if (ctx.interrupted?.()) throw new HarnessError('interrupted while waiting for Realtime');
     try {
       const l = await listen(ctx, u.riderB, receiveTopics('rider', id));
       if (l.joined.length) {

@@ -286,11 +286,13 @@ export const cases = [
       const secrets = [u.riderA.phone, POS.lat, POS.lng];
       const found = [];
       const probe = async (label, q) => {
-        const { data } = await q;
-        if (leaks(data, ...secrets).length) found.push(label);
+        if (leaks(await read(q), ...secrets).length) found.push(label);
       };
       await probe('accounts', c.from('accounts').select('*').eq('id', u.riderA.id));
-      await probe('accounts embed', c.from('ride_participants').select('account_id, accounts(name, phone)').eq('ride_id', rides.main.id));
+      // The embed the old roster screen used. Its policy is gone, so the request itself may
+      // be rejected; only a returned phone matters here.
+      const embed = await c.from('ride_participants').select('account_id, accounts(name, phone)').eq('ride_id', rides.main.id);
+      if (leaks(embed.data, ...secrets).length) found.push('accounts embed');
       await probe('get_ride_roster_contacts', c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }));
       await probe('ride_participants_pa_view', c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id));
       const roster = await riderRoster(c, rides.main.id);
@@ -679,6 +681,7 @@ export const cases = [
       // T14.1 opened rider B's connection while the ride was live and the beacon active, and
       // confirmed it was receiving. Rider A now keeps sending on every path a rider has.
       const rb = ctx.state.endingRideListener;
+      control(rb.attached(), 'rider B\'s connection from before the ride end has dropped, so its silence proves nothing');
       const fresh = await listen(ctx, u.riderB, allTopics(id));
       control(fresh.unclear().length === 0, `a fresh join was neither accepted nor refused by policy: ${fresh.why()}`);
       // Realtime is delivering right now: on the live ride, rider B receives the Captain.
@@ -861,10 +864,10 @@ export const cases = [
         const got = [];
         for (const who of [u.riderA, u.captain, u.clubAdmin]) {
           const c = db(ctx, who);
-          if ((await c.from('rides').select('id').eq('id', id)).data?.length) got.push(`${who.key}: rides`);
-          if ((await c.from('beacon_alerts').select('id').eq('ride_id', id)).data?.length) got.push(`${who.key}: beacon_alerts`);
-          if ((await c.from('ride_participants').select('id').eq('ride_id', id)).data?.length) got.push(`${who.key}: ride_participants`);
-          if ((await c.rpc('get_ride_roster_contacts', { p_ride_id: id })).data?.length) got.push(`${who.key}: roster contacts`);
+          if ((await read(c.from('rides').select('id').eq('id', id))).length) got.push(`${who.key}: rides`);
+          if ((await read(c.from('beacon_alerts').select('id').eq('ride_id', id))).length) got.push(`${who.key}: beacon_alerts`);
+          if ((await read(c.from('ride_participants').select('id').eq('ride_id', id))).length) got.push(`${who.key}: ride_participants`);
+          if ((await read(c.rpc('get_ride_roster_contacts', { p_ride_id: id }))).length) got.push(`${who.key}: roster contacts`);
           const l = await refused(ctx, who, rides.other);
           if (l.joined.length) got.push(`${who.key}: joined a channel`);
         }
