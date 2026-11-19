@@ -1784,5 +1784,10 @@ Notes:
 - TESTS: baseline flips T10.1, T11.1 to T11.4 and T16.2 to green; T10.2 added.
 - STAGING SETTING (W310 follow-up): Realtime `private_only` set on staging (Senior PM approved
   2026-11-18); `baseline.json` records T15.2 green for the staging target only.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 1 important, 2 minor; all 8 criteria met; no
+  finding in the migration, recursion traced clean): a `mobile/node_modules` symlink had been
+  committed by mistake (removed; `.gitignore` now also matches a link); T14.2 added for the one
+  client path that depends on trigger order (a rider's raise after ride end); qa_log records CI
+  results, not expectations.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 

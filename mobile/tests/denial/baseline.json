@@ -43,7 +43,8 @@
     "T5.3": "red",
     "T16.4": "green",
     "T15.2": "red",
-    "T10.2": "green"
+    "T10.2": "green",
+    "T14.2": "green"
   },
   "targets": {
     "staging": {
@@ -51,5 +52,5 @@
     }
   },
   "_advisory": "T15.2 is advisory (outside rule T15): red wherever the Supabase project still relays public realtime channels. Staging was set to private channels only on 2026-11-18 (Senior PM approved), so it is green there; the local stack has no such setting.",
-  "_w311": "W311 (2026-11-18): T10.1, T11.1 to T11.4 and T16.2 turned green; T10.2 added."
+  "_w311": "W311 (2026-11-18): T10.1, T11.1 to T11.4 and T16.2 turned green; T10.2 and T14.2 added."
 }
