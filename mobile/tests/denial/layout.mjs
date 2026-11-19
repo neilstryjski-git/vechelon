@@ -45,7 +45,8 @@ export function allTopics(rideId) {
   return [...set];
 }
 
-// The public web channel (admin/src/hooks/useRideRealtime.ts). Not private: no JWT, no RLS.
+// The old public web channel. Its only users (admin useRideRealtime, lib/simulation) were dead
+// code and were removed in W310. Kept here for the advisory probe T15.2 only.
 export function publicWebTopic(rideId) {
   return `ride:${rideId}`;
 }

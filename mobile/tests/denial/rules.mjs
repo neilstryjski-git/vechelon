@@ -14,6 +14,9 @@
 // "On the ride" = participant with rail3_joined_at set and departed_at null.
 // "Off the ride" = affiliated member of the same club with no participant row.
 
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   rule, control, needle, listen, joinAttempt, restSend, accepted, arrives, quiet, freshClient, posPayload,
   beaconPayload, adminBeacon, beaconTruth, clearBeacons, setBeaconFlag, POS, GUEST,
@@ -22,6 +25,21 @@ import {
   EVENTS, receiveTopics, sendTopics, allTopics, publicWebTopic, PUBLIC_WEB_POSITION_EVENT,
   riderRoster, leaderRoster,
 } from './layout.mjs';
+
+// Source the product ships: web, mobile, the edge Worker and the edge functions.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const SOURCE_DIRS = ['admin/src', 'mobile/src', 'worker', 'supabase/functions'];
+function sourceFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...sourceFiles(p));
+    else if (/\.(ts|tsx|js|jsx|mjs)$/.test(e.name) && !/\.test\./.test(e.name)) out.push(p);
+  }
+  return out;
+}
 
 const db = (ctx, user) => freshClient(ctx.target, user);
 const leaks = (data, ...values) => {
@@ -730,24 +748,62 @@ export const cases = [
   },
 
   // ── T15 ────────────────────────────────────────────────────────────────────
+  // W310 finding: the public `ride:<id>` channel had one subscriber (admin useRideRealtime)
+  // and one sender (admin lib/simulation), neither imported by anything. Both were removed,
+  // so the channel no longer exists in the product. T15.1 keeps it that way.
   {
     id: 'T15.1', rule: 'T15',
-    provisional: 'W310 owns the finding on the public web channel; this probe is rewritten when it reports',
-    title: 'The public web ride channel does not carry a rider position to an unauthenticated listener',
+    title: 'No app code opens a public realtime channel: every channel is private, and the public ride:<id> topic is gone',
+    run: async () => {
+      const offenders = [];
+      let channelCalls = 0;
+      for (const dir of SOURCE_DIRS) {
+        for (const file of sourceFiles(join(REPO_ROOT, dir))) {
+          const text = readFileSync(file, 'utf8');
+          const rel = relative(REPO_ROOT, file);
+          // A topic literal that starts with `ride:` is the old public channel.
+          if (/[`'"]ride:(\$\{|[`'"])/.test(text)) offenders.push(`${rel}: names a public ride: topic`);
+          let at = text.indexOf('.channel(');
+          while (at !== -1) {
+            channelCalls += 1;
+            // The call's own argument list, up to its closing parenthesis.
+            let depth = 0;
+            let end = at + '.channel'.length;
+            for (; end < text.length; end += 1) {
+              if (text[end] === '(') depth += 1;
+              else if (text[end] === ')') { depth -= 1; if (depth === 0) break; }
+            }
+            if (!/private:\s*true/.test(text.slice(at, end))) {
+              offenders.push(`${rel}:${text.slice(0, at).split('\n').length}: channel opened without private: true`);
+            }
+            at = text.indexOf('.channel(', end);
+          }
+        }
+      }
+      // The scan must have found the app's own private channel, or it is not looking in the right place.
+      control(channelCalls > 0, 'the source scan found no realtime channel at all');
+      rule(offenders.length === 0, offenders.join('; '));
+    },
+  },
+  {
+    id: 'T15.2', rule: 'T15', advisory: true,
+    title: 'Advisory, outside the rule: the project refuses public realtime channels altogether',
     run: async (ctx) => {
+      // Not part of T15: nothing in the product sends on a public channel any more. This
+      // records whether the Realtime service itself still relays a public channel for anyone
+      // holding the publishable key. It turns green when the project is set to private
+      // channels only (a project setting, the Senior PM's call; qa_log.md W310).
       const { users: u, rides } = ctx.fx;
       const topic = publicWebTopic(rides.main.id);
-      // Realtime is answering: a permitted private join works in this same case.
       const up = await listen(ctx, u.captain, receiveTopics('captain', rides.main.id));
       control(up.joined.length > 0, `Realtime is not answering: ${up.why()}`);
       const anon = await listen(ctx, null, [topic], { priv: false });
-      control(anon.unclear().length === 0, `the public channel join was neither accepted nor refused: ${anon.why()}`);
+      control(anon.statuses[topic] !== 'TIMED_OUT', `the public channel join timed out: ${anon.why()}`);
       const n = needle();
-      const payload = { participantId: u.riderA.id, lastLat: POS.lat, lastLong: POS.lng, marker: n };
+      const payload = { id: u.riderA.id, lastLat: POS.lat, lastLong: POS.lng, marker: n };
       await restSend(ctx, null, [topic], PUBLIC_WEB_POSITION_EVENT, payload, { priv: false });
-      await restSend(ctx, u.riderA, [topic], PUBLIC_WEB_POSITION_EVENT, payload, { priv: false });
       const got = await arrives(ctx, anon, n, ctx.target.timeouts.quiet + 2000);
-      rule(!got, `an unauthenticated listener on ${topic.split(':')[0]}:<id> received a position`);
+      rule(!got, 'the Realtime service relays a public channel between unauthenticated clients');
     },
   },
 

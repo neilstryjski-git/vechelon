@@ -44,6 +44,9 @@ same case, so a message that was never sent cannot pass as "not received".
 
 `baseline.targets.staging` holds any recorded staging-only exception.
 
+A case marked `advisory` is reported and compared with the baseline like any other, but it is
+not part of its rule's pass or fail and never gates `--strict`.
+
 ## When the channel layout or the roster path changes
 
 Edit `layout.mjs` only. The rules never name a topic or a table for the things W193, D94

@@ -2,7 +2,7 @@
 //
 //   npm run denial:local            local stack (CI); needs SUPABASE_URL / _ANON_KEY / _SERVICE_ROLE_KEY
 //   npm run denial:staging          the staging project (keys read at run time, never stored)
-//   ... -- --strict                 every rule must hold (the W317 cutover run)
+//   ... -- --strict                 every rule must hold (the W317 cutover run); advisory cases do not gate
 //   ... -- --sweep                  only remove anything a crashed run left behind
 //   ... -- --only T2,T5             run a subset
 //   ... -- --out <dir>              where the report goes (default tests/denial/out)
@@ -89,7 +89,7 @@ try {
     } finally {
       await closeAll(ctx);
     }
-    results.push({ id: c.id, rule: c.rule, title: c.title, status, detail, provisional: c.provisional ?? null, ms: Date.now() - t0 });
+    results.push({ id: c.id, rule: c.rule, title: c.title, status, detail, advisory: c.advisory ?? false, ms: Date.now() - t0 });
     console.log(`${status.toUpperCase().padEnd(5)} ${c.id.padEnd(6)} ${c.title}${detail ? `\n        ${detail}` : ''}`);
   }
 } catch (e) {
@@ -140,7 +140,7 @@ if (baseline) {
 // ── Report ───────────────────────────────────────────────────────────────────
 const rules = [...new Set(cases.map((c) => c.rule))].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 const ruleStatus = (r) => {
-  const rs = results.filter((x) => x.rule === r);
+  const rs = results.filter((x) => x.rule === r && !x.advisory);
   if (!rs.length) return 'not run';
   if (rs.some((x) => x.status === 'error')) return 'error';
   return rs.some((x) => x.status === 'red') ? 'FAILS' : 'passes';
@@ -166,7 +166,7 @@ const md = [
   '',
   '| Rule | Result | Case | What was tested | Finding |',
   '|---|---|---|---|---|',
-  ...results.map((r) => `| ${r.rule} | ${r.status} | ${r.id} | ${r.title}${r.provisional ? ' (provisional)' : ''} | ${r.detail.replaceAll('|', '/')} |`),
+  ...results.map((r) => `| ${r.rule} | ${r.status}${r.advisory ? ' (advisory)' : ''} | ${r.id} | ${r.title} | ${r.detail.replaceAll('|', '/')} |`),
   '',
   `Per rule: ${rules.map((r) => `${r} ${ruleStatus(r)}`).join(', ')}`,
   '',
@@ -182,7 +182,8 @@ console.log(`Report: ${join(outDir, `denial-${targetName}.md`)}`);
 let code = 0;
 if (fatal || dirty || interrupted) code = 1;
 if (results.some((r) => r.status === 'error')) code = 1;
-if (flag('strict') && results.some((r) => r.status !== 'green')) code = 1;
+// --strict: every rule must hold. Advisory cases are reported and never gate.
+if (flag('strict') && results.some((r) => r.status !== 'green' && !r.advisory)) code = 1;
 if (drift.length) {
   console.log(`\nDiffers from baseline.json:\n${drift.map((d) => `  ${d}`).join('\n')}`);
   code = 1;

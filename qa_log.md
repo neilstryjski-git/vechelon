@@ -2,6 +2,26 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
+
+Finding: the channel had one subscriber and one sender in the web app, both dead code (never
+imported). Nothing in mobile, the Worker or the edge functions used it. Detail and payload
+fields: `docs/rail3/sprint2/brief_section8_answers.md`, item 3.
+
+Change: both files deleted. No behaviour changes, because nothing ran them.
+
+| Case | Before W310 | After W310 | What it proves |
+|---|---|---|---|
+| T15.1 | (provisional probe, failed) | **Passes** | No app source opens a realtime channel without `private: true`, and none names a `ride:` topic. Shown to fail when the old hook is put back |
+| T15.2 (advisory) | — | Fails | The Realtime service still relays a public channel between unauthenticated clients. Outside rule T15: nothing in the product sends on one. Turns green when the project is set to private channels only |
+
+Rule T15 now passes. Baseline after W310: 7 rules pass, 9 fail (39 cases: 19 green, 20 red,
+one of the red advisory).
+
+Web pages: the web build gate passed with the two files removed. No page imported them, so
+there is no page behaviour to re-test. Web Race Control is not on the trunk (see the answers
+file), so the ticket's manual Race Control step has nothing to run against.
+
 ## 2026-11-18 — W309: denial suite T1 to T16, baseline before enforcement
 
 Suite: `mobile/tests/denial/` (38 cases across 16 rules; see its README). Source of the rules:
