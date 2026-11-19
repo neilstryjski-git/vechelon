@@ -1729,3 +1729,35 @@ Notes:
   (base `rail3-integration`) made by hand.
 - NOT A PILLAR DEPARTURE: nothing here changes behaviour.
 
+## 2026-11-18 — W310 Public web `ride:<id>` channel: found unused, removed
+
+- EVERY SENDER AND SUBSCRIBER of the public `ride:<id>` channel (searched admin/src, mobile/src,
+  worker, supabase/functions, and the unmerged W192 and w273-web-lastknown branches):
+  - Subscriber: `admin/src/hooks/useRideRealtime.ts`, `supabase.channel('ride:<id>', { broadcast: { self: true } })`,
+    no `private`. Listened for `beacon_fired` `{ participantId }`, `beacon_cancelled`
+    `{ participantId }`, `location_update` `{ id, displayName, lastLat, lastLong, beaconActive }`.
+  - Sender: `admin/src/lib/simulation.ts`, `location_update` with those five fields for mock riders.
+  - Importers of either file: none, on any branch. Mobile, Worker and edge functions: no use.
+- CHANGE: both files deleted. The store actions they called (`processLocationUpdate`,
+  `runHeartbeat`, `addActiveBeacon`, `removeActiveBeacon`) are left in `useAppStore.ts`: the
+  Dashboard reads `activeBeacons`, and trimming the store is not this ticket.
+- PRODUCTION: the same files are on `master`, equally unused. Nothing was exposed. The deletion
+  reaches production web when the trunk is promoted; it changes no behaviour there.
+- T15: `T15.1` is now a source check (every `.channel(` call carries `private: true`; no `ride:`
+  topic literal), proven to fail with the old hook restored. The wire probe became `T15.2`,
+  advisory: it shows Realtime still relays public channels at the project level
+  (`private_only` unset on staging and production). The runner reports advisory cases and
+  never gates on them, including under `--strict`.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 2 important, 3 minor; all 5 criteria met), all
+  addressed: the scan strips comments before looking for `private: true` (both call sites carry
+  that phrase in a comment); it also checks the REST broadcast sender; a missing source
+  directory is an error; Rail 3 CI now runs when `admin/src`, `worker` or `supabase/functions`
+  change, so T15.1 guards a later Race Control merge; W190 named as a third Race Control branch.
+- REVIEW r2: approved, all 5 criteria met, 2 latent minors in the scanner (block-comment strip
+  not string-aware; REST check per file, not per message), both fixed after the verdict.
+- NOT DONE HERE: setting `private_only` on either project (a project setting, the Senior PM's
+  call). Web Race Control is not on the trunk, so the manual Race Control check has no target.
+- BRIEF §8 ITEM 3: answered in `docs/rail3/sprint2/brief_section8_answers.md`.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand (hooks
+  branch off `master`).
+

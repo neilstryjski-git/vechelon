@@ -22,6 +22,11 @@ on:
       - 'supabase/seed.sql'   # seed runs on `supabase start` — it can break the gate (D49, #56)
       - '.github/workflows/rail3-ci.yml'
       - 'mobile/**'
+      # W310: rule T15.1 scans these for a realtime channel opened without private: true,
+      # so a change there has to run the denial suite too.
+      - 'admin/src/**'
+      - 'worker/**'
+      - 'supabase/functions/**'
   workflow_dispatch:
 
 # Avoid piling up redundant runs on rapid pushes to the same PR.
@@ -150,8 +155,17 @@ jobs:
           # answers again (seen as "transport failure" for the whole run). Restart it so it
           # boots against the rebuilt database; the suite waits until it delivers.
           docker ps --filter name=supabase_realtime -q | xargs -r docker restart
+          # The suite waits (up to DENIAL_READY_MS) until Realtime delivers a message. If it
+          # never does, print Realtime's own log so the cause is on record.
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
-            npm run denial:local -- --out ../denial-out
+            DENIAL_READY_MS=300000 npm run denial:local -- --out ../denial-out || {
+              code=$?
+              echo "::group::Realtime container log (last 80 lines)"
+              docker ps --filter name=supabase_realtime --format '{{.Names}} {{.Status}}'
+              docker ps -a --filter name=supabase_realtime -q | xargs -r -n1 docker logs --tail 80 2>&1 || true
+              echo "::endgroup::"
+              exit $code
+            }
 
       - name: Upload denial report (W309)
         if: always()
