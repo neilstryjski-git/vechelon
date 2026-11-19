@@ -179,6 +179,21 @@ export async function restSend(ctx, user, topics, event, payload, { priv = true 
   return out;
 }
 
+// True when every REST broadcast was accepted by the server.
+export const accepted = (statuses) => statuses.length > 0 && statuses.every((c) => c >= 200 && c < 300);
+
+// Try to join `topics` as `user` and report the listener, having first shown in the same
+// case that Realtime is up (a permitted user joins) and that every refusal is a real refusal:
+// a join that merely timed out is not evidence of a denial.
+export async function joinAttempt(ctx, user, topics, permitted, permittedTopics) {
+  const c = await listen(ctx, permitted, permittedTopics);
+  control(c.joined.length === permittedTopics.length, `a permitted user could not join: ${c.why()}`);
+  const l = await listen(ctx, user, topics);
+  const timedOut = topics.filter((t) => l.statuses[t] === 'TIMED_OUT');
+  control(timedOut.length === 0, `a join was neither accepted nor refused (timed out): ${timedOut.join(', ')}`);
+  return l;
+}
+
 // Wait until `listener` has a message containing `n`, or time out.
 export async function arrives(ctx, listener, n, ms = ctx.target.timeouts.deliver) {
   const end = Date.now() + ms;
@@ -314,6 +329,11 @@ export async function buildFixtures(ctx) {
       part(fx.rides.main, u.riderB, 'member'),
       part(fx.rides.main, u.departed, 'member', { departed_at: now }),
       part(fx.rides.main, u.neverOpened, 'member', { rail3_joined_at: null, status: 'rsvpd' }),
+      // A guest: no account, no app. On the roster only (Pillar II §4.1 ROSTER).
+      {
+        ride_id: fx.rides.main.id, account_id: null, role: 'guest', status: 'rsvpd',
+        display_name: GUEST.name, email: `${run}-guest@${EMAIL_DOMAIN}`, phone: GUEST.phone,
+      },
       part(fx.rides.ending, u.captain, 'captain'),
       part(fx.rides.ending, u.riderA, 'member'),
       part(fx.rides.ending, u.riderB, 'member'),
@@ -324,6 +344,8 @@ export async function buildFixtures(ctx) {
   );
   return fx;
 }
+
+export const GUEST = { name: 'W309 guest', phone: '+14165559999' };
 
 // Rider A's stored last position. Distinctive values so a leak is unmistakable in any JSON.
 export const POS = { lat: 43.7001309, lng: -79.4163309 };
@@ -360,25 +382,20 @@ export async function setBeaconFlag(ctx, ride, rider, on) {
 // It selects by marker first and deletes by the ids it found; it never deletes by a broad
 // predicate.
 export async function sweep(admin, log = () => {}) {
-  const { data: tenants } = await admin.from('tenants').select('id, slug').like('slug', `${MARK}%`);
-  const tIds = (tenants ?? []).map((t) => t.id);
-  const { data: accounts } = await admin.from('accounts').select('id, email').like('email', `${MARK}%@${EMAIL_DOMAIN}`);
-  const aIds = new Set((accounts ?? []).map((a) => a.id));
+  // A failed read here must never look like "nothing to remove".
+  const tenants = ok(await admin.from('tenants').select('id, slug').like('slug', `${MARK}%`), 'sweep: read test clubs');
+  const tIds = tenants.map((t) => t.id);
+  const accounts = ok(
+    await admin.from('accounts').select('id, email').like('email', `${MARK}%@${EMAIL_DOMAIN}`),
+    'sweep: read test accounts',
+  );
+  const aIds = new Set(accounts.map((a) => a.id));
 
-  const authUsers = [];
-  for (let page = 1; page < 50; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error || !data?.users?.length) break;
-    for (const usr of data.users) {
-      if (usr.email?.startsWith(MARK) && usr.email.endsWith(`@${EMAIL_DOMAIN}`)) authUsers.push(usr);
-    }
-    if (data.users.length < 200) break;
-  }
-  for (const usr of authUsers) aIds.add(usr.id);
+  for (const usr of await markedAuthUsers(admin)) aIds.add(usr.id);
 
   if (tIds.length) {
-    const { data: rides } = await admin.from('rides').select('id').in('tenant_id', tIds);
-    const rIds = (rides ?? []).map((r) => r.id);
+    const rides = ok(await admin.from('rides').select('id').in('tenant_id', tIds), 'sweep: read test rides');
+    const rIds = rides.map((r) => r.id);
     const del = async (table, col, ids) => {
       if (!ids.length) return;
       const { error } = await admin.from(table).delete().in(col, ids);
@@ -406,9 +423,27 @@ export async function sweep(admin, log = () => {}) {
   return leftovers(admin);
 }
 
-// What still carries the marker. All zeros = clean.
+// Auth users carrying the marker. Throws if the list cannot be read.
+async function markedAuthUsers(admin) {
+  const out = [];
+  for (let page = 1; page < 50; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new HarnessError(`could not list auth users: ${error.message}`);
+    const users = data?.users ?? [];
+    out.push(...users.filter((usr) => usr.email?.startsWith(MARK) && usr.email.endsWith(`@${EMAIL_DOMAIN}`)));
+    if (users.length < 200) break;
+  }
+  return out;
+}
+
+// What still carries the marker. All zeros = clean. Throws if any count cannot be read:
+// an unreadable count is never reported as zero.
 export async function leftovers(admin) {
-  const count = async (q) => (await q).count ?? 0;
+  const count = async (q) => {
+    const { count: n, error } = await q;
+    if (error || n == null) throw new HarnessError(`could not count leftovers: ${error?.message ?? 'no count returned'}`);
+    return n;
+  };
   const out = {
     tenants: await count(admin.from('tenants').select('id', { count: 'exact', head: true }).like('slug', `${MARK}%`)),
     accounts: await count(
@@ -418,13 +453,7 @@ export async function leftovers(admin) {
     participants: await count(
       admin.from('ride_participants').select('id', { count: 'exact', head: true }).like('email', `${MARK}%@${EMAIL_DOMAIN}`),
     ),
-    auth_users: 0,
+    auth_users: (await markedAuthUsers(admin)).length,
   };
-  for (let page = 1; page < 50; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error || !data?.users?.length) break;
-    out.auth_users += data.users.filter((usr) => usr.email?.startsWith(MARK) && usr.email.endsWith(`@${EMAIL_DOMAIN}`)).length;
-    if (data.users.length < 200) break;
-  }
   return out;
 }

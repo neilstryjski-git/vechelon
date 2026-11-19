@@ -74,13 +74,23 @@ export async function riderRoster(client, rideId) {
   };
 }
 
-// The roster as a Captain's or SAG's device reads it: every participant with a phone.
-// Returns rows of { account_id, name, phone }.
+// The roster as a Captain's or SAG's device reads it: every participant, guests included,
+// with a phone. Returns rows of { participant_id, account_id, name, phone }.
+// Today: the participant rows (which carry a guest's own name and phone) joined with the
+// contacts function (which carries each member's account name and phone).
 export async function leaderRoster(client, rideId) {
-  const { data, error } = await client.rpc('get_ride_roster_contacts', { p_ride_id: rideId });
-  if (error) return { rows: [], error };
+  const rows = await client.from('ride_participants').select('id, account_id, display_name, phone').eq('ride_id', rideId);
+  if (rows.error) return { rows: [], error: rows.error };
+  const contacts = await client.rpc('get_ride_roster_contacts', { p_ride_id: rideId });
+  if (contacts.error) return { rows: [], error: contacts.error };
+  const byId = Object.fromEntries((contacts.data ?? []).map((c) => [c.participant_id, c]));
   return {
-    rows: (data ?? []).map((r) => ({ account_id: r.account_id, name: r.name, phone: r.phone })),
+    rows: (rows.data ?? []).map((r) => ({
+      participant_id: r.id,
+      account_id: r.account_id,
+      name: byId[r.id]?.name ?? r.display_name,
+      phone: byId[r.id]?.phone ?? r.phone,
+    })),
     error: null,
   };
 }

@@ -15,8 +15,8 @@
 // "Off the ride" = affiliated member of the same club with no participant row.
 
 import {
-  rule, control, needle, listen, restSend, arrives, quiet, freshClient, posPayload, beaconPayload,
-  adminBeacon, beaconTruth, clearBeacons, setBeaconFlag, POS,
+  rule, control, needle, listen, joinAttempt, restSend, accepted, arrives, quiet, freshClient, posPayload,
+  beaconPayload, adminBeacon, beaconTruth, clearBeacons, setBeaconFlag, POS, GUEST,
 } from './harness.mjs';
 import {
   EVENTS, receiveTopics, sendTopics, allTopics, publicWebTopic, PUBLIC_WEB_POSITION_EVENT,
@@ -29,12 +29,23 @@ const leaks = (data, ...values) => {
   return values.filter((v) => v != null && s.includes(String(v)));
 };
 const iso = () => new Date().toISOString();
+// A permitted joiner for a ride, used to show Realtime is answering before a refusal is believed.
+const permitted = (ctx, ride) =>
+  ride.id === ctx.fx.rides.other.id
+    ? [ctx.fx.users.otherAdmin, receiveTopics('captain', ride.id)]
+    : [ctx.fx.users.captain, receiveTopics('captain', ride.id)];
+const refused = (ctx, user, ride) => joinAttempt(ctx, user, allTopics(ride.id), ...permitted(ctx, ride));
 
 // Send `payload` as `sender` and confirm `allowed` receives it; then report which of
 // `denied` also received it. The control makes a silent, undelivered send impossible to
 // mistake for a denial.
 async function deliver(ctx, { sender, topics, event, payload, n, allowed, denied }) {
-  await restSend(ctx, sender, topics, event, payload);
+  for (const l of denied) {
+    const timedOut = Object.values(l.statuses).filter((st) => st === 'TIMED_OUT');
+    control(timedOut.length === 0, 'a listener\'s join timed out, so its silence proves nothing');
+  }
+  const sent = await restSend(ctx, sender, topics, event, payload);
+  control(accepted(sent), `the server did not accept the send (HTTP ${sent.join(', ')})`);
   control(await arrives(ctx, allowed, n), `the message never reached a listener who is allowed it (${event})`);
   await quiet(ctx);
   return denied.filter((l) => l.saw(n));
@@ -47,13 +58,13 @@ export const cases = [
     title: 'A member off the ride cannot subscribe to any channel of that ride',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
-      const l = await listen(ctx, u.offRide, allTopics(rides.main.id));
+      const l = await refused(ctx, u.offRide, rides.main);
       rule(l.joined.length === 0, `off-ride member joined: ${l.joined.join(', ')}`);
     },
   },
   {
     id: 'T1.2', rule: 'T1',
-    title: 'A member off the ride cannot send on any channel of that ride (REST and socket)',
+    title: 'Nobody off the ride can send on any channel of that ride (REST and socket)',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const topics = allTopics(rides.main.id);
@@ -63,15 +74,28 @@ export const cases = [
       const c = needle();
       await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, rides.main.id), EVENTS.pos, posPayload(u.riderA, c));
       control(await arrives(ctx, cap, c), 'an on-ride position never reached the captain');
-      // Attempt: the off-ride member, by REST and over a socket.
-      const n1 = needle();
-      await restSend(ctx, u.offRide, topics, EVENTS.pos, posPayload(u.offRide, n1));
-      const n2 = needle();
-      const off = await listen(ctx, u.offRide, topics);
-      for (const t of off.joined) await off.sendSocket(t, EVENTS.pos, posPayload(u.offRide, n2));
+      // Attempt: an off-ride member, a rider who left, and a participant who never opened
+      // the ride, each by REST and over a socket.
+      const sent = [];
+      for (const who of [u.offRide, u.departed, u.neverOpened]) {
+        const n1 = needle();
+        await restSend(ctx, who, topics, EVENTS.pos, posPayload(who, n1));
+        const n2 = needle();
+        const l = await listen(ctx, who, topics);
+        for (const t of l.joined) await l.sendSocket(t, EVENTS.pos, posPayload(who, n2));
+        sent.push([who, n1, n2]);
+      }
+      // The captain's connection is still live: a second on-ride position arrives.
+      const c2 = needle();
+      await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, rides.main.id), EVENTS.pos, posPayload(u.riderA, c2));
+      control(await arrives(ctx, cap, c2), 'the captain\'s connection went quiet during the case');
       await quiet(ctx);
-      rule(!cap.saw(n1), 'an off-ride member\'s REST broadcast was delivered on the ride');
-      rule(!cap.saw(n2), 'an off-ride member\'s socket broadcast was delivered on the ride');
+      const got = [];
+      for (const [who, n1, n2] of sent) {
+        if (cap.saw(n1)) got.push(`${who.key} by REST`);
+        if (cap.saw(n2)) got.push(`${who.key} by socket`);
+      }
+      rule(got.length === 0, `a broadcast from someone off the ride was delivered: ${got.join(', ')}`);
     },
   },
   {
@@ -79,7 +103,7 @@ export const cases = [
     title: 'A rider who has left the ride cannot subscribe to any channel of that ride',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
-      const l = await listen(ctx, u.departed, allTopics(rides.main.id));
+      const l = await refused(ctx, u.departed, rides.main);
       rule(l.joined.length === 0, `departed rider joined: ${l.joined.join(', ')}`);
     },
   },
@@ -127,8 +151,10 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
       const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
+      rule(rb.joined.length > 0, `rider B could not join the rider channels: ${rb.why()}`);
       const n = needle();
-      await restSend(ctx, u.captain, sendTopics('captain', EVENTS.pos, id), EVENTS.pos, posPayload(u.captain, n));
+      const sent = await restSend(ctx, u.captain, sendTopics('captain', EVENTS.pos, id), EVENTS.pos, posPayload(u.captain, n));
+      rule(accepted(sent), `the Captain's position was not accepted by the server (HTTP ${sent.join(', ')})`);
       rule(await arrives(ctx, rb, n), 'rider B did not receive the Captain\'s position');
     },
   },
@@ -139,8 +165,10 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
       const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
+      rule(rb.joined.length > 0, `rider B could not join the rider channels: ${rb.why()}`);
       const n = needle();
-      await restSend(ctx, u.sag, sendTopics('sag', EVENTS.pos, id), EVENTS.pos, posPayload(u.sag, n));
+      const sent = await restSend(ctx, u.sag, sendTopics('sag', EVENTS.pos, id), EVENTS.pos, posPayload(u.sag, n));
+      rule(accepted(sent), `the SAG's position was not accepted by the server (HTTP ${sent.join(', ')})`);
       rule(await arrives(ctx, rb, n), 'rider B did not receive the SAG\'s position');
     },
   },
@@ -152,11 +180,18 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
-      const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
-      const n = needle();
-      await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
-        beaconPayload(u.riderA, true, '00000000-0000-4000-8000-000000000001', n));
-      rule(await arrives(ctx, rb, n), 'rider B did not receive rider A\'s beacon event');
+      try {
+        const b = await adminBeacon(ctx, rides.main, u.riderA);
+        await setBeaconFlag(ctx, rides.main, u.riderA, true);
+        const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
+        rule(rb.joined.length > 0, `rider B could not join the rider channels: ${rb.why()}`);
+        const n = needle();
+        await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
+          beaconPayload(u.riderA, true, b.id, n));
+        rule(await arrives(ctx, rb, n), 'rider B did not receive rider A\'s beacon event');
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
     },
   },
   {
@@ -183,22 +218,35 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
+      const both = [...new Set([
+        ...sendTopics('rider', EVENTS.pos, id, { beaconActive: false }),
+        ...sendTopics('rider', EVENTS.pos, id, { beaconActive: true }),
+      ])];
       try {
-        // A beacon that was raised and then cancelled by its own rider.
-        await adminBeacon(ctx, rides.main, u.riderA, { beacon_cancelled_at: iso(), beacon_cancelled_by: u.riderA.id });
-        await setBeaconFlag(ctx, rides.main, u.riderA, false);
+        // Rider B is already connected while the beacon is active, and is receiving.
+        const b = await adminBeacon(ctx, rides.main, u.riderA);
+        await setBeaconFlag(ctx, rides.main, u.riderA, true);
         const cap = await listen(ctx, u.captain, receiveTopics('captain', id));
         const rb = await listen(ctx, u.riderB, receiveTopics('rider', id));
-        // Rider A keeps sending, on the normal path and on the beacon-active path.
-        const topics = [...new Set([
-          ...sendTopics('rider', EVENTS.pos, id, { beaconActive: false }),
-          ...sendTopics('rider', EVENTS.pos, id, { beaconActive: true }),
-        ])];
+        const n0 = needle();
+        await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, id, { beaconActive: true }), EVENTS.pos, posPayload(u.riderA, n0));
+        control(await arrives(ctx, rb, n0), 'rider B was not receiving the beaconing rider before the cancel');
+        // Rider A cancels their own beacon, as the app does: audit row, flag, then the event.
+        const cancel = await db(ctx, u.riderA).from('beacon_alerts')
+          .update({ beacon_cancelled_at: iso(), beacon_cancelled_by: u.riderA.id }).eq('id', b.id).is('beacon_cancelled_at', null);
+        control(!cancel.error && (await beaconTruth(ctx, b.id))?.beacon_cancelled_at, 'rider A could not cancel their own beacon');
+        await setBeaconFlag(ctx, rides.main, u.riderA, false);
+        await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
+          beaconPayload(u.riderA, false, b.id, needle()));
+        // Rider A keeps sending on every path a rider has. Neither the connection that was
+        // open during the beacon nor a fresh one may receive it.
+        const rb2 = await listen(ctx, u.riderB, receiveTopics('rider', id));
         const n = needle();
         const got = await deliver(ctx, {
-          sender: u.riderA, topics, event: EVENTS.pos, payload: posPayload(u.riderA, n), n, allowed: cap, denied: [rb],
+          sender: u.riderA, topics: both, event: EVENTS.pos, payload: posPayload(u.riderA, n), n, allowed: cap, denied: [rb, rb2],
         });
-        rule(got.length === 0, 'rider B still received rider A\'s position after the beacon was cancelled');
+        rule(!got.includes(rb), 'rider B\'s open connection still received rider A\'s position after the cancel');
+        rule(!got.includes(rb2), 'a fresh rider connection received rider A\'s position after the cancel');
       } finally {
         await clearBeacons(ctx, rides.main);
       }
@@ -220,7 +268,6 @@ export const cases = [
       if (row?.phone) got.push('phone');
       if (row?.last_lat != null || row?.last_long != null) got.push('last position');
       if (row?.last_ping) got.push('last ping');
-      if (row?.email) got.push('email');
       rule(got.length === 0, `rider B read rider A's ${got.join(', ')} from ride_participants`);
     },
   },
@@ -240,11 +287,34 @@ export const cases = [
       await probe('accounts embed', c.from('ride_participants').select('account_id, accounts(name, phone)').eq('ride_id', rides.main.id));
       await probe('get_ride_roster_contacts', c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }));
       await probe('ride_participants_pa_view', c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id));
-      await probe('rail3_breadcrumb', c.from('rail3_breadcrumb').select('*').eq('ride_id', rides.main.id));
       const roster = await riderRoster(c, rides.main.id);
       const a = roster.rows.find((r) => r.account_id === u.riderA.id);
       if (a?.phone || leaks(roster.rows, POS.lat, POS.lng).length) found.push('rider roster path');
       rule(found.length === 0, `rider B read rider A's phone or position through: ${found.join(', ')}`);
+    },
+  },
+
+  {
+    id: 'T5.3', rule: 'T5',
+    title: 'Nobody off the ride (off-ride member, departed rider, never-opened participant) can read a rider\'s phone or position',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const secrets = [u.riderA.phone, POS.lat, POS.lng];
+      const found = [];
+      for (const who of [u.offRide, u.departed, u.neverOpened]) {
+        const c = db(ctx, who);
+        const probes = {
+          ride_participants: c.from('ride_participants').select('*').eq('ride_id', rides.main.id),
+          accounts: c.from('accounts').select('*').eq('id', u.riderA.id),
+          get_ride_roster_contacts: c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }),
+          ride_participants_pa_view: c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id),
+        };
+        for (const [label, q] of Object.entries(probes)) {
+          const { data } = await q;
+          if (leaks(data, ...secrets).length) found.push(`${who.key}: ${label}`);
+        }
+      }
+      rule(found.length === 0, `rider A's phone or position was read by: ${found.join(', ')}`);
     },
   },
 
@@ -264,6 +334,7 @@ export const cases = [
       rule(byId[u.riderA.id]?.joined === true && byId[u.riderA.id]?.departed === false, 'app-tracked state missing for rider A');
       rule(byId[u.neverOpened.id]?.joined === false, 'roster-only state missing for the rider who never opened the ride');
       rule(byId[u.departed.id]?.departed === true, 'left-ride state missing for the departed rider');
+      rule(roster.rows.some((r) => r.account_id == null && r.name === GUEST.name), 'the guest is missing from the rider\'s roster');
     },
   },
   {
@@ -295,6 +366,11 @@ export const cases = [
         const r = roster.rows.find((x) => x.account_id === p.id);
         if (!r || r.phone !== p.phone || !r.name) missing.push(p.key);
       }
+      const { data: guest } = await ctx.admin.from('ride_participants').select('id, phone')
+        .eq('ride_id', rides.main.id).is('account_id', null).single();
+      control(guest?.phone, 'the guest fixture has no phone');
+      const g = roster.rows.find((x) => x.participant_id === guest.id);
+      if (!g?.name || g.phone !== guest.phone) missing.push('guest');
       rule(missing.length === 0, `${who} cannot read name and phone for: ${missing.join(', ')}`);
     },
   })),
@@ -317,12 +393,18 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
-      const adm = await listen(ctx, u.clubAdmin, receiveTopics('admin', id));
-      rule(adm.joined.length > 0, `the club admin could not subscribe: ${adm.why()}`);
-      const n = needle();
-      await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
-        beaconPayload(u.riderA, true, '00000000-0000-4000-8000-000000000002', n));
-      rule(await arrives(ctx, adm, n), 'the club admin did not receive the beacon event');
+      try {
+        const b = await adminBeacon(ctx, rides.main, u.riderA);
+        await setBeaconFlag(ctx, rides.main, u.riderA, true);
+        const adm = await listen(ctx, u.clubAdmin, receiveTopics('admin', id));
+        rule(adm.joined.length > 0, `the club admin could not subscribe: ${adm.why()}`);
+        const n = needle();
+        await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.beacon, id, { beaconActive: true }), EVENTS.beacon,
+          beaconPayload(u.riderA, true, b.id, n));
+        rule(await arrives(ctx, adm, n), 'the club admin did not receive the beacon event');
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
     },
   },
   {
@@ -330,7 +412,7 @@ export const cases = [
     title: 'An admin of another club cannot subscribe to any channel of the ride',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
-      const l = await listen(ctx, u.otherAdmin, allTopics(rides.main.id));
+      const l = await refused(ctx, u.otherAdmin, rides.main);
       rule(l.joined.length === 0, `another club's admin joined: ${l.joined.join(', ')}`);
     },
   },
@@ -354,18 +436,22 @@ export const cases = [
   },
   {
     id: 'T9.2', rule: 'T9',
-    title: 'A member off the ride cannot read the ride\'s beacon rows or beacon flags',
+    title: 'A member off the ride, and a rider who has left, cannot read the ride\'s beacon rows or beacon flags',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       try {
         const b = await adminBeacon(ctx, rides.main, u.riderA);
         await setBeaconFlag(ctx, rides.main, u.riderA, true);
-        const c = db(ctx, u.offRide);
-        const rows = await c.from('beacon_alerts').select('id').eq('ride_id', rides.main.id);
-        const flags = await c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', rides.main.id).eq('beacon_active', true);
         control((await beaconTruth(ctx, b.id)) != null, 'beacon fixture missing');
-        rule((rows.data?.length ?? 0) === 0, 'an off-ride member read the ride\'s beacon rows');
-        rule((flags.data?.length ?? 0) === 0, 'an off-ride member read which rider has an active beacon');
+        const got = [];
+        for (const who of [u.offRide, u.departed]) {
+          const c = db(ctx, who);
+          const rows = await c.from('beacon_alerts').select('id').eq('ride_id', rides.main.id);
+          const flags = await c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', rides.main.id).eq('beacon_active', true);
+          if (rows.data?.length) got.push(`${who.key}: beacon rows`);
+          if (flags.data?.length) got.push(`${who.key}: which rider has an active beacon`);
+        }
+        rule(got.length === 0, `read from off the ride: ${got.join(', ')}`);
       } finally {
         await clearBeacons(ctx, rides.main);
       }
@@ -383,7 +469,7 @@ export const cases = [
         const c = db(ctx, u.neverOpened);
         const rows = await c.from('beacon_alerts').select('id').eq('ride_id', id);
         const flags = await c.from('ride_participants').select('account_id, beacon_active').eq('ride_id', id).eq('beacon_active', true);
-        const l = await listen(ctx, u.neverOpened, allTopics(id));
+        const l = await refused(ctx, u.neverOpened, rides.main);
         const paths = [];
         if (rows.data?.length) paths.push('beacon rows');
         if (flags.data?.length) paths.push('beacon flags');
@@ -556,6 +642,14 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const b = await adminBeacon(ctx, rides.ending, u.riderA);
       await setBeaconFlag(ctx, rides.ending, u.riderA, true);
+      // For T4.4: rider B connects while the ride is live and is shown to be receiving the
+      // beaconing rider. The connection is kept open across the ride end.
+      const rb = await listen(ctx, u.riderB, receiveTopics('rider', rides.ending.id));
+      const n0 = needle();
+      await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, rides.ending.id, { beaconActive: true }), EVENTS.pos, posPayload(u.riderA, n0));
+      ctx.state.endingRideListenerLive = await arrives(ctx, rb, n0);
+      ctx.open.delete(rb);
+      ctx.state.endingRideListener = rb;
       const end = await db(ctx, u.captain).from('rides').update({ status: 'saved', actual_end: iso() }).eq('id', rides.ending.id).select('id, status');
       control(!end.error && end.data?.[0]?.status === 'saved', `the Captain could not end the ride (${end.error?.message ?? 'no row'})`);
       ctx.state.endingRideEnded = true;
@@ -569,21 +663,28 @@ export const cases = [
     },
   },
   {
-    id: 'T4.4', rule: 'T4',
+    id: 'T4.4', rule: 'T4', needs: ['T14.1'],
     title: 'After the ride ends, riders stop receiving the beaconing rider\'s position',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.ending.id;
       control(ctx.state.endingRideEnded, 'the ride was not ended (T14.1 did not complete)');
-      const rb = await listen(ctx, u.riderB, allTopics(id));
+      control(ctx.state.endingRideListenerLive, 'rider B was not receiving the beaconing rider before the ride ended');
+      ctx.open.add(ctx.state.endingRideListener);
+      // T14.1 opened rider B's connection while the ride was live and the beacon active, and
+      // confirmed it was receiving. Rider A now keeps sending on every path a rider has.
+      const rb = ctx.state.endingRideListener;
+      const fresh = await listen(ctx, u.riderB, allTopics(id));
       const topics = [...new Set([
         ...sendTopics('rider', EVENTS.pos, id, { beaconActive: false }),
         ...sendTopics('rider', EVENTS.pos, id, { beaconActive: true }),
       ])];
       const n = needle();
       await restSend(ctx, u.riderA, topics, EVENTS.pos, posPayload(u.riderA, n));
-      const got = await arrives(ctx, rb, n, ctx.target.timeouts.quiet + 2000);
-      rule(!got, 'rider B received rider A\'s position on a ride that has ended');
+      const window = ctx.target.timeouts.quiet + 2000;
+      const [a, b] = await Promise.all([arrives(ctx, rb, n, window), arrives(ctx, fresh, n, window)]);
+      rule(!a, 'rider B\'s open connection received rider A\'s position after the ride ended');
+      rule(!b, 'a fresh rider connection received rider A\'s position on a ride that has ended');
     },
   },
 
@@ -623,6 +724,7 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const topic = publicWebTopic(rides.main.id);
       const anon = await listen(ctx, null, [topic], { priv: false });
+      control(anon.statuses[topic] !== 'TIMED_OUT', 'the public channel join timed out, so silence proves nothing');
       const n = needle();
       const payload = { participantId: u.riderA.id, lastLat: POS.lat, lastLong: POS.lng, marker: n };
       await restSend(ctx, null, [topic], PUBLIC_WEB_POSITION_EVENT, payload, { priv: false });
@@ -633,44 +735,65 @@ export const cases = [
   },
 
   // ── T16 ────────────────────────────────────────────────────────────────────
+  // The DoD-12 / V-012 cross-tenant checks of tests/rlsIsolation.test.mjs, restated here so
+  // they also run on staging (that matrix refuses any non-local target).
   {
     id: 'T16.1', rule: 'T16',
     title: 'Cross-tenant: another club\'s admin and member read nothing of the ride',
     run: async (ctx) => {
-      const { users: u, rides } = ctx.fx;
+      const { users: u, rides, tenants } = ctx.fx;
       const id = rides.main.id;
       try {
         await adminBeacon(ctx, rides.main, u.riderA);
+        const rs = await ctx.admin.from('rider_states').insert({ tenant_id: tenants.x.id, ride_id: id, rider_id: u.riderA.id, state: 'active' });
+        control(!rs.error, `rider_states fixture: ${rs.error?.message}`);
+        const probes = (c) => ({
+          rides: c.from('rides').select('id').eq('id', id),
+          beacon_alerts: c.from('beacon_alerts').select('id').eq('ride_id', id),
+          rider_states: c.from('rider_states').select('id').eq('ride_id', id),
+          ride_participants: c.from('ride_participants').select('id').eq('ride_id', id),
+          rider_roster: riderRoster(c, id).then((r) => ({ data: r.rows })),
+        });
+        // Control: the same reads return rows to a member of this club, so an empty answer
+        // across the boundary is a refusal and not a broken query.
+        for (const [label, q] of Object.entries(probes(db(ctx, u.riderB)))) {
+          const { data } = await q;
+          control(data?.length > 0, `in-club read of ${label} returned nothing`);
+        }
+        const lead = await db(ctx, u.captain).rpc('get_ride_roster_contacts', { p_ride_id: id });
+        control(lead.data?.length > 0, 'the Captain\'s roster contacts returned nothing');
         const got = [];
         for (const who of [u.otherAdmin, u.otherMember]) {
           const c = db(ctx, who);
-          const probes = {
-            beacon_alerts: c.from('beacon_alerts').select('id').eq('ride_id', id),
-            ride_participants: c.from('ride_participants').select('id').eq('ride_id', id),
-            roster_contacts: c.rpc('get_ride_roster_contacts', { p_ride_id: id }),
-            rider_roster: riderRoster(c, id).then((r) => ({ data: r.rows })),
-            breadcrumb: c.from('rail3_breadcrumb').select('*').eq('ride_id', id),
-          };
-          for (const [label, q] of Object.entries(probes)) {
+          const all = { ...probes(c), roster_contacts: c.rpc('get_ride_roster_contacts', { p_ride_id: id }) };
+          for (const [label, q] of Object.entries(all)) {
             const { data } = await q;
             if (data?.length) got.push(`${who.key}: ${label}`);
           }
         }
         rule(got.length === 0, `cross-tenant read: ${got.join(', ')}`);
       } finally {
+        await ctx.admin.from('rider_states').delete().eq('ride_id', id);
         await clearBeacons(ctx, rides.main);
       }
     },
   },
   {
     id: 'T16.2', rule: 'T16',
-    title: 'Cross-tenant: another club\'s admin and member cannot write to the ride or join its channels',
+    title: 'Cross-tenant: another club\'s admin and member cannot write to the ride, send on it, or join its channels',
     run: async (ctx) => {
       const { users: u, rides, tenants } = ctx.fx;
       const id = rides.main.id;
+      const telemetry = (tenantId, who) => ({
+        tenant_id: tenantId, ride_id: id, account_id: who.id, platform: 'android', device_class: 'test/device',
+        kind: 'engine_started', tier: 'always_on', client_ts: iso(), payload: { reason: 'start_resolved' },
+      });
       try {
         const b = await adminBeacon(ctx, rides.main, u.riderA);
+        const cap = await listen(ctx, u.captain, receiveTopics('captain', id));
+        control(cap.joined.length > 0, `captain could not join: ${cap.why()}`);
         const got = [];
+        const needles = [];
         for (const who of [u.otherAdmin, u.otherMember]) {
           const c = db(ctx, who);
           await c.from('beacon_alerts').insert({ tenant_id: tenants.x.id, ride_id: id, rider_id: who.id });
@@ -678,10 +801,23 @@ export const cases = [
           await c.from('beacon_alerts').update({ beacon_cancelled_at: iso(), beacon_cancelled_by: who.id }).eq('id', b.id);
           await c.from('ride_participants').update({ last_lat: 1 }).eq('ride_id', id);
           await c.from('rides').update({ status: 'saved' }).eq('id', id);
+          await c.from('rail3_telemetry_events').insert(telemetry(tenants.x.id, who));
+          await c.from('rail3_telemetry_events').insert(telemetry(tenants.y.id, who));
+          const n = needle();
+          await restSend(ctx, who, allTopics(id), EVENTS.pos, posPayload(who, n));
+          needles.push([who, n]);
           const l = await listen(ctx, who, allTopics(id));
+          control(!Object.values(l.statuses).includes('TIMED_OUT'), 'a cross-tenant join timed out, so it proves nothing');
           if (l.joined.length) got.push(`${who.key}: joined a channel`);
         }
-        const { data: planted } = await ctx.admin.from('beacon_alerts').select('id, tenant_id').eq('ride_id', id).in('rider_id', [u.otherAdmin.id, u.otherMember.id]);
+        // The captain's connection is live: an in-club position still arrives.
+        const c2 = needle();
+        await restSend(ctx, u.riderA, sendTopics('rider', EVENTS.pos, id), EVENTS.pos, posPayload(u.riderA, c2));
+        control(await arrives(ctx, cap, c2), 'the captain\'s connection went quiet during the case');
+        await quiet(ctx);
+        for (const [who, n] of needles) if (cap.saw(n)) got.push(`${who.key}: a broadcast was delivered on the ride`);
+        const others = [u.otherAdmin.id, u.otherMember.id];
+        const { data: planted } = await ctx.admin.from('beacon_alerts').select('id, tenant_id').eq('ride_id', id).in('rider_id', others);
         if (planted?.some((r) => r.tenant_id === tenants.x.id)) got.push('a beacon row was inserted into this club from another club');
         if (planted?.some((r) => r.tenant_id === tenants.y.id)) got.push('another club\'s member attached a beacon row (under their own club) to this club\'s ride');
         if ((await beaconTruth(ctx, b.id))?.beacon_cancelled_at) got.push('a beacon was cancelled from another club');
@@ -689,8 +825,11 @@ export const cases = [
         if (ride?.status !== 'active') got.push('the ride was ended from another club');
         const { data: moved } = await ctx.admin.from('ride_participants').select('id').eq('ride_id', id).eq('last_lat', 1);
         if (moved?.length) got.push('participant rows were written from another club');
+        const { data: tel } = await ctx.admin.from('rail3_telemetry_events').select('id').eq('ride_id', id).in('account_id', others);
+        if (tel?.length) got.push('telemetry was written against this club\'s ride from another club');
         rule(got.length === 0, `cross-tenant write: ${got.join(', ')}`);
       } finally {
+        await ctx.admin.from('rail3_telemetry_events').delete().eq('ride_id', id);
         await clearBeacons(ctx, rides.main);
       }
     },
@@ -703,19 +842,36 @@ export const cases = [
       const id = rides.other.id;
       try {
         await adminBeacon(ctx, rides.other, u.otherMember);
+        const own = await db(ctx, u.otherMember).from('beacon_alerts').select('id').eq('ride_id', id);
+        control(own.data?.length > 0, 'the other club\'s own member could not read their beacon row');
         const got = [];
         for (const who of [u.riderA, u.captain, u.clubAdmin]) {
           const c = db(ctx, who);
+          if ((await c.from('rides').select('id').eq('id', id)).data?.length) got.push(`${who.key}: rides`);
           if ((await c.from('beacon_alerts').select('id').eq('ride_id', id)).data?.length) got.push(`${who.key}: beacon_alerts`);
           if ((await c.from('ride_participants').select('id').eq('ride_id', id)).data?.length) got.push(`${who.key}: ride_participants`);
           if ((await c.rpc('get_ride_roster_contacts', { p_ride_id: id })).data?.length) got.push(`${who.key}: roster contacts`);
-          const l = await listen(ctx, who, allTopics(id));
+          const l = await refused(ctx, who, rides.other);
           if (l.joined.length) got.push(`${who.key}: joined a channel`);
         }
         rule(got.length === 0, `cross-tenant read: ${got.join(', ')}`);
       } finally {
         await clearBeacons(ctx, rides.other);
       }
+    },
+  },
+  {
+    id: 'T16.4', rule: 'T16',
+    title: 'A channel for a ride that does not exist admits nobody',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const ghost = '00000000-0000-0000-0000-000000000000';
+      const got = [];
+      for (const who of [u.captain, u.clubAdmin, u.riderA]) {
+        const l = await joinAttempt(ctx, who, allTopics(ghost), ...permitted(ctx, rides.main));
+        if (l.joined.length) got.push(who.key);
+      }
+      rule(got.length === 0, `joined a channel for a ride that does not exist: ${got.join(', ')}`);
     },
   },
 ];

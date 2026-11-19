@@ -38,6 +38,22 @@ if (flag('sweep')) {
   process.exit(Object.values(left).some((n) => n > 0) ? 1 : 0);
 }
 
+// Ctrl-C or a kill still cleans up.
+let interrupted = false;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    if (interrupted) process.exit(1);
+    interrupted = true;
+    console.error(`\n${sig}: removing test rows before exit`);
+    try {
+      console.error('leftovers:', JSON.stringify(await sweep(admin, log)));
+    } catch (e) {
+      console.error(`CLEANUP NOT VERIFIED (${e.message}). Run again with --sweep against ${targetName}.`);
+    }
+    process.exit(1);
+  });
+}
+
 const before = await leftovers(admin);
 if (Object.values(before).some((n) => n > 0)) {
   console.log(`found rows from an earlier run (${JSON.stringify(before)}); removing them first`);
@@ -49,10 +65,15 @@ const ctx = { target, admin, run, open: new Set(), state: {}, fx: null };
 const results = [];
 let fatal = null;
 
+// --only picks rules or cases; a case another one builds on is pulled in with it.
+const selected = new Set(cases.filter((c) => !only || only.includes(c.rule) || only.includes(c.id)).map((c) => c.id));
+for (const c of cases) if (selected.has(c.id)) for (const dep of c.needs ?? []) selected.add(dep);
+
 try {
   await buildFixtures(ctx);
   for (const c of cases) {
-    if (only && !only.includes(c.rule) && !only.includes(c.id)) continue;
+    if (!selected.has(c.id)) continue;
+    if (interrupted) break;
     const t0 = Date.now();
     let status = 'green';
     let detail = '';
@@ -74,22 +95,39 @@ try {
   await closeAll(ctx);
 }
 
-const left = await sweep(admin, log);
-const dirty = Object.values(left).some((n) => n > 0);
+// Cleanup. If it cannot be completed or verified, the run fails and says so: an unverified
+// cleanup is never reported as clean.
+let left = null;
+let cleanupError = null;
+for (let attempt = 1; attempt <= 3 && left == null; attempt += 1) {
+  try {
+    left = await sweep(admin, log);
+  } catch (e) {
+    cleanupError = e.message;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+if (left) cleanupError = null;
+const dirty = left == null || Object.values(left).some((n) => n > 0);
+if (left == null) {
+  console.error(`CLEANUP NOT VERIFIED (${cleanupError}). Run again with --sweep against ${targetName}.`);
+}
 
 // ── Compare with the recorded baseline ───────────────────────────────────────
 const baselinePath = join(here, 'baseline.json');
 const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
 const expected = (id) => baseline?.targets?.[targetName]?.[id] ?? baseline?.cases?.[id] ?? null;
 const drift = [];
-if (baseline && !only) {
+if (baseline) {
   for (const r of results) {
     const want = expected(r.id);
     if (want == null) drift.push(`${r.id}: not in the baseline (ran ${r.status})`);
     else if (want !== r.status) drift.push(`${r.id}: baseline ${want}, ran ${r.status}`);
   }
-  for (const id of Object.keys(baseline.cases ?? {})) {
-    if (!results.find((r) => r.id === id)) drift.push(`${id}: in the baseline but did not run`);
+  if (!only) {
+    for (const id of Object.keys(baseline.cases ?? {})) {
+      if (!results.find((r) => r.id === id)) drift.push(`${id}: in the baseline but did not run`);
+    }
   }
 }
 
@@ -109,6 +147,7 @@ const report = {
   rules: Object.fromEntries(rules.map((r) => [r, ruleStatus(r)])),
   cases: results,
   leftovers: left,
+  cleanup_error: cleanupError,
   drift,
   fatal: fatal?.message ?? null,
 };
@@ -125,7 +164,7 @@ const md = [
   '',
   `Per rule: ${rules.map((r) => `${r} ${ruleStatus(r)}`).join(', ')}`,
   '',
-  `Leftover test rows after cleanup: ${JSON.stringify(left)}`,
+  left ? `Leftover test rows after cleanup: ${JSON.stringify(left)}` : `CLEANUP NOT VERIFIED: ${cleanupError}`,
   ...(drift.length ? ['', 'Differences from baseline.json:', ...drift.map((d) => `- ${d}`)] : []),
 ].join('\n');
 writeFileSync(join(outDir, `denial-${targetName}.md`), `${md}\n`);
