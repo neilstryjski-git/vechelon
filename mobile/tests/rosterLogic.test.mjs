@@ -10,6 +10,8 @@ import {
   rowVisibleTo,
   phoneVisibleTo,
   rosterOpenFor,
+  rosterRowFromRpc,
+  rowParticipation,
 } from '../src/lib/rosterLogic.ts';
 
 const ROLES = ['captain', 'support', 'member', 'guest'];
@@ -78,3 +80,62 @@ test('rosterOpenFor: open for created/active to participants; closed at saved/un
   for (const s of ['saved', null, undefined, '', 'purged']) assert.equal(rosterOpenFor(s, true), false, `status=${s}`);
   for (const s of ['created', 'active', 'saved']) assert.equal(rosterOpenFor(s, false), false, `non-participant ${s}`);
 });
+
+// --- W313: mapping the get_ride_roster result onto roster rows, per role ---------------------------
+
+const rpc = (over = {}) => ({
+  participant_id: 'p-1', account_id: 'acct-1', name: 'Ada Rider', role: 'member',
+  participation: 'app_tracked', phone: null, rail3_joined_at: ISO, departed_at: null, ...over,
+});
+
+test('rosterRowFromRpc: a rider row as a rider receives it — name kept, no phone, state from the server', () => {
+  const row = rosterRowFromRpc(rpc());
+  assert.deepEqual(row, {
+    id: 'p-1', account_id: 'acct-1', display_name: 'Ada Rider', phone: null, role: 'member',
+    rail3_joined_at: ISO, departed_at: null, participation: 'app_tracked',
+  });
+  assert.equal(rowParticipation(row), 'app_tracked');
+});
+
+test('rosterRowFromRpc: leader rows carry the phone the server sent (Captain and SAG, to every viewer)', () => {
+  for (const role of ['captain', 'support']) {
+    const row = rosterRowFromRpc(rpc({ role, phone: '+14165550100' }));
+    assert.equal(row.role, role);
+    assert.equal(row.phone, '+14165550100');
+  }
+});
+
+test('rosterRowFromRpc: as Captain or SAG, a rider row and a guest row carry their phones', () => {
+  assert.equal(rosterRowFromRpc(rpc({ phone: '+14165550101' })).phone, '+14165550101');
+  const guest = rosterRowFromRpc(rpc({ account_id: null, role: 'guest', participation: 'roster_only', phone: '+14165550102', rail3_joined_at: null }));
+  assert.equal(guest.account_id, null);
+  assert.equal(guest.role, 'guest');
+  assert.equal(guest.phone, '+14165550102');
+  assert.equal(rowParticipation(guest), 'roster_only');
+});
+
+test('rosterRowFromRpc never invents a phone: null and missing stay null', () => {
+  assert.equal(rosterRowFromRpc(rpc({ phone: null })).phone, null);
+  const { phone, ...noPhone } = rpc();
+  assert.equal(rosterRowFromRpc(noPhone).phone, null);
+});
+
+test('rosterRowFromRpc: an unknown role fails closed to member (no leader treatment)', () => {
+  assert.equal(rosterRowFromRpc(rpc({ role: 'marshal' })).role, 'member');
+  assert.equal(rosterRowFromRpc(rpc({ role: null })).role, 'member');
+});
+
+test('a participation value this build does not know (a later fourth value) falls back to the durable marks', () => {
+  const row = rosterRowFromRpc(rpc({ participation: 'app_open_only' }));
+  assert.equal(row.participation, null);
+  assert.equal(rowParticipation(row), 'app_tracked');
+  const departed = rosterRowFromRpc(rpc({ participation: 'something_new', departed_at: ISO }));
+  assert.equal(rowParticipation(departed), 'departed');
+});
+
+test('rowParticipation: a row from the offline cache has no server value and is derived', () => {
+  assert.equal(rowParticipation({ account_id: 'acct-1', rail3_joined_at: null, departed_at: null }), 'roster_only');
+  assert.equal(rowParticipation({ account_id: 'acct-1', rail3_joined_at: ISO, departed_at: ISO }), 'departed');
+  assert.equal(rowParticipation({ account_id: null, rail3_joined_at: null }), 'roster_only');
+});
+

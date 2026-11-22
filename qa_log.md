@@ -2,6 +2,27 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-22 — W313: roster on the server function, rules T5 to T7
+
+Change: `get_ride_roster(ride)` (migration `20261118020000`), the mobile roster screen switched
+to it, and a held migration (`20261118030000`) that drops the staging-only identity hydration
+trigger at cutover. The CI database is built from migrations alone, so the hydration trigger
+is absent there: these results are the roster working without it.
+
+| Case | Before W313 | After (CI) | What it proves |
+|---|---|---|---|
+| T5.4 (new) | — | RESULT_T54 | Through the function: a rider gets no other rider's, guest's or departed rider's phone, no position, no extra columns; a club member off the roster and another club's member and admin get no rows |
+| T6.1, T6.2 | Pass (table read) | RESULT_T6 | Now read through the function: every row by name and state; the Captain's, co-Captain's and SAG's phones |
+| T6.3 (new) | — | RESULT_T63 | The guest is marked roster-only; a rider gets their own phone back; only the three known participation values reach a rider |
+| T7.1 to T7.3 | Pass (table read plus contacts function) | RESULT_T7 | Now through the function: Captain and SAG read every phone, the guest's included; co-Captains read each other's |
+| T5.1 to T5.3 | Fail | Fail (expected) | The table itself still returns phones and positions to club members. That is D50, not this ticket |
+
+Unit tests: `mobile/tests/rosterLogic.test.mjs`, seven new cases for the mapping from the
+function result to roster rows per role (29 pass with the roster cache tests).
+
+Not yet run: the roster on a development build as rider, Captain and SAG (manual). Staging:
+the function is additive and can be applied; the trigger drop is held for the cutover.
+
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
 Finding: the channel had one subscriber and one sender in the web app, both dead code (never

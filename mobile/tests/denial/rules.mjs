@@ -334,12 +334,46 @@ export const cases = [
           accounts: c.from('accounts').select('*').eq('id', u.riderA.id),
           get_ride_roster_contacts: c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }),
           ride_participants_pa_view: c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id),
+          get_ride_roster: c.rpc('get_ride_roster', { p_ride_id: rides.main.id }),
         };
         for (const [label, q] of Object.entries(probes)) {
           if (leaks(await read(q), ...secrets).length) found.push(`${who.key}: ${label}`);
         }
       }
       rule(found.length === 0, `rider A's phone or position was read by: ${found.join(', ')}`);
+    },
+  },
+
+  {
+    id: 'T5.4', rule: 'T5',
+    title: 'The roster function gives a rider no other rider\'s phone, no position, and gives nothing to anyone off the roster (W313)',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const got = [];
+      const mine = await riderRoster(db(ctx, u.riderB), rides.main.id);
+      control(!mine.error && mine.rows.length > 0, `rider B could not read the roster (${mine.error?.message ?? 'no rows'})`);
+      // Riders, the departed rider, the never-opened member and the guest: no phone for rider B.
+      for (const r of mine.rows) {
+        const leader = r.role === 'captain' || r.role === 'support';
+        if (!leader && r.account_id !== u.riderB.id && r.phone) got.push(`phone of a ${r.role} (${r.name})`);
+      }
+      const allowed = new Set(['participant_id', 'account_id', 'name', 'role', 'participation', 'phone', 'rail3_joined_at', 'departed_at']);
+      const extra = [...new Set(mine.raw.flatMap((r) => Object.keys(r)))].filter((k) => !allowed.has(k));
+      if (extra.length) got.push(`unexpected columns: ${extra.join(', ')}`);
+      if (leaks(mine.raw, POS.lat, POS.lng).length) got.push('a position');
+      // Off the roster: a club member not on the ride, and another club's member and admin.
+      for (const who of [u.offRide, u.otherMember, u.otherAdmin]) {
+        const r = await riderRoster(db(ctx, who), rides.main.id);
+        if (r.rows.length) got.push(`${who.key} read ${r.rows.length} roster rows`);
+      }
+      // A departed rider and a member who never opened the ride are on the roster: they read
+      // it as riders do (leaders' phones only).
+      for (const who of [u.departed, u.neverOpened]) {
+        const r = await riderRoster(db(ctx, who), rides.main.id);
+        const a = r.rows.find((x) => x.account_id === u.riderA.id);
+        if (a?.phone) got.push(`${who.key} read rider A's phone`);
+      }
+      rule(got.length === 0, `through get_ride_roster: ${got.join('; ')}`);
     },
   },
 
@@ -375,6 +409,21 @@ export const cases = [
         if (!r?.name || r?.phone !== leader.phone) missing.push(leader.key);
       }
       rule(missing.length === 0, `rider B cannot read name and phone for: ${missing.join(', ')}`);
+    },
+  },
+
+  {
+    id: 'T6.3', rule: 'T6',
+    title: 'The roster marks a guest as roster-only, and a rider reads their own phone (W313)',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const roster = await riderRoster(db(ctx, u.riderB), rides.main.id);
+      rule(!roster.error, `roster read failed: ${roster.error?.message}`);
+      const guest = roster.rows.find((r) => r.account_id == null && r.name === GUEST.name);
+      rule(guest?.participation === 'roster_only' && guest?.role === 'guest', `the guest reads as ${guest?.role} / ${guest?.participation}`);
+      rule(roster.rows.find((r) => r.account_id === u.riderB.id)?.phone === u.riderB.phone, 'rider B does not get their own phone back');
+      const states = new Set(roster.rows.map((r) => r.participation));
+      rule([...states].every((v) => ['roster_only', 'app_tracked', 'departed'].includes(v)), `unknown participation value sent to a rider: ${[...states].join(', ')}`);
     },
   },
 

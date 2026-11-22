@@ -68,3 +68,72 @@ export function rosterOpenFor(rideStatus: string | null | undefined, iAmParticip
   if (!iAmParticipant) return false;
   return rideStatus === 'created' || rideStatus === 'active';
 }
+
+// ---------------------------------------------------------------------------------------------
+// W313 — the roster comes from the server function get_ride_roster(ride), not from a table read
+// with an accounts embed. The server decides which phones a caller may have (§4.1 ROSTER) and
+// resolves each name; this maps its rows onto the row the screen and the cache already use.
+// ---------------------------------------------------------------------------------------------
+
+export interface RosterRpcRow {
+  participant_id: string;
+  account_id: string | null;
+  name: string | null;
+  role: string | null;
+  participation: string | null;
+  phone: string | null;
+  rail3_joined_at: string | null;
+  departed_at: string | null;
+}
+
+export interface RosterRow {
+  id: string;
+  account_id: string | null;
+  display_name: string | null;
+  phone: string | null;
+  role: RideRole;
+  rail3_joined_at: string | null;
+  departed_at: string | null;
+  // The server's participation value, when it is one this build knows. null = derive it.
+  participation: ParticipationState | null;
+}
+
+const KNOWN_ROLES: readonly string[] = ['captain', 'support', 'member', 'guest'];
+const KNOWN_STATES: readonly string[] = ['departed', 'app_tracked', 'roster_only'];
+
+// An unknown role fails closed to 'member' (no leader treatment, no leader phone rule). An
+// unknown participation value (a later server may add one for Captain and SAG) becomes null, so
+// this build falls back to the durable timestamps instead of showing a label it does not have.
+export function rosterRowFromRpc(r: RosterRpcRow): RosterRow {
+  return {
+    id: r.participant_id,
+    account_id: r.account_id ?? null,
+    display_name: r.name ?? null,
+    phone: r.phone ?? null,
+    role: (KNOWN_ROLES.includes(r.role ?? '') ? r.role : 'member') as RideRole,
+    rail3_joined_at: r.rail3_joined_at ?? null,
+    departed_at: r.departed_at ?? null,
+    participation: KNOWN_STATES.includes(r.participation ?? '')
+      ? (r.participation as ParticipationState)
+      : null,
+  };
+}
+
+// The state to show for a row: the server's value when present, else derived from the durable
+// marks (a row read back from the offline cache carries no server value).
+export function rowParticipation(row: {
+  account_id: string | null;
+  rail3_joined_at: string | null;
+  departed_at?: string | null;
+  participation?: ParticipationState | null;
+}): ParticipationState {
+  return (
+    row.participation ??
+    participationState({
+      accountId: row.account_id,
+      rail3JoinedAt: row.rail3_joined_at,
+      departedAt: row.departed_at,
+    })
+  );
+}
+

@@ -4,6 +4,7 @@
 // rider-facing roster path is W313's to build. The rules in rules.mjs are written against
 // these functions, never against a literal topic or table, so when W193 / D94 / W313 change
 // the layout they edit THIS file and the same rules prove the new behaviour.
+// W313 moved the two roster readers to get_ride_roster.
 //
 // Today (before W193): one private channel per ride, `rail3:ride:<id>`, carrying every event
 // to every affiliated club member. The roster is read straight off ride_participants.
@@ -54,44 +55,26 @@ export const PUBLIC_WEB_POSITION_EVENT = 'location_update';
 
 // The roster as a RIDER's device reads it. Returns rows of
 //   { account_id, name, role, joined, departed, phone }
-// Today: the table read RosterScreen.tsx makes. W313 replaces this with the rider-facing
-// function; the returned shape stays.
+// W313: the server function RosterScreen.tsx calls. One function serves every role; the server
+// decides which phones the caller may have.
+const fromRosterFn = (r) => ({
+  participant_id: r.participant_id,
+  account_id: r.account_id,
+  name: r.name,
+  role: r.role,
+  participation: r.participation,
+  joined: r.participation === 'app_tracked' || (r.participation === 'departed' && r.rail3_joined_at != null),
+  departed: r.participation === 'departed',
+  phone: r.phone,
+});
 export async function riderRoster(client, rideId) {
-  const { data, error } = await client
-    .from('ride_participants')
-    .select('account_id, display_name, role, phone, rail3_joined_at, departed_at')
-    .eq('ride_id', rideId);
+  const { data, error } = await client.rpc('get_ride_roster', { p_ride_id: rideId });
   if (error) return { rows: [], error };
-  return {
-    rows: (data ?? []).map((r) => ({
-      account_id: r.account_id,
-      name: r.display_name,
-      role: r.role,
-      joined: r.rail3_joined_at != null,
-      departed: r.departed_at != null,
-      phone: r.phone,
-    })),
-    error: null,
-  };
+  return { rows: (data ?? []).map(fromRosterFn), error: null, raw: data ?? [] };
 }
 
 // The roster as a Captain's or SAG's device reads it: every participant, guests included,
-// with a phone. Returns rows of { participant_id, account_id, name, phone }.
-// Today: the participant rows (which carry a guest's own name and phone) joined with the
-// contacts function (which carries each member's account name and phone).
+// with a phone. Returns rows of { participant_id, account_id, name, phone }. Same function.
 export async function leaderRoster(client, rideId) {
-  const rows = await client.from('ride_participants').select('id, account_id, display_name, phone').eq('ride_id', rideId);
-  if (rows.error) return { rows: [], error: rows.error };
-  const contacts = await client.rpc('get_ride_roster_contacts', { p_ride_id: rideId });
-  if (contacts.error) return { rows: [], error: contacts.error };
-  const byId = Object.fromEntries((contacts.data ?? []).map((c) => [c.participant_id, c]));
-  return {
-    rows: (rows.data ?? []).map((r) => ({
-      participant_id: r.id,
-      account_id: r.account_id,
-      name: byId[r.id]?.name ?? r.display_name,
-      phone: byId[r.id]?.phone ?? r.phone,
-    })),
-    error: null,
-  };
+  return riderRoster(client, rideId);
 }

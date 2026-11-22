@@ -18,10 +18,13 @@ import { useRideDetails } from '../hooks/useRideDetails';
 import type { RideRole } from '../lib/roleVisibility';
 import {
   participationLabel,
-  participationState,
   phoneVisibleTo,
   rosterOpenFor,
+  rosterRowFromRpc,
+  rowParticipation,
   rowVisibleTo,
+  type RosterRow,
+  type RosterRpcRow,
 } from '../lib/rosterLogic';
 import { fetchRideStatus } from '../lib/rideStatus';
 import { useResume } from '../hooks/useResume';
@@ -41,32 +44,28 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 //     a declared structural state, never a failure;
 //   • leaders' (Captain/SAG) numbers are visible to every viewer (slate 8, non-negotiable);
 //     command sees every number (a call sheet, co-captains included); rider↔rider stays parked.
-// UI-layer enforcement. The participant_tactical_select policy still over-returns phone to
-// affiliated riders (D50 / RP-16), so for them this gate is the ONLY gate and the server-side
-// column fix remains the security lane; conversely a NON-affiliated rider is handed only command
-// rows + their own by RLS, so "all rows" holds to the extent the server returns them.
+// W313: the rows come from the server function get_ride_roster(ride), which applies these rules
+// itself: it returns a rider no other rider's phone, and it resolves each name. The UI gate
+// below (phoneVisibleTo) stays as a second check and still governs rows read from an older
+// offline cache slot.
 // Ride-scoped (slate 11): open for 'created'/'active' to participants, closed at ride end — the
 // in-screen guard matters because popping the map from under this screen leaves it mounted.
 
 type AccountEmbed = { name: string | null; phone: string | null };
-type Row = {
-  id: string;
-  account_id: string | null;
-  display_name: string | null;
-  phone: string | null;
-  role: RideRole;
-  rail3_joined_at: string | null; // W288: the app-tracked signal (NOT joined_at)
-  departed_at: string | null; // W292: the durable departed mark (a timestamp, never a coordinate)
-  accounts: AccountEmbed | AccountEmbed[] | null;
+// A row from get_ride_roster (W313), or one read back from the offline cache. `accounts` exists
+// only on cache slots written before W313, when the read embedded the account; live rows have
+// the name and phone already resolved by the server.
+type Row = Omit<RosterRow, 'participation'> & {
+  participation?: RosterRow['participation'];
+  accounts?: AccountEmbed | AccountEmbed[] | null;
 };
 
 const dialable = (phone: string): string => phone.replace(/[^\d+]/g, '');
 const isCommand = (r: RideRole) => r === 'captain' || r === 'support';
 const roleRank: Record<RideRole, number> = { captain: 0, support: 1, member: 2, guest: 3 };
 
-// The account record is the source of truth for a member's current name + phone
-// (editing the member page must show here even if the ride row predates it).
-// The ride row's own name/phone is the fallback — used for guests with no account.
+// Pre-W313 cache slots only: the embedded account, which was the source of truth for a member's
+// name + phone. Live rows carry no embed (the server resolves account-first itself).
 const acctOf = (r: Row): AccountEmbed | null =>
   (Array.isArray(r.accounts) ? r.accounts[0] : r.accounts) ?? null;
 // W289: the roster fields the cache slot carries (contact fields included; nothing positional). W292 adds departed_at (eight).
@@ -78,7 +77,7 @@ const toCachedRow = (r: Row): CachedRow => ({
   role: r.role,
   rail3_joined_at: r.rail3_joined_at,
   departed_at: r.departed_at ?? null,
-  accounts: acctOf(r),
+  accounts: null, // W313: nothing to embed; display_name and phone are the resolved values
 });
 const timeAgo = (iso: string): string => {
   const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
@@ -122,12 +121,11 @@ const RosterScreen: React.FC = () => {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { data, error: pErr } = await supabase
-        .from('ride_participants')
-        .select('id, account_id, display_name, phone, role, rail3_joined_at, departed_at, accounts(name, phone)')
-        .eq('ride_id', rideId);
+      // W313: one server function for every role (Pillar II §4.1 ROSTER). It returns every roster
+      // row by name and participation state, and only the phones this caller may have.
+      const { data, error: pErr } = await supabase.rpc('get_ride_roster', { p_ride_id: rideId });
       if (pErr) throw pErr;
-      const live = (data ?? []) as Row[];
+      const live: Row[] = ((data ?? []) as RosterRpcRow[]).map(rosterRowFromRpc);
       setRows(live);
       setCached(null);
       // Slate 11: re-read the persisted status on every load (useRideDetails reads once) so the
@@ -219,11 +217,9 @@ const RosterScreen: React.FC = () => {
     const resolvedPhone = phoneOf(item);
     const lead = isCommand(item.role);
     const self = isSelf(item);
-    const state = participationState({
-      accountId: item.account_id,
-      rail3JoinedAt: item.rail3_joined_at,
-      departedAt: item.departed_at, // W292: a departed row is retained and marked, never dropped (R3-65/70)
-    });
+    // W292: a departed row is retained and marked, never dropped (R3-65/70). W313: the server's
+    // value when the row has one, else derived from the durable marks (cached rows).
+    const state = rowParticipation(item);
     // slate 8 / §4.1: leaders' numbers to everyone; every number to command (co-captains included —
     // a call sheet, a deliberate divergence from the map's canSeePhone). Rider↔rider parked.
     const phoneAllowed = !self && phoneVisibleTo(myRole, item.role);

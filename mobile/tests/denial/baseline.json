@@ -42,8 +42,11 @@
     "T16.3": "green",
     "T5.3": "red",
     "T16.4": "green",
-    "T15.2": "red"
+    "T15.2": "red",
+    "T5.4": "green",
+    "T6.3": "green"
   },
   "targets": {},
-  "_advisory": "T15.2 is advisory (outside rule T15): it stays red until the Supabase project is set to private realtime channels only."
+  "_advisory": "T15.2 is advisory (outside rule T15): it stays red until the Supabase project is set to private realtime channels only.",
+  "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path."
 }
