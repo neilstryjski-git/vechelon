@@ -593,6 +593,24 @@ export const cases = [
     },
   },
 
+  {
+    id: 'T10.2', rule: 'T10',
+    title: 'A beacon cannot be inserted already cancelled (W311: a new beacon arrives open)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      try {
+        await db(ctx, u.riderA).from('beacon_alerts').insert({
+          tenant_id: tenants.x.id, ride_id: rides.main.id, rider_id: u.riderA.id,
+          beacon_cancelled_at: iso(), beacon_cancelled_by: u.captain.id,
+        });
+        const { data } = await ctx.admin.from('beacon_alerts').select('id').eq('ride_id', rides.main.id).eq('rider_id', u.riderA.id);
+        rule((data?.length ?? 0) === 0, 'a rider inserted a beacon that already names the Captain as its canceller');
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
+    },
+  },
+
   // ── T11 ────────────────────────────────────────────────────────────────────
   {
     id: 'T11.0', rule: 'T11',
@@ -755,6 +773,27 @@ export const cases = [
     },
   },
   {
+    id: 'T14.2', rule: 'T14', needs: ['T14.1'],
+    title: 'A beacon raised by a rider after the ride ended is still recorded, closed with ride_ended (W311 guard order)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      control(ctx.state.endingRideEnded === true, 'T14.1 has to run first: it ends the ride');
+      // The W311 guard refuses a client insert that arrives cancelled. The server's own
+      // late-beacon close sets the cancel fields on the same insert, so it must run after the
+      // guard (triggers fire in name order). A rename that reverses them fails here.
+      const ins = await db(ctx, u.riderB).from('beacon_alerts')
+        .insert({ tenant_id: tenants.x.id, ride_id: rides.ending.id, rider_id: u.riderB.id, lat: 43.66, long: -79.39 });
+      const { data } = await ctx.admin.from('beacon_alerts').select('id, beacon_cancelled_at, beacon_cancel_reason')
+        .eq('ride_id', rides.ending.id).eq('rider_id', u.riderB.id);
+      try {
+        rule(!ins.error && data?.length === 1, `the delayed raise was refused or lost (${ins.error?.message ?? 'no row'})`);
+        rule(data[0].beacon_cancelled_at != null && data[0].beacon_cancel_reason === 'ride_ended', 'the delayed raise was not closed with ride_ended');
+      } finally {
+        await ctx.admin.from('beacon_alerts').delete().eq('ride_id', rides.ending.id).eq('rider_id', u.riderB.id);
+      }
+    },
+  },
+  {
     id: 'T4.4', rule: 'T4', needs: ['T14.1'],
     title: 'After the ride ends, riders stop receiving the beaconing rider\'s position',
     run: async (ctx) => {
@@ -808,6 +847,27 @@ export const cases = [
         rule(t2.beacon_cancel_reason === 'ride_ended', `the ride_ended row now reads ${t2.beacon_cancel_reason}`);
         rule(t1.beacon_cancelled_at != null, 'the cancel time was lost');
         rule(t1.beacon_cancel_reason === 'actor_deleted', `a past cancel by the deleted person reads reason=${t1.beacon_cancel_reason}, expected actor_deleted`);
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
+    },
+  },
+  {
+    id: 'T13.2', rule: 'T13',
+    title: 'No client can have actor_deleted written: not directly, and not by blanking the actor',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      try {
+        const at = '2026-01-01T00:00:00+00:00';
+        const b = await adminBeacon(ctx, rides.main, u.riderA, { beacon_cancelled_at: at, beacon_cancelled_by: u.captain.id });
+        for (const who of [u.riderA, u.captain, u.clubAdmin]) {
+          const c = db(ctx, who);
+          await c.from('beacon_alerts').update({ beacon_cancel_reason: 'actor_deleted' }).eq('id', b.id);
+          await c.from('beacon_alerts').update({ beacon_cancelled_by: null }).eq('id', b.id);
+        }
+        const t = await beaconTruth(ctx, b.id);
+        control(t != null, 'the beacon row disappeared');
+        rule(t.beacon_cancel_reason == null, `a client got reason=${t.beacon_cancel_reason} written onto a beacon`);
       } finally {
         await clearBeacons(ctx, rides.main);
       }
