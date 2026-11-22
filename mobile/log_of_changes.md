@@ -1845,5 +1845,57 @@ Notes:
   the Management API, inside one transaction with its `schema_migrations` row, after a
   rolled-back trial. Not a bulk push: later Sprint 2 migrations are held off staging. The
   W312 cases pass on staging (see `qa_log.md`).
+
+## 2026-11-22 — W313: mobile roster on a server function (T5 to T7)
+
+- MIGRATION `20261118020000_w313_ride_roster_function.sql`: `get_ride_roster(p_ride_id)`,
+  SECURITY DEFINER, one function for every role. Standing: the caller has a participant row on
+  the ride. Returns every roster row (guests included) with name, role, participation and the
+  two durable timestamps. Phone: every phone to the ride's Captain and SAG; to anyone else the
+  leaders' phones and their own. Never position, ping or email.
+- LLD decisions:
+  - One function, not a rider one plus the existing leader one: the phone rule is a single
+    expression, and two functions would have to agree on names and row sets.
+    `get_ride_roster_contacts` is untouched (the web admin uses it).
+  - Name and phone: account first, participant row second (guests; per-ride copy). After ride
+    end the phone comes from the per-ride copy only, which retention clears: an ended-ride
+    roster shows no phone, as the ticket requires.
+  - `participation` is text computed on the server (`roster_only`, `app_tracked`, `departed`).
+    The fourth value (tracks only while the app is open, Captain and SAG only) is another text
+    value behind the same leader test; the app maps a value it does not know back to the
+    timestamps (`rowParticipation`), so adding it breaks no build.
+  - A departed rider and a member who never opened the ride keep roster access (they have a
+    row); they read it as riders do. A club admin who is not on the ride gets nothing from this
+    function and keeps `get_ride_roster_contacts`.
+- APP: `RosterScreen.tsx` calls the function; the `accounts(name, phone)` embed is gone. Mapping
+  lives in `rosterLogic.ts` (`rosterRowFromRpc`, `rowParticipation`). The UI phone gate stays as
+  a second check.
+- ROSTER CACHE (ticket pitfall): the slot stores what the roster returns, so from this build a
+  rider's slot holds only the phones the server allowed. A slot written by an older build can
+  still hold other riders' phones (encrypted, never shown: the UI gate applies); it is
+  overwritten on the next load. Cache version unchanged, so an offline rider keeps the roster.
+- HELD MIGRATION `20261118030000_w313_drop_identity_hydration_trigger.sql`: drops the
+  staging-only trigger `rail3_hydrate_participant_identity_trg` and its function. No-op on a
+  database built from migrations. NOT for staging before the cutover (W317): the Play build's
+  roster depends on it. CONSEQUENCE: once this is on the trunk, staging must not be bulk-pushed;
+  earlier Sprint 2 migrations (W311, W312, the function above) go to staging one file at a time.
+- TESTS: denial suite roster readers moved to the function (`layout.mjs`); T5.4 and T6.3 added.
+  T5.1 to T5.3 stay red until D50.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 3 important, 1 minor; all 7 criteria met;
+  recursion traced clean), all addressed:
+  - An email could reach riders as a name: the app's join writes `display_name = name ?? email`.
+    The function no longer uses a display_name containing `@`; T6.3 proves it.
+  - The test fixture copied every member's name and phone onto the participant row, as the
+    trigger would, so T6 and T7 could pass without the account read. Two rows (co-Captain,
+    never-opened member) are now written as the web writes them, with neither.
+  - The hold on the trigger drop was a comment only. The file now refuses to run while the
+    trigger exists unless the session sets `rail3.w317_cutover = 'yes'`, so a bulk push to
+    staging stops there with an error.
+  - Comment corrected: nothing calls `get_ride_roster_contacts` today.
+- REVIEW r2: approved, all 7 criteria met, both failed sections closed; 1 minor (T6.3's restore
+  was unchecked), fixed.
+- KNOWN, OUTSIDE THIS TICKET: `mobile/src/hooks/useFleetPositions.ts:118-128` reads name and phone
+  off participant rows for the map. After the trigger is dropped, rows the app did not write
+  itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 

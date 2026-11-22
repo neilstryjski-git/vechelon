@@ -45,7 +45,9 @@
     "T15.2": "red",
     "T10.2": "green",
     "T14.2": "green",
-    "T13.2": "green"
+    "T13.2": "green",
+    "T5.4": "green",
+    "T6.3": "green"
   },
   "targets": {
     "staging": {
@@ -54,5 +56,6 @@
   },
   "_advisory": "T15.2 is advisory (outside rule T15): red wherever the Supabase project still relays public realtime channels. Staging was set to private channels only on 2026-11-18 (Senior PM approved), so it is green there; the local stack has no such setting.",
   "_w311": "W311 (2026-11-18): T10.1, T11.1 to T11.4 and T16.2 turned green; T10.2 and T14.2 added.",
-  "_w312": "W312 (2026-11-18): T13.1 turned green; T13.2 added."
+  "_w312": "W312 (2026-11-18): T13.1 turned green; T13.2 added.",
+  "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path."
 }
