@@ -1807,6 +1807,8 @@ Notes:
     trigger exists unless the session sets `rail3.w317_cutover = 'yes'`, so a bulk push to
     staging stops there with an error.
   - Comment corrected: nothing calls `get_ride_roster_contacts` today.
+- REVIEW r2: approved, all 7 criteria met, both failed sections closed; 1 minor (T6.3's restore
+  was unchecked), fixed.
 - KNOWN, OUTSIDE THIS TICKET: `mobile/src/hooks/useFleetPositions.ts:118-128` reads name and phone
   off participant rows for the map. After the trigger is dropped, rows the app did not write
   itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.

@@ -426,6 +426,7 @@ export const cases = [
       // account has no name) must not hand that email to other riders as a name.
       const { data: row } = await ctx.admin.from('ride_participants').select('id, display_name')
         .eq('ride_id', rides.main.id).eq('account_id', u.riderA.id).single();
+      control(row?.id, 'rider A has no participant row to rename');
       try {
         const blank = await ctx.admin.from('accounts').update({ name: '' }).eq('id', u.riderA.id).select('name');
         const asEmail = await ctx.admin.from('ride_participants').update({ display_name: u.riderA.email }).eq('id', row.id).select('display_name');
@@ -435,8 +436,9 @@ export const cases = [
         control(!again.error, `roster read failed: ${again.error?.message}`);
         rule(leaks(again.raw, u.riderA.email).length === 0, 'rider A\'s email reached rider B as a roster name');
       } finally {
-        await ctx.admin.from('accounts').update({ name: u.riderA.name }).eq('id', u.riderA.id);
-        await ctx.admin.from('ride_participants').update({ display_name: row.display_name }).eq('id', row.id);
+        const r1 = await ctx.admin.from('accounts').update({ name: u.riderA.name }).eq('id', u.riderA.id);
+        const r2 = await ctx.admin.from('ride_participants').update({ display_name: row.display_name }).eq('id', row.id);
+        control(!r1.error && !r2.error, `could not restore rider A's name after the case (${r1.error?.message ?? r2.error?.message})`);
       }
       const states = new Set(roster.rows.map((r) => r.participation));
       rule([...states].every((v) => ['roster_only', 'app_tracked', 'departed'].includes(v)), `unknown participation value sent to a rider: ${[...states].join(', ')}`);
