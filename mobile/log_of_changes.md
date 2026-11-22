@@ -1761,6 +1761,32 @@ Notes:
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand (hooks
   branch off `master`).
 
+## 2026-11-18 — W314: Sprint 2 Voice & Tone copy list, handed to the Senior PM
+
+- NEW `docs/rail3/sprint2/voice_tone_copy_list.md`, beside the Sprint 1 list (which is left
+  untouched: the main checkout has uncommitted edits to it). Five parts: the in-app disclosure
+  (row 1.3 blocks brief item 10), the reduced beacon bottom sheet a rider gets for another
+  rider, messages a rider can now see when the server refuses, the Play-facing sentences that
+  need new wording when the widened build ships, and the items carried from Sprint 1.
+- Every row: current text, where it appears (file:line), and a proposed placeholder. Proposals
+  are the Hands' wording; Voice & Tone decides. No app string, Play listing or Play form changed.
+- FOUND WHILE LISTING: (1) the app prints raw server error text to riders in three places
+  (`useBeacons.ts:338`, `:385`/`:450`, `RosterScreen.tsx:164`); after W311 that can include the
+  guard's `permission_denied: ...` messages. Proposed rule: never show server text. (2)
+  `docs/play/data_safety.md:29` says the beacon alert record stays after 30 days; Pillar II
+  v1.2.0 §2 says the whole row is deleted 30 days after raise. Flagged in row 4.6, not changed.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 2 important, 2 minor; all 4 criteria met; every
+  quoted text and file:line verified): added the two who-sees strings in `bgGeo.ts` (permission
+  rationale and tracking notification); row 2.3's proposal no longer promises that a leader was
+  alerted; the W311 insert refusal added (four messages, not three); the app-only limit of
+  "everyone on the ride" stated and put to Voice & Tone.
+- REVIEW r2 approved; r3 assessed the ticket's security consideration (wording must not promise
+  narrower visibility than the server enforces) and failed rows 4.2 to 4.4 for leaving out club
+  admins, who see beacons in Race Control. Those proposals now name the club's organisers, and
+  question 1 puts the same point for the in-app rows.
+- HANDOVER: given to the Senior PM in the session of 2026-11-18 with PR and file path; seven
+  questions for the pass are at the foot of the list.
+
 ## 2026-11-18 — W311: beacon write guard (T10 to T12)
 
 - MIGRATION `20261118000000_w311_beacon_write_guard.sql`:
