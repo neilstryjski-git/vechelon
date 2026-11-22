@@ -18,6 +18,10 @@
 --       - everyone else gets the Captain's and SAG's phones, and their own;
 --       - no rider's phone goes to another rider.
 --   * Never returned to anyone: last position, last ping, email.
+--     The app's join writes display_name = name, or the member's EMAIL when the account has
+--     no name yet (mobile/src/lib/rideJoin.ts). So a display_name containing '@' is never
+--     used as a name here: the row comes back with a null name and the app shows its own
+--     "Unnamed rider" text.
 --
 -- Name and phone source: the account record first (a member's current name and number),
 -- the participant row second (a guest has no account; a member's row may carry a per-ride
@@ -32,7 +36,8 @@
 -- caller-is-leader test, with no change to the return shape. Not built here.
 -- The two timestamps are returned as well: the app's cache and its offline path use them.
 --
--- get_ride_roster_contacts is left as it is: the web admin uses it.
+-- get_ride_roster_contacts is left as it is. Nothing in admin/src or mobile/src calls it
+-- today; it remains the path that gives a club admin who is not on the ride the contacts.
 --
 -- supabase-patterns walkthrough:
 --   * Pattern 1 (recursion): no policy is created or changed, and no policy calls this
@@ -75,7 +80,11 @@ AS $$
   SELECT
     p.id,
     p.account_id,
-    COALESCE(NULLIF(btrim(a.name), ''), NULLIF(btrim(p.display_name), '')),
+    COALESCE(
+      NULLIF(btrim(a.name), ''),
+      CASE WHEN position('@' in COALESCE(p.display_name, '')) = 0
+           THEN NULLIF(btrim(p.display_name), '') END
+    ),
     p.role::text,
     CASE
       WHEN p.account_id IS NULL        THEN 'roster_only'

@@ -414,7 +414,7 @@ export const cases = [
 
   {
     id: 'T6.3', rule: 'T6',
-    title: 'The roster marks a guest as roster-only, and a rider reads their own phone (W313)',
+    title: 'The roster marks a guest as roster-only, a rider reads their own phone, and no email is sent as a name (W313)',
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const roster = await riderRoster(db(ctx, u.riderB), rides.main.id);
@@ -422,6 +422,20 @@ export const cases = [
       const guest = roster.rows.find((r) => r.account_id == null && r.name === GUEST.name);
       rule(guest?.participation === 'roster_only' && guest?.role === 'guest', `the guest reads as ${guest?.role} / ${guest?.participation}`);
       rule(roster.rows.find((r) => r.account_id === u.riderB.id)?.phone === u.riderB.phone, 'rider B does not get their own phone back');
+      // A row whose display_name is the member's email (what the app's join writes when the
+      // account has no name) must not hand that email to other riders as a name.
+      const { data: row } = await ctx.admin.from('ride_participants').select('id, display_name')
+        .eq('ride_id', rides.main.id).eq('account_id', u.riderA.id).single();
+      await ctx.admin.from('accounts').update({ name: null }).eq('id', u.riderA.id);
+      await ctx.admin.from('ride_participants').update({ display_name: u.riderA.email }).eq('id', row.id);
+      try {
+        const again = await riderRoster(db(ctx, u.riderB), rides.main.id);
+        control(!again.error, `roster read failed: ${again.error?.message}`);
+        rule(leaks(again.raw, u.riderA.email).length === 0, 'rider A\'s email reached rider B as a roster name');
+      } finally {
+        await ctx.admin.from('accounts').update({ name: u.riderA.name }).eq('id', u.riderA.id);
+        await ctx.admin.from('ride_participants').update({ display_name: row.display_name }).eq('id', row.id);
+      }
       const states = new Set(roster.rows.map((r) => r.participation));
       rule([...states].every((v) => ['roster_only', 'app_tracked', 'departed'].includes(v)), `unknown participation value sent to a rider: ${[...states].join(', ')}`);
     },

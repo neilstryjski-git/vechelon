@@ -1796,5 +1796,19 @@ Notes:
   earlier Sprint 2 migrations (W311, W312, the function above) go to staging one file at a time.
 - TESTS: denial suite roster readers moved to the function (`layout.mjs`); T5.4 and T6.3 added.
   T5.1 to T5.3 stay red until D50.
+- REVIEW r1 (`stride:task-reviewer`: 0 critical, 3 important, 1 minor; all 7 criteria met;
+  recursion traced clean), all addressed:
+  - An email could reach riders as a name: the app's join writes `display_name = name ?? email`.
+    The function no longer uses a display_name containing `@`; T6.3 proves it.
+  - The test fixture copied every member's name and phone onto the participant row, as the
+    trigger would, so T6 and T7 could pass without the account read. Two rows (co-Captain,
+    never-opened member) are now written as the web writes them, with neither.
+  - The hold on the trigger drop was a comment only. The file now refuses to run while the
+    trigger exists unless the session sets `rail3.w317_cutover = 'yes'`, so a bulk push to
+    staging stops there with an error.
+  - Comment corrected: nothing calls `get_ride_roster_contacts` today.
+- KNOWN, OUTSIDE THIS TICKET: `mobile/src/hooks/useFleetPositions.ts:118-128` reads name and phone
+  off participant rows for the map. After the trigger is dropped, rows the app did not write
+  itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 

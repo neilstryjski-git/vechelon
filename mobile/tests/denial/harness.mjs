@@ -375,13 +375,16 @@ export async function buildFixtures(ctx) {
   ok(
     await admin.from('ride_participants').insert([
       part(fx.rides.main, u.captain, 'captain'),
-      part(fx.rides.main, u.coCaptain, 'captain'),
+      // W313: two rows as the WEB writes them (an RSVP made outside the app): no name and no
+      // phone on the row. On staging a hand-made trigger used to fill these in; the roster
+      // function must get them from the account instead, and T6 / T7 prove it on these rows.
+      part(fx.rides.main, u.coCaptain, 'captain', { display_name: null, phone: null }),
       part(fx.rides.main, u.sag, 'support'),
       part(fx.rides.main, u.actor, 'support'),
       part(fx.rides.main, u.riderA, 'member', { last_lat: POS.lat, last_long: POS.lng, last_ping: now }),
       part(fx.rides.main, u.riderB, 'member'),
       part(fx.rides.main, u.departed, 'member', { departed_at: now }),
-      part(fx.rides.main, u.neverOpened, 'member', { rail3_joined_at: null, status: 'rsvpd' }),
+      part(fx.rides.main, u.neverOpened, 'member', { rail3_joined_at: null, status: 'rsvpd', display_name: null, phone: null }),
       // A guest: no account, no app. On the roster only (Pillar II §4.1 ROSTER).
       {
         ride_id: fx.rides.main.id, account_id: null, role: 'guest', status: 'rsvpd',
