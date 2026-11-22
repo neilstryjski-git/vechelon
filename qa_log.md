@@ -25,8 +25,15 @@ the on-device check on the Play build are recorded below when run.
 Rules after W311 on the local stack: 10 pass (T3, T6, T7, T8, T10, T11, T12, T14, T15, T16),
 6 fail (T1, T2, T4, T5, T9, T13).
 
-Not yet run: the migration on staging; raise, self-cancel and Captain or SAG cancel on the
-Play build (versionCode 4).
+**Staging, 2026-11-22** (Senior PM approved the apply). The migration was trialled in a
+rolled-back transaction, then applied on its own and recorded in the migration history
+(version 20261118000000). Staging had 0 open beacons. Run against staging afterwards:
+T10.1, T10.2, T11.0 to T11.4, T12.1, T14.1, T14.2 and T16.1 to T16.4 all pass; zero leftover
+rows; beacon count unchanged at 119. Evidence: `~/vechelon-backups/w311-w312-staging/`
+(state before and after, and the run report).
+
+Not yet run: raise, self-cancel and Captain or SAG cancel on the Play build (versionCode 4),
+by the Senior PM.
 
 Also recorded: staging was set to private realtime channels only on 2026-11-18 (Senior PM
 approved). Checked on staging the same day: T3, T4.1 and T8 pass (private channels work) and

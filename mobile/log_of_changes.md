@@ -1789,5 +1789,9 @@ Notes:
   committed by mistake (removed; `.gitignore` now also matches a link); T14.2 added for the one
   client path that depends on trigger order (a rider's raise after ride end); qa_log records CI
   results, not expectations.
+- STAGING 2026-11-22 (Senior PM approved): applied to `xybgtbybdhxuwqjfcfkc` as a single file through
+  the Management API, inside one transaction with its `schema_migrations` row, after a
+  rolled-back trial. Not a bulk push: later Sprint 2 migrations are held off staging. The
+  W311 cases pass on staging (see `qa_log.md`).
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
