@@ -11,11 +11,13 @@ is absent there: these results are the roster working without it.
 
 | Case | Before W313 | After (CI) | What it proves |
 |---|---|---|---|
-| T5.4 (new) | — | RESULT_T54 | Through the function: a rider gets no other rider's, guest's or departed rider's phone, no position, no extra columns; a club member off the roster and another club's member and admin get no rows |
-| T6.1, T6.2 | Pass (table read) | RESULT_T6 | Now read through the function: every row by name and state; the Captain's, co-Captain's and SAG's phones |
-| T6.3 (new) | — | RESULT_T63 | The guest is marked roster-only; a rider gets their own phone back; only the three known participation values reach a rider |
-| T7.1 to T7.3 | Pass (table read plus contacts function) | RESULT_T7 | Now through the function: Captain and SAG read every phone, the guest's included; co-Captains read each other's |
+| T5.4 (new) | — | Passes | Through the function: a rider gets no other rider's, guest's or departed rider's phone, no position, no extra columns; a club member off the roster and another club's member and admin get no rows |
+| T6.1, T6.2 | Pass (table read) | Pass | Now read through the function: every row by name and state; the Captain's, co-Captain's and SAG's phones |
+| T6.3 (new) | — | Passes | The guest is marked roster-only; a rider gets their own phone back; only the three known participation values reach a rider |
+| T7.1 to T7.3 | Pass (table read plus contacts function) | Pass | Now through the function: Captain and SAG read every phone, the guest's included; co-Captains read each other's |
 | T5.1 to T5.3 | Fail | Fail (expected) | The table itself still returns phones and positions to club members. That is D50, not this ticket |
+
+Source: Rail 3 CI run 45054913692 on pull request #169; zero leftover rows.
 
 Unit tests: `mobile/tests/rosterLogic.test.mjs`, seven new cases for the mapping from the
 function result to roster rows per role (29 pass with the roster cache tests).
