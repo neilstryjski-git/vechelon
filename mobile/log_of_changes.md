@@ -1782,5 +1782,9 @@ Notes:
   traced clean (actor_deleted < W311 audit guard < reason guard); 1 minor (QA log wording), fixed.
 - MERGE NOTE: W311 and W312 both edit `baseline.json`, `qa_log.md` and this log. On the second
   merge keep T13.1 green, T13.2, T10.2, T14.2 and `targets.staging` in the baseline.
+- STAGING 2026-11-22 (Senior PM approved): applied to `xybgtbybdhxuwqjfcfkc` as a single file through
+  the Management API, inside one transaction with its `schema_migrations` row, after a
+  rolled-back trial. Not a bulk push: later Sprint 2 migrations are held off staging. The
+  W312 cases pass on staging (see `qa_log.md`).
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 

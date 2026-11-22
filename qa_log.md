@@ -20,7 +20,11 @@ in the same CI job and passed. The CI database has every migration applied, so t
 table and the new trigger exist there; the test's accounts have no beacon rows, so the
 deletion's beacon update matches nothing and the deletion completes.
 
-Not yet run: the migration on staging.
+**Staging, 2026-11-22** (Senior PM approved the apply). Trialled in a rolled-back transaction,
+then applied on its own and recorded in the migration history (version 20261118010000). Run
+against staging afterwards: T13.1, T13.2, T12.1 and T14.1 pass; zero leftover rows. The
+ticket's check, closed rows with a blank actor and a blank reason: 0 before, 0 after.
+Evidence: `~/vechelon-backups/w311-w312-staging/`.
 
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
