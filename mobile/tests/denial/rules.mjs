@@ -426,9 +426,11 @@ export const cases = [
       // account has no name) must not hand that email to other riders as a name.
       const { data: row } = await ctx.admin.from('ride_participants').select('id, display_name')
         .eq('ride_id', rides.main.id).eq('account_id', u.riderA.id).single();
-      await ctx.admin.from('accounts').update({ name: null }).eq('id', u.riderA.id);
-      await ctx.admin.from('ride_participants').update({ display_name: u.riderA.email }).eq('id', row.id);
       try {
+        const blank = await ctx.admin.from('accounts').update({ name: '' }).eq('id', u.riderA.id).select('name');
+        const asEmail = await ctx.admin.from('ride_participants').update({ display_name: u.riderA.email }).eq('id', row.id).select('display_name');
+        control(!blank.error && blank.data?.[0]?.name === '' && asEmail.data?.[0]?.display_name === u.riderA.email,
+          `could not set up the email-as-name row (${blank.error?.message ?? asEmail.error?.message ?? 'no row'})`);
         const again = await riderRoster(db(ctx, u.riderB), rides.main.id);
         control(!again.error, `roster read failed: ${again.error?.message}`);
         rule(leaks(again.raw, u.riderA.email).length === 0, 'rider A\'s email reached rider B as a roster name');
