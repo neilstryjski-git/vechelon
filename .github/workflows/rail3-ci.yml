@@ -122,7 +122,19 @@ jobs:
             *127.0.0.1*|*localhost*) : ;;  # ok — local only
             *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
           esac
-          supabase db reset --local --no-seed
+          # The reset applies every migration, then restarts the service containers and calls
+          # one of them through the gateway. That last call sometimes returns 502 (the gateway
+          # still holds a restarted service's old address) although the database is complete.
+          # So a failed reset is accepted only when the database proves it has every migration.
+          if ! supabase db reset --local --no-seed; then
+            echo "::warning::supabase db reset exited non-zero; checking the database itself"
+            docker ps --filter name=supabase_kong -q | xargs -r docker restart
+            want=$(ls supabase/migrations/*.sql | sed 's|.*/||; s|_.*||' | sort | tail -1)
+            count=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
+            got=$(psql "$DB_URL" -At -c "select max(version) || ' ' || count(*) from supabase_migrations.schema_migrations")
+            echo "migrations wanted: $want $count; database has: $got"
+            [ "$got" = "$want $count" ] || { echo "::error::the rebuild did not apply every migration"; exit 1; }
+          fi
           mkdir -p schema-out
           supabase db dump --local -f schema-out/trunk_schema.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -At -f supabase/tests/schema_fingerprint.sql > schema-out/trunk_fingerprint.json
