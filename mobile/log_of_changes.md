@@ -1819,5 +1819,31 @@ Notes:
   the Management API, inside one transaction with its `schema_migrations` row, after a
   rolled-back trial. Not a bulk push: later Sprint 2 migrations are held off staging. The
   W311 cases pass on staging (see `qa_log.md`).
+
+## 2026-11-18 — W312: `actor_deleted` reason on account deletion (T13)
+
+- MIGRATION `20261118010000_w312_beacon_actor_deleted.sql`: the reason check constraint now
+  allows `actor_deleted`; trigger `trg_rail3_beacon_actor_deleted` (BEFORE UPDATE OF
+  `beacon_cancelled_by`) sets it when the server removes the actor from a closed beacon that has
+  no reason. `ride_ended` rows are untouched.
+- LLD: a trigger, not an edit to `delete_account_data`. The rule holds in the statement that
+  blanks the actor, and the 280-line W299 function is not forked for one line. Consequence,
+  accepted: any server update that removes an actor from a closed, reasonless row is marked
+  `actor_deleted`, not only account deletion. The deletion function is the only such writer.
+- TICKET CORRECTION: the ticket says the foreign key on `beacon_cancelled_by` is ON DELETE SET
+  NULL. It is ON DELETE RESTRICT (schema migration and staging both); W299's function blanks
+  the actor itself before deleting the account.
+- SERVER-ONLY: the trigger returns at once for API roles. `delete_account_data` is SECURITY
+  DEFINER and unchanged, caller check included.
+- NO BACKFILL: staging has 0 closed rows with a blank actor and a blank reason (2026-11-18).
+- TESTS: baseline flips T13.1 to green; T13.2 added (no client can have the reason written).
+- REVIEW r1 (`stride:task-reviewer`): approved, all 6 criteria met, recursion and trigger order
+  traced clean (actor_deleted < W311 audit guard < reason guard); 1 minor (QA log wording), fixed.
+- MERGE NOTE: W311 and W312 both edit `baseline.json`, `qa_log.md` and this log. On the second
+  merge keep T13.1 green, T13.2, T10.2, T14.2 and `targets.staging` in the baseline.
+- STAGING 2026-11-22 (Senior PM approved): applied to `xybgtbybdhxuwqjfcfkc` as a single file through
+  the Management API, inside one transaction with its `schema_migrations` row, after a
+  rolled-back trial. Not a bulk push: later Sprint 2 migrations are held off staging. The
+  W312 cases pass on staging (see `qa_log.md`).
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 

@@ -785,6 +785,27 @@ export const cases = [
       }
     },
   },
+  {
+    id: 'T13.2', rule: 'T13',
+    title: 'No client can have actor_deleted written: not directly, and not by blanking the actor',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      try {
+        const at = '2026-01-01T00:00:00+00:00';
+        const b = await adminBeacon(ctx, rides.main, u.riderA, { beacon_cancelled_at: at, beacon_cancelled_by: u.captain.id });
+        for (const who of [u.riderA, u.captain, u.clubAdmin]) {
+          const c = db(ctx, who);
+          await c.from('beacon_alerts').update({ beacon_cancel_reason: 'actor_deleted' }).eq('id', b.id);
+          await c.from('beacon_alerts').update({ beacon_cancelled_by: null }).eq('id', b.id);
+        }
+        const t = await beaconTruth(ctx, b.id);
+        control(t != null, 'the beacon row disappeared');
+        rule(t.beacon_cancel_reason == null, `a client got reason=${t.beacon_cancel_reason} written onto a beacon`);
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
+    },
+  },
 
   // ── T15 ────────────────────────────────────────────────────────────────────
   // W310 finding: the public `ride:<id>` channel had one subscriber (admin useRideRealtime)

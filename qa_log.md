@@ -2,6 +2,30 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-18 — W312: the `actor_deleted` reason, rule T13
+
+Change: one migration, `20261118010000_w312_beacon_actor_deleted.sql`. Results below are from
+Rail 3 CI on the pull request (local stack). Staging is recorded when the migration is applied.
+
+| Case | Before W312 | After (CI) | What it proves |
+|---|---|---|---|
+| T13.1 | Fails | Passes | Deleting an account turns that person's past cancels into `actor_deleted`; a `ride_ended` row is unchanged |
+| T13.2 (new) | — | Passes | A client cannot get `actor_deleted` written, directly or by blanking the actor |
+
+Rule T13 passes on the local stack (Rail 3 CI run 44451287671, pull request #168); zero
+leftover rows.
+
+Account deletion with no beacon history: `supabase/tests/w299_account_deletion.test.sql` runs
+in the same CI job and passed. The CI database has every migration applied, so the beacon
+table and the new trigger exist there; the test's accounts have no beacon rows, so the
+deletion's beacon update matches nothing and the deletion completes.
+
+**Staging, 2026-11-22** (Senior PM approved the apply). Trialled in a rolled-back transaction,
+then applied on its own and recorded in the migration history (version 20261118010000). Run
+against staging afterwards: T13.1, T13.2, T12.1 and T14.1 pass; zero leftover rows. The
+ticket's check, closed rows with a blank actor and a blank reason: 0 before, 0 after.
+Evidence: `~/vechelon-backups/w311-w312-staging/`.
+
 ## 2026-11-18 — W311: beacon insert and cancel tightening, rules T10 to T12
 
 Change: one migration, `20261118000000_w311_beacon_write_guard.sql`. The "After" column is the
