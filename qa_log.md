@@ -9,11 +9,17 @@ Rail 3 CI on the pull request (local stack). Staging is recorded when the migrat
 
 | Case | Before W312 | After (CI) | What it proves |
 |---|---|---|---|
-| T13.1 | Fails | See the pull request's CI run | Deleting an account turns that person's past cancels into `actor_deleted`; a `ride_ended` row is unchanged |
-| T13.2 (new) | — | See the pull request's CI run | A client cannot get `actor_deleted` written, directly or by blanking the actor |
+| T13.1 | Fails | Passes | Deleting an account turns that person's past cancels into `actor_deleted`; a `ride_ended` row is unchanged |
+| T13.2 (new) | — | Passes | A client cannot get `actor_deleted` written, directly or by blanking the actor |
 
-Account deletion with no beacon history: covered by the existing W299 deletion tests in
-`mobile/tests/rlsIsolation.test.mjs`, which run in the same CI job.
+Rule T13 passes on the local stack (Rail 3 CI run 44451287671, pull request #168); zero
+leftover rows.
+
+Account deletion with no beacon history: `supabase/tests/w299_account_deletion.test.sql` runs
+in the same CI job and passed. It deletes accounts on the base schema, where no beacon rows
+exist, so it shows the deletion path is not disturbed by the new trigger.
+
+Not yet run: the migration on staging.
 
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
