@@ -18,6 +18,8 @@ cleaned_tasks.json
 
 # Dependencies
 node_modules/
+# also a symlinked node_modules (a trailing slash does not match a link)
+node_modules
 package-lock.json
 
 # Build artifacts — never commit compiled output
