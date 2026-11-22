@@ -155,6 +155,13 @@ jobs:
           # answers again (seen as "transport failure" for the whole run). Restart it so it
           # boots against the rebuilt database; the suite waits until it delivers.
           docker ps --filter name=supabase_realtime -q | xargs -r docker restart
+          # W313: the gateway holds the address Realtime had before the restart. When the
+          # restart gives Realtime a new address the gateway answers 502 for the whole run while
+          # Realtime itself is healthy and sees no connection (run 45056606867). Restart the
+          # gateway after Realtime so it resolves the new address.
+          sleep 5
+          docker ps --filter name=supabase_kong -q | xargs -r docker restart
+          sleep 5
           # The suite waits (up to DENIAL_READY_MS) until Realtime delivers a message. If it
           # never does, print Realtime's own log so the cause is on record.
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
@@ -163,6 +170,8 @@ jobs:
               echo "::group::Realtime container log (last 80 lines)"
               docker ps --filter name=supabase_realtime --format '{{.Names}} {{.Status}}'
               docker ps -a --filter name=supabase_realtime -q | xargs -r -n1 docker logs --tail 80 2>&1 || true
+              echo "--- gateway (kong), last 30 lines"
+              docker ps -a --filter name=supabase_kong -q | xargs -r -n1 docker logs --tail 30 2>&1 || true
               echo "::endgroup::"
               exit $code
             }
