@@ -26,6 +26,43 @@ against staging afterwards: T13.1, T13.2, T12.1 and T14.1 pass; zero leftover ro
 ticket's check, closed rows with a blank actor and a blank reason: 0 before, 0 after.
 Evidence: `~/vechelon-backups/w311-w312-staging/`.
 
+## 2026-11-18 — W311: beacon insert and cancel tightening, rules T10 to T12
+
+Change: one migration, `20261118000000_w311_beacon_write_guard.sql`. The "After" column is the
+result of Rail 3 CI on pull request #166 (local stack, every migration replayed). Staging and
+the on-device check on the Play build are recorded below when run.
+
+| Case | Before W311 | After (CI) | What it proves |
+|---|---|---|---|
+| T10.1 | Fails | Passes | A rider cannot insert a beacon in another rider's name |
+| T10.2 (new) | — | Passes | A beacon cannot be inserted already cancelled |
+| T11.0 (control) | Passes | Passes | Own rider, Captain and SAG can each still cancel |
+| T11.1 | Fails | Passes | A club admin off the ride, or another rider, cannot cancel |
+| T11.2 | Fails | Passes | Position, time and rider columns cannot be rewritten |
+| T11.3 | Fails | Passes | A closed beacon cannot be re-opened or overwritten |
+| T11.4 | Fails | Passes | The canceller recorded is the caller, never blank or someone else |
+| T12.1 | Passes | Passes | No client writes `beacon_cancel_reason` |
+| T14.1 | Passes | Passes | Ride end still closes open beacons with `ride_ended` |
+| T14.2 (new) | — | Passes | A rider's delayed raise after ride end is still recorded, closed with `ride_ended` |
+| T16.2 | Fails | Passes | Another club's member cannot attach a beacon to this club's ride |
+
+Rules after W311 on the local stack: 10 pass (T3, T6, T7, T8, T10, T11, T12, T14, T15, T16),
+6 fail (T1, T2, T4, T5, T9, T13).
+
+**Staging, 2026-11-22** (Senior PM approved the apply). The migration was trialled in a
+rolled-back transaction, then applied on its own and recorded in the migration history
+(version 20261118000000). Staging had 0 open beacons. Run against staging afterwards:
+T10.1, T10.2, T11.0 to T11.4, T12.1, T14.1, T14.2 and T16.1 to T16.4 all pass; zero leftover
+rows; beacon count unchanged at 119. Evidence: `~/vechelon-backups/w311-w312-staging/`
+(state before and after, and the run report).
+
+Not yet run: raise, self-cancel and Captain or SAG cancel on the Play build (versionCode 4),
+by the Senior PM.
+
+Also recorded: staging was set to private realtime channels only on 2026-11-18 (Senior PM
+approved). Checked on staging the same day: T3, T4.1 and T8 pass (private channels work) and
+T15.2 passes (a public channel is refused). Production is owed the same setting at Gate B.
+
 ## 2026-11-18 — W310: public web `ride:<id>` channel, rule T15
 
 Finding: the channel had one subscriber and one sender in the web app, both dead code (never

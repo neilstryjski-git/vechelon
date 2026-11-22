@@ -526,6 +526,24 @@ export const cases = [
     },
   },
 
+  {
+    id: 'T10.2', rule: 'T10',
+    title: 'A beacon cannot be inserted already cancelled (W311: a new beacon arrives open)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      try {
+        await db(ctx, u.riderA).from('beacon_alerts').insert({
+          tenant_id: tenants.x.id, ride_id: rides.main.id, rider_id: u.riderA.id,
+          beacon_cancelled_at: iso(), beacon_cancelled_by: u.captain.id,
+        });
+        const { data } = await ctx.admin.from('beacon_alerts').select('id').eq('ride_id', rides.main.id).eq('rider_id', u.riderA.id);
+        rule((data?.length ?? 0) === 0, 'a rider inserted a beacon that already names the Captain as its canceller');
+      } finally {
+        await clearBeacons(ctx, rides.main);
+      }
+    },
+  },
+
   // ── T11 ────────────────────────────────────────────────────────────────────
   {
     id: 'T11.0', rule: 'T11',
@@ -685,6 +703,27 @@ export const cases = [
       rule(t?.beacon_cancelled_by === u.captain.id, 'the ender was not recorded on the closed beacon');
       const { data: flags } = await ctx.admin.from('ride_participants').select('id').eq('ride_id', rides.ending.id).eq('beacon_active', true);
       rule((flags?.length ?? 0) === 0, 'a beacon flag is still set after ride end');
+    },
+  },
+  {
+    id: 'T14.2', rule: 'T14', needs: ['T14.1'],
+    title: 'A beacon raised by a rider after the ride ended is still recorded, closed with ride_ended (W311 guard order)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      control(ctx.state.endingRideEnded === true, 'T14.1 has to run first: it ends the ride');
+      // The W311 guard refuses a client insert that arrives cancelled. The server's own
+      // late-beacon close sets the cancel fields on the same insert, so it must run after the
+      // guard (triggers fire in name order). A rename that reverses them fails here.
+      const ins = await db(ctx, u.riderB).from('beacon_alerts')
+        .insert({ tenant_id: tenants.x.id, ride_id: rides.ending.id, rider_id: u.riderB.id, lat: 43.66, long: -79.39 });
+      const { data } = await ctx.admin.from('beacon_alerts').select('id, beacon_cancelled_at, beacon_cancel_reason')
+        .eq('ride_id', rides.ending.id).eq('rider_id', u.riderB.id);
+      try {
+        rule(!ins.error && data?.length === 1, `the delayed raise was refused or lost (${ins.error?.message ?? 'no row'})`);
+        rule(data[0].beacon_cancelled_at != null && data[0].beacon_cancel_reason === 'ride_ended', 'the delayed raise was not closed with ride_ended');
+      } finally {
+        await ctx.admin.from('beacon_alerts').delete().eq('ride_id', rides.ending.id).eq('rider_id', u.riderB.id);
+      }
     },
   },
   {

@@ -122,7 +122,19 @@ jobs:
             *127.0.0.1*|*localhost*) : ;;  # ok — local only
             *) echo "::error::Refusing to run: DB_URL is not a local address ($DB_URL)"; exit 1 ;;
           esac
-          supabase db reset --local --no-seed
+          # The reset applies every migration, then restarts the service containers and calls
+          # one of them through the gateway. That last call sometimes returns 502 (the gateway
+          # still holds a restarted service's old address) although the database is complete.
+          # So a failed reset is accepted only when the database proves it has every migration.
+          if ! supabase db reset --local --no-seed; then
+            echo "::warning::supabase db reset exited non-zero; checking the database itself"
+            docker ps --filter name=supabase_kong -q | xargs -r docker restart
+            want=$(ls supabase/migrations/*.sql | sed 's|.*/||; s|_.*||' | sort | tail -1)
+            count=$(ls supabase/migrations/*.sql | wc -l | tr -d ' ')
+            got=$(psql "$DB_URL" -At -c "select max(version) || ' ' || count(*) from supabase_migrations.schema_migrations")
+            echo "migrations wanted: $want $count; database has: $got"
+            [ "$got" = "$want $count" ] || { echo "::error::the rebuild did not apply every migration"; exit 1; }
+          fi
           mkdir -p schema-out
           supabase db dump --local -f schema-out/trunk_schema.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -At -f supabase/tests/schema_fingerprint.sql > schema-out/trunk_fingerprint.json
@@ -155,6 +167,13 @@ jobs:
           # answers again (seen as "transport failure" for the whole run). Restart it so it
           # boots against the rebuilt database; the suite waits until it delivers.
           docker ps --filter name=supabase_realtime -q | xargs -r docker restart
+          # W313: the gateway holds the address Realtime had before the restart. When the
+          # restart gives Realtime a new address the gateway answers 502 for the whole run while
+          # Realtime itself is healthy and sees no connection (run 45056606867). Restart the
+          # gateway after Realtime so it resolves the new address.
+          sleep 5
+          docker ps --filter name=supabase_kong -q | xargs -r docker restart
+          sleep 5
           # The suite waits (up to DENIAL_READY_MS) until Realtime delivers a message. If it
           # never does, print Realtime's own log so the cause is on record.
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
@@ -163,6 +182,8 @@ jobs:
               echo "::group::Realtime container log (last 80 lines)"
               docker ps --filter name=supabase_realtime --format '{{.Names}} {{.Status}}'
               docker ps -a --filter name=supabase_realtime -q | xargs -r -n1 docker logs --tail 80 2>&1 || true
+              echo "--- gateway (kong), last 30 lines"
+              docker ps -a --filter name=supabase_kong -q | xargs -r -n1 docker logs --tail 30 2>&1 || true
               echo "::endgroup::"
               exit $code
             }

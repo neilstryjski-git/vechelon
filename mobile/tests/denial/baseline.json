@@ -26,26 +26,33 @@
     "T9.1": "green",
     "T9.2": "red",
     "T9.3": "red",
-    "T10.1": "red",
+    "T10.1": "green",
     "T11.0": "green",
-    "T11.1": "red",
-    "T11.2": "red",
-    "T11.3": "red",
-    "T11.4": "red",
+    "T11.1": "green",
+    "T11.2": "green",
+    "T11.3": "green",
+    "T11.4": "green",
     "T12.1": "green",
     "T14.1": "green",
     "T4.4": "red",
     "T13.1": "green",
     "T15.1": "green",
     "T16.1": "green",
-    "T16.2": "red",
+    "T16.2": "green",
     "T16.3": "green",
     "T5.3": "red",
     "T16.4": "green",
     "T15.2": "red",
+    "T10.2": "green",
+    "T14.2": "green",
     "T13.2": "green"
   },
-  "targets": {},
-  "_advisory": "T15.2 is advisory (outside rule T15): it stays red until the Supabase project is set to private realtime channels only.",
+  "targets": {
+    "staging": {
+      "T15.2": "green"
+    }
+  },
+  "_advisory": "T15.2 is advisory (outside rule T15): red wherever the Supabase project still relays public realtime channels. Staging was set to private channels only on 2026-11-18 (Senior PM approved), so it is green there; the local stack has no such setting.",
+  "_w311": "W311 (2026-11-18): T10.1, T11.1 to T11.4 and T16.2 turned green; T10.2 and T14.2 added.",
   "_w312": "W312 (2026-11-18): T13.1 turned green; T13.2 added."
 }
