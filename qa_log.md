@@ -16,8 +16,9 @@ Rule T13 passes on the local stack (Rail 3 CI run 44451287671, pull request #168
 leftover rows.
 
 Account deletion with no beacon history: `supabase/tests/w299_account_deletion.test.sql` runs
-in the same CI job and passed. It deletes accounts on the base schema, where no beacon rows
-exist, so it shows the deletion path is not disturbed by the new trigger.
+in the same CI job and passed. The CI database has every migration applied, so the beacon
+table and the new trigger exist there; the test's accounts have no beacon rows, so the
+deletion's beacon update matches nothing and the deletion completes.
 
 Not yet run: the migration on staging.
 

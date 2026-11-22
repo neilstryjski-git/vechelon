@@ -1778,5 +1778,9 @@ Notes:
   DEFINER and unchanged, caller check included.
 - NO BACKFILL: staging has 0 closed rows with a blank actor and a blank reason (2026-11-18).
 - TESTS: baseline flips T13.1 to green; T13.2 added (no client can have the reason written).
+- REVIEW r1 (`stride:task-reviewer`): approved, all 6 criteria met, recursion and trigger order
+  traced clean (actor_deleted < W311 audit guard < reason guard); 1 minor (QA log wording), fixed.
+- MERGE NOTE: W311 and W312 both edit `baseline.json`, `qa_log.md` and this log. On the second
+  merge keep T13.1 green, T13.2, T10.2, T14.2 and `targets.staging` in the baseline.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
