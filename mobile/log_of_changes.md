@@ -1899,3 +1899,24 @@ Notes:
   itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
+## 2026-11-22 — D94: ride scoping on broadcast subscribe and send (T1)
+
+- MIGRATION `20261122000000_d94_ride_scoped_broadcast.sql`: the two `realtime.messages`
+  policies for `rail3:ride:<id>` now ask "is the caller on this ride" instead of "is the caller
+  in this club". Receive: on the ride, or an admin of the ride's club (Race Control). Send: on
+  the ride. New helpers `rail3_topic_ride_id(topic)` and `rail3_on_ride(ride)` (SECURITY DEFINER,
+  one lookup: participant row, `rail3_joined_at` set, `departed_at` null, still affiliated).
+- LLD: admins receive but do not send (nothing in Race Control sends). Policy names are kept
+  (`rail3_broadcast_tenant_receive` / `_send`) and altered in place; W193 replaces the layout.
+  After a ride ends its participants are still admitted (no departure mark is written at ride
+  end), which the ride-end `depart` message needs; stopping delivery after ride end is T4.4, W193.
+- APP: `RideMapScreen` opens the channel once its join attempt has settled (or after 5 s), since
+  the server now refuses a subscribe that arrives before the participant row or mark.
+- PLAY BUILD (vc4): keeps working, with one visible change: on a first open of a ride, or a
+  rejoin, the first subscribe is refused and the app's retry connects about 2 s later, showing
+  "CHANNEL DENIED" for that moment. Departure is unaffected (broadcast first, mark second).
+  Staging apply is the Senior PM's call on that basis; NOT applied.
+- TESTS: baseline flips T1.1 to T1.3 to green locally and records them red for the staging
+  target until D94 is applied there. `rlsIsolation.test.mjs` updated to the new rule.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+

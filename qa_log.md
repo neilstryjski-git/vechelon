@@ -2,6 +2,35 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-22 — D94: ride scoping on the channel, rule T1
+
+Change: migration `20261122000000_d94_ride_scoped_broadcast.sql`. Results from Rail 3 CI on
+pull request #170 (local stack).
+
+| Case | Before D94 | After (CI) | What it proves |
+|---|---|---|---|
+| T1.1 | Fails | Passes | A club member off the ride cannot subscribe to the ride's channel |
+| T1.2 | Fails | Passes | Nobody off the ride (off-ride member, departed rider, member who never opened it) can send on it, by REST or socket |
+| T1.3 | Fails | Passes | A rider who has left cannot subscribe again |
+| T3.1, T3.2, T4.1 | Pass | Pass | People on the ride still receive leaders' positions and beacon state |
+| T8.1, T8.2 | Pass | Pass | A club admin who is not on the ride still subscribes (Race Control); another club's admin does not |
+| T16.1 to T16.4 | Pass | Pass | Cross-club isolation holds |
+
+Rules after D94 on the local stack: 12 pass, 4 fail (T2, T4, T5, T9: W193 and D50).
+
+The older isolation matrix (`mobile/tests/rlsIsolation.test.mjs`) asserted the old rule, that
+any club member could join a ride's channel. It now asserts the new one: a rider on the ride
+joins and sends; a member with an RSVP who never opened the ride is refused.
+
+**Play build (versionCode 4) compatibility, read from the code, not yet seen on a device.**
+The app opens the channel at the same moment it writes its join. With D94 on the server, a
+first open of a ride (or a rejoin after leaving) is refused once and connects on the app's
+own retry about 2 seconds later; the map shows the "CHANNEL DENIED" chip for that moment.
+Leaving is unaffected: the app sends its departure message before it writes the departure
+mark. The next build opens the channel after the join has settled, so it never sees the chip.
+
+Not yet run: D94 on staging; the Play build against it.
+
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 
 Change: `get_ride_roster(ride)` (migration `20261118020000`), the mobile roster screen switched
