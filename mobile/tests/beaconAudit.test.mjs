@@ -81,8 +81,10 @@ before(async () => {
   // ride_participants roles: rider is a member participant, captain is captain.
   assert.ifError(
     (await admin.from('ride_participants').insert([
-      { ride_id: ride.id, account_id: fx.rider.id, role: 'member', status: 'rsvpd' },
-      { ride_id: ride.id, account_id: fx.captain.id, role: 'captain', status: 'rsvpd' },
+      // W193: beacon rows are readable by people ON the ride (opened it in the app), so both
+      // fixture participants carry the first-open mark, as a rider raising a beacon always does.
+      { ride_id: ride.id, account_id: fx.rider.id, role: 'member', status: 'rsvpd', rail3_joined_at: new Date().toISOString() },
+      { ride_id: ride.id, account_id: fx.captain.id, role: 'captain', status: 'rsvpd', rail3_joined_at: new Date().toISOString() },
     ])).error,
   );
 });
