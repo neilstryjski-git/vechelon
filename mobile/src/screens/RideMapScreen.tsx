@@ -94,8 +94,13 @@ const RideMapScreen: React.FC = () => {
   const { session } = useAuth();
   const myRiderId = session?.user?.id ?? null;
   const { roster, refetchRoster } = useRideRoster(rideId);
+  // D94: the server admits only someone ON the ride to its channel (participant row with the
+  // first-open mark, no departure mark). The join effect below writes that row or mark, so the
+  // channel waits for it: subscribing first would be refused and only recover on the retry.
+  // Settled = the join attempt finished (either way) or 5 s passed; never a permanent gate.
+  const [joinSettled, setJoinSettled] = useState(false);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
-  const { channel, status } = useRideChannel(rideId);
+  const { channel, status } = useRideChannel(joinSettled ? rideId : null);
   // D63: enabled only after the W176 explainer flow grants BACKGROUND location.
   const [backgroundReady, setBackgroundReady] = useState(false);
   // W302: prominent-disclosure consent gate ahead of the background-location request.
@@ -220,7 +225,13 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     if (!myRiderId || !rideId) return;
     let cancelled = false;
+    setJoinSettled(false);
+    const settle = () => {
+      if (!cancelled) setJoinSettled(true);
+    };
+    const settleAnyway = setTimeout(settle, 5000); // D94: a slow or failed join never blocks the channel for good
     void (async () => {
+     try {
       // W292: a quick leave → re-open must read the row AFTER the departure's UPDATE has landed, or
       // the mark would be stamped on a present rider with nothing left to clear it. Bounded wait;
       // no pending departure resolves immediately.
@@ -259,9 +270,13 @@ const RideMapScreen: React.FC = () => {
         role: 'member',
       });
       if (rsvpErr) console.warn('[Rail3] self-RSVP failed', rsvpErr);
+     } finally {
+      settle(); // D94: the row or mark is written (or the attempt failed): open the channel now
+     }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(settleAnyway);
     };
   }, [myRiderId, rideId]);
 
