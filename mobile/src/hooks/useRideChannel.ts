@@ -98,7 +98,7 @@ export function useRideChannel(
       statusLogs += 1;
       lastLoggedStatus = s;
       // err.message only — never the token, the session, or a raw payload.
-      logChannelStatus(rideId, s, attempt, err?.message);
+      logChannelStatus(rideId, s, attempt, err?.message, kind);
     };
 
     // D55: a PRIVATE channel makes Realtime evaluate the realtime.messages RLS, which

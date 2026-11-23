@@ -52,20 +52,30 @@ export async function restBroadcast(
     // active (lib/channelLayout.ts). One request per topic: the server authorises each topic
     // by its own rule, and a refusal on one (sos, in the moment before the beacon flag lands
     // or after it clears) must not take the other with it.
-    await Promise.all(
-      sendTopicsFor(rideId, event).map((topic) =>
-        fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ messages: [{ topic, event, private: true, payload }] }),
-        }),
-      ),
+    // The result is true if at least one topic's request got through. NOTE: a send the
+    // topic's policy refuses is still answered 202 and simply not delivered, so the status
+    // cannot tell a refusal from a delivery; only transport and server errors show here.
+    const results = await Promise.all(
+      sendTopicsFor(rideId, event).map(async (topic) => {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ messages: [{ topic, event, private: true, payload }] }),
+          });
+          if (!res.ok) console.warn(`[Rail3] broadcast ${event} answered ${res.status} on ${topic.split(':')[1]}`);
+          return res.ok;
+        } catch (e) {
+          console.warn(`[Rail3] broadcast ${event} failed on ${topic.split(':')[1]}`, e);
+          return false;
+        }
+      }),
     );
-    return true;
+    return results.some(Boolean);
   } catch (e) {
     console.warn('[Rail3] broadcast failed', e);
     return false;

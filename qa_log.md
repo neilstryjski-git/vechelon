@@ -40,6 +40,12 @@ its stack with CLI 2.122.1, where the cases pass. The diagnostic case is removed
 on the same socket unanswered (newer local Realtime; once on staging). A timeout is not a
 refusal, so `listen` now asks each timed-out topic again on a connection of its own.
 
+**Review r1, 2026-11-23.** Found: beacon rows were readable by the Captain / SAG role alone
+(suspended, or never opened the ride). Fixed by migration `20261123010000`; T9.3 now also
+tries a SAG with no first-open mark and a suspended SAG, with a control that the same SAG
+reads the row normally. That migration is NOT on staging yet. Also added: unit tests for the
+channel multiplexer (8), role-read retry, and four more known limits (dev log, 5 to 8).
+
 **Known limits** (also in the dev log): a socket's send permission is cached at join; the
 `all` topic accepts any event name from anyone on the ride (both leak only the sender's own
 position); the rider's role is read when the ride opens.

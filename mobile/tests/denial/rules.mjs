@@ -695,6 +695,31 @@ export const cases = [
         if (rows.length) paths.push('beacon rows');
         if (flags.length) paths.push('beacon flags');
         if (l.joined.length) paths.push(`channels (${l.joined.join(', ')})`);
+        // W193 r1: the same for a LEADER. The role alone must not open the beacon rows: a SAG
+        // who has not opened the ride in the app, and a SAG suspended from the club.
+        const sagRows = () => read(db(ctx, u.sag).from('beacon_alerts').select('id').eq('ride_id', id));
+        control((await sagRows()).length > 0, 'a SAG on the ride could not read the beacon row');
+        const row = () => ctx.admin.from('ride_participants').update({ rail3_joined_at: null })
+          .eq('ride_id', id).eq('account_id', u.sag.id);
+        const member = (status) => ctx.admin.from('account_tenants').update({ status })
+          .eq('account_id', u.sag.id).eq('tenant_id', ctx.fx.tenants.x.id);
+        try {
+          const { error: e1 } = await row();
+          if (e1) throw new Error(`could not clear the SAG's first-open mark: ${e1.message}`);
+          if ((await sagRows()).length) paths.push('beacon rows (a SAG who never opened the ride)');
+        } finally {
+          const { error } = await ctx.admin.from('ride_participants').update({ rail3_joined_at: iso() })
+            .eq('ride_id', id).eq('account_id', u.sag.id);
+          if (error) throw new Error(`could not restore the SAG's first-open mark: ${error.message}`);
+        }
+        try {
+          const { error: e2 } = await member('suspended');
+          if (e2) throw new Error(`could not suspend the fixture SAG: ${e2.message}`);
+          if ((await sagRows()).length) paths.push('beacon rows (a suspended SAG)');
+        } finally {
+          const { error } = await member('affiliated');
+          if (error) throw new Error(`could not restore the fixture SAG: ${error.message}`);
+        }
         rule(paths.length === 0, `a participant who never opened the ride reached: ${paths.join('; ')}`);
       } finally {
         await clearBeacons(ctx, rides.main);

@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
 import { selfRsvpWithIdentity, markRail3Joined, markRail3Rejoined } from '../lib/rideJoin';
-import { isLeaderRole, setSendContext } from '../lib/channelLayout';
+import { listenKinds, receiveKinds, setSendContext, type ChannelKind } from '../lib/channelLayout';
 import { makeRideMux } from '../lib/rideMux';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
@@ -109,20 +109,23 @@ const RideMapScreen: React.FC = () => {
   // details; until they load this device behaves as a rider. `status` (the connection chip,
   // beacon NO SIGNAL) follows `all`, the channel the safety events travel on.
   const channelRideId = joinSettled ? rideId : null;
-  const leaderChannels = isLeaderRole(ride?.myRole);
+  // Which topics this device joins comes from the same table the tests pin (receiveKinds).
+  const joins = receiveKinds(ride?.myRole);
+  const topicRide = (kind: ChannelKind) => (joins.includes(kind) ? channelRideId : null);
   const { channel: allChannel, status } = useRideChannel(channelRideId, 'all');
-  const { channel: leadChannel } = useRideChannel(channelRideId, 'lead');
-  const { channel: crewChannel } = useRideChannel(leaderChannels ? channelRideId : null, 'crew');
-  const { channel: sosChannel } = useRideChannel(leaderChannels ? null : channelRideId, 'sos');
+  const { channel: leadChannel } = useRideChannel(topicRide('lead'), 'lead');
+  const { channel: crewChannel } = useRideChannel(topicRide('crew'), 'crew');
+  const { channel: sosChannel } = useRideChannel(topicRide('sos'), 'sos');
   // The hooks below still take one "channel"; the mux routes each handler and send to the
-  // right topic. Cast: the hooks are typed for a RealtimeChannel and use only .on and .send.
-  const channel = useMemo(
-    () =>
-      makeRideMux({ all: allChannel, lead: leadChannel, crew: crewChannel, sos: sosChannel }) as unknown as
-        | RealtimeChannel
-        | null,
-    [allChannel, leadChannel, crewChannel, sosChannel],
-  );
+  // right topic. It lives as long as `all` does (as the single channel did), so `lead`, `crew`
+  // or `sos` reconnecting on its own never resets the map. Cast: the hooks are typed for a
+  // RealtimeChannel and use only .on and .send.
+  const mux = useMemo(() => makeRideMux(allChannel, listenKinds), [allChannel]);
+  useEffect(() => {
+    mux?.attach({ lead: leadChannel, crew: crewChannel, sos: sosChannel });
+  }, [mux, leadChannel, crewChannel, sosChannel]);
+  useEffect(() => () => mux?.dispose(), [mux]);
+  const channel = mux as unknown as RealtimeChannel | null;
   // D50: the roster comes from functions that admit only someone with a row on the ride, so it
   // waits for the join as well.
   const { roster, refetchRoster } = useRideRoster(joinSettled ? rideId : null);

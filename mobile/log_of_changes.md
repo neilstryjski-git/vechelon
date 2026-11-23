@@ -2028,8 +2028,27 @@ Notes:
 - STAGING: the migration was APPLIED TO STAGING 2026-11-23 on the Senior PM's approval, to
   settle whether the hosted Realtime delivers a send from someone who may not receive on the
   topic. It does. Version 20261123000000 recorded; evidence `~/vechelon-backups/w193-staging/`.
-- CI: test stack moved from CLI 2.89.1 to 2.122.1 (its Realtime drops such a send). The pin is
-  the test stack's only; deploy commands keep their own.
+- CI: test stack moved from CLI 2.89.1 to 2.122.1. Observed, cause not isolated: the 2.89.1
+  stack does not deliver such a send, staging and the 2.122.1 stack do (qa_log.md 2026-11-23).
+  The pin is the test stack's only; deploy commands keep their own.
 - TEST HARNESS: a join that times out after another topic's refusal is retried on its own
   connection. `tests/beaconAudit.test.mjs` fixture riders carry the first-open mark.
+- REVIEW r1 (2026-11-23), migration `20261123010000_w193_r1_beacon_rows_and_null_action.sql`:
+  beacon rows no longer open to the Captain / SAG ROLE alone (a suspended or never-opened
+  leader read them; T9.3 now covers both); `rail3_channel_can(topic, NULL)` returns false.
+  NOT YET ON STAGING: staging carries 20261123000000 only until this one is approved.
+- REVIEW r1, APP: the mux now lives as long as the `all` channel and re-binds its handlers
+  when `lead` / `crew` / `sos` is replaced, so one topic reconnecting no longer resets the
+  map (`tests/rideMux.test.mjs`, 8). The screen's joins come from `receiveKinds`, the table
+  the tests pin. The role read retries for about three minutes and is repeated on every
+  resume, because the role now decides the wire routing. `channel_status` rows name the topic.
+- KNOWN LIMITS added by review r1: (5) a Captain or SAG who raises a beacon sends position on
+  `lead` only; a club admin (Race Control, not built) joins `all` and `sos`, so would get that
+  beacon without a moving position. To settle when Race Control is built. (6) The `sos` send
+  rule reads the rider's beacon flag, which the app writes beside the alert; if that write
+  fails, riders see the beacon without live position (leaders still get it on `crew`) until
+  the flag is re-asserted. (7) A demoted leader keeps the old routing until the next resume or
+  re-open; the server refuses what the new role may not do. (8) A REST send refused by policy
+  is answered 202, so the app cannot tell refusal from delivery. Limit (3) is now "at the next
+  resume" rather than "at the next open".
 
