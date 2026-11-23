@@ -134,23 +134,6 @@ export const cases = [
 
   // ── T2 ─────────────────────────────────────────────────────────────────────
   {
-    // TEMPORARY DIAGNOSTIC (W193): which half of the crew path fails on this stack?
-    id: 'T2.0', rule: 'T2', advisory: true,
-    title: 'DIAGNOSTIC: crew path, join and send separately',
-    run: async (ctx) => {
-      const { users: u, rides } = ctx.fx;
-      const id = rides.main.id;
-      const crew = `rail3:crew:${id}`;
-      const cap = await listen(ctx, u.captain, [crew]);
-      const st1 = await restSend(ctx, u.riderA, [crew], EVENTS.pos, posPayload(u.riderA, needle()));
-      const n2 = needle();
-      const st2 = await restSend(ctx, u.captain, [crew], EVENTS.pos, posPayload(u.captain, n2));
-      const capGotOwn = await arrives(ctx, cap, n2);
-      const ra = await listen(ctx, u.riderA, [crew]);
-      rule(false, `captain crew join: joined=${JSON.stringify(cap.joined)} why=${cap.why()}; riderA REST on crew: ${JSON.stringify(st1)}; captain REST on crew: ${JSON.stringify(st2)} arrived=${capGotOwn}; riderA crew join: joined=${JSON.stringify(ra.joined)} why=${ra.why()}`);
-    },
-  },
-  {
     id: 'T2.1', rule: 'T2',
     title: 'A rider on the ride receives no other rider\'s position over the wire',
     run: async (ctx) => {

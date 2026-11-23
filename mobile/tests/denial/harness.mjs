@@ -109,29 +109,38 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
   const statuses = {};
   const reasons = {};
   const channels = {};
-  await Promise.all(
-    topics.map(
-      (topic) =>
-        new Promise((resolve) => {
-          const ch = client.channel(topic, { config: { private: priv, broadcast: { self: false, ack: false } } });
-          channels[topic] = ch;
-          ch.on('broadcast', { event: '*' }, (m) => msgs.push({ topic, event: m.event, payload: m.payload }));
-          const timer = setTimeout(() => {
-            statuses[topic] ??= 'TIMED_OUT';
-            resolve();
-          }, ctx.target.timeouts.join);
-          ch.subscribe((status, err) => {
-            if (statuses[topic]) return;
-            if (err?.message) reasons[topic] = err.message;
-            if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-              statuses[topic] = status;
-              clearTimeout(timer);
-              resolve();
-            }
-          });
-        }),
-    ),
-  );
+  const joinOn = (cl, topic) =>
+    new Promise((resolve) => {
+      const ch = cl.channel(topic, { config: { private: priv, broadcast: { self: false, ack: false } } });
+      channels[topic] = ch;
+      ch.on('broadcast', { event: '*' }, (m) => msgs.push({ topic, event: m.event, payload: m.payload }));
+      const timer = setTimeout(() => {
+        statuses[topic] ??= 'TIMED_OUT';
+        resolve();
+      }, ctx.target.timeouts.join);
+      ch.subscribe((status, err) => {
+        if (statuses[topic]) return;
+        if (err?.message) reasons[topic] = err.message;
+        if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          statuses[topic] = status;
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+  await Promise.all(topics.map((topic) => joinOn(client, topic)));
+  // W193: with several topics per ride, one refused join can leave the other joins on the same
+  // socket unanswered (seen on the newer local Realtime and once on staging). A timeout proves
+  // nothing, so each topic that timed out is asked again alone, on a connection of its own.
+  const extras = [];
+  for (const topic of topics.filter((t) => statuses[t] === 'TIMED_OUT')) {
+    const alone = freshClient(ctx.target, user);
+    if (user) await alone.realtime.setAuth(user.token);
+    extras.push(alone);
+    delete statuses[topic];
+    delete reasons[topic];
+    await joinOn(alone, topic);
+  }
   const joined = topics.filter((t) => statuses[t] === 'SUBSCRIBED');
   // A join that failed because Realtime could not be reached is not a refusal. It makes the
   // case an error, never a pass or a finding.
@@ -168,11 +177,13 @@ export async function listen(ctx, user, topics, { priv = true } = {}) {
       }
     },
     close: async () => {
-      try {
-        await client.removeAllChannels();
-        client.realtime.disconnect();
-      } catch {
-        /* closing a denied channel can throw; nothing to do */
+      for (const c of [client, ...extras]) {
+        try {
+          await c.removeAllChannels();
+          c.realtime.disconnect();
+        } catch {
+          /* closing a denied channel can throw; nothing to do */
+        }
       }
     },
   };
