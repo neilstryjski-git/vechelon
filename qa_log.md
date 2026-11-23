@@ -77,8 +77,15 @@ Server rows read back from staging for each step.
 | Leave (rider) | Jigsaw | Departure mark set; last position cleared |
 | End Ride (Captain, after rejoin) | Jigsaw | Ride saved 03:32:19; no beacon left open |
 
-Criterion 6 (the Play build still connects with D94 on staging): met on the S23. The S21
-shows the older build connects too; it is not evidence for versionCode 4.
+Criterion 6 (the Play build still connects with D94 on staging): met on the S23, with one
+limit. The S23's account is a club ADMIN of Racer Sportif, so the admin branch admitted its
+subscribe at once; that is why no chip showed, and the refuse-then-retry path was not exercised
+on versionCode 4 itself. That path was exercised by the S21 (an ordinary member, first open,
+connected): its build is older, but `useRideChannel.ts`, `rideJoin.ts` and
+`backgroundLocation.ts` are byte-identical between `3892439` and `bbbde56`, and
+`RideMapScreen.tsx` differs only by the D101 notification prompt. Still not shown: an ordinary
+member on a Play-installed versionCode 4 phone. (The "code reading only" notes above predate
+this check.)
 
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 
