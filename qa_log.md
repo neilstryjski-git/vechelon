@@ -46,7 +46,24 @@ mark. The next build opens the channel after the join has settled, so it never s
 - Acceptance criterion 6 (the Play build still connects with D94 on staging) is shown by
   reading the code only. A slow first open can be refused more than once before it connects.
 
-Not yet run: D94 on staging; the Play build against it.
+**Staging apply, 2026-11-22 (Senior PM approved "option 1": apply now).** Target
+`xybgtbybdhxuwqjfcfkc` named on every command; production untouched. Method as for W311/W312:
+Management API, one rolled-back trial (policies read back, no helper left behind), then
+`BEGIN; file; schema_migrations row; COMMIT`. No ride was active at the time (one planned
+ride, nobody had opened it). Evidence: `~/vechelon-backups/d94-staging/`.
+
+Denial suite against staging (`--target staging --only T1,T3,T8,T16`), zero leftover rows:
+
+| Case | Staging result |
+|---|---|
+| T1.1, T1.2, T1.3 | Pass (were failing on staging before the apply) |
+| T3.1, T3.2 | Pass |
+| T8.1, T8.2, T8.3 | Pass |
+| T16.2, T16.3, T16.4 | Pass |
+| T16.1 | Error, not a D94 result: its in-club control read calls `get_ride_roster` (W313), which is not on staging. The cross-club half did not run. |
+
+Not yet run: the Play build (versionCode 4) on a device against staging with D94. Checks for
+the Senior PM: first open of a ride, re-open, leave, rejoin, raise and cancel a beacon, End Ride.
 
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 

@@ -1923,7 +1923,9 @@ Notes:
 - PLAY BUILD (vc4): keeps working, with one visible change: on a first open of a ride, or a
   rejoin, the first subscribe is refused and the app's retry connects about 2 s later, showing
   "CHANNEL DENIED" for that moment. Departure is unaffected (broadcast first, mark second).
-  Staging apply is the Senior PM's call on that basis; NOT applied.
+  APPLIED TO STAGING 2026-11-22 on the Senior PM's approval (version 20261122000000 recorded;
+  rolled-back trial first; evidence `~/vechelon-backups/d94-staging/`). Device check on the
+  Play build is still owed.
 - TESTS: baseline flips T1.1 to T1.3 to green locally and records them red for the staging
   target until D94 is applied there. `rlsIsolation.test.mjs` updated to the new rule.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
