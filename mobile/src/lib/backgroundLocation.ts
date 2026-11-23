@@ -3,7 +3,7 @@ import type { RiderTacticalState } from '../state/riderState';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
 import { isCurrentIdentity } from './identity';
-import { rail3RideTopic } from '../hooks/useRideChannel';
+import { sendTopicsFor } from './channelLayout';
 
 // Mirror of useFleetPositions.POSITION_EVENT / DEPARTED_EVENT — inlined to avoid a circular
 // import. Keep these in sync with the exports in useFleetPositions.ts.
@@ -48,19 +48,23 @@ export async function restBroadcast(
     const claimed = typeof payload.riderId === 'string' ? payload.riderId : null;
     const ok = await isCurrentIdentity(claimed, rideId, 'broadcast', s.session?.user?.id ?? null);
     if (!ok) return false;
-    await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: [
-          { topic: rail3RideTopic(rideId), event, private: true, payload },
-        ],
-      }),
-    });
+    // W193: the topic depends on the event, the sender's role and whether their beacon is
+    // active (lib/channelLayout.ts). One request per topic: the server authorises each topic
+    // by its own rule, and a refusal on one (sos, in the moment before the beacon flag lands
+    // or after it clears) must not take the other with it.
+    await Promise.all(
+      sendTopicsFor(rideId, event).map((topic) =>
+        fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messages: [{ topic, event, private: true, payload }] }),
+        }),
+      ),
+    );
     return true;
   } catch (e) {
     console.warn('[Rail3] broadcast failed', e);

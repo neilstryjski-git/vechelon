@@ -1978,3 +1978,51 @@ Notes:
 - NOT ON STAGING (breaks the Play build's direct reads; W317). Not on production.
 - TESTS: T5.5, T5.6 added; T5.2 and T5.3 probe the new functions too.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+
+## 2026-11-22 — W193: role-scoped broadcast channels (T2, T3, T4, T8, T9)
+
+- LLD, CHANNEL LAYOUT (recorded before the app half was built). Four private topics per ride:
+
+  | Topic | Carries | Receive | Send |
+  |---|---|---|---|
+  | `rail3:crew:<ride>` | riders' positions | Captain, SAG | anyone on the ride |
+  | `rail3:lead:<ride>` | Captain and SAG positions | anyone on the ride | Captain, SAG |
+  | `rail3:all:<ride>` | beacon raise and cancel, depart, ride ended | anyone on the ride, the club's admins | anyone on the ride |
+  | `rail3:sos:<ride>` | a beaconing rider's live position | anyone on the ride, the club's admins | a rider on the ride whose own beacon is active, on a ride that has not ended |
+
+  "On the ride" = D94's `rail3_on_ride`. "Captain, SAG" = on the ride AND `is_captain_or_support`.
+  "The club's admins" = `rail3_ride_admin`.
+- WHY FOUR. Realtime decides RECEIVE once, at join, and caches it for the connection; it checks
+  every REST broadcast when sent. So what a role may receive is decided by which topics it can
+  join, and anything that must stop at a moment in time (a beaconing rider's position on cancel
+  and on ride end, T4) is a SEND rule on a topic of its own (`sos`). The app sends positions by
+  REST, so every ping is checked.
+- SCALE: a rider's ping is delivered to the Captain and SAG, not to every rider. Rider-side
+  delivery is leaders + beaconing riders, no longer the square of the ride size.
+- MIGRATION `20261123000000_w193_role_scoped_channels.sql`: `rail3_channel_can(topic, action)`
+  (SECURITY DEFINER; fails closed on any topic that is not exactly `rail3:<kind>:<uuid>`), two
+  policies on `realtime.messages`, and `beacon_alerts_tenant_select` narrowed to on the ride /
+  Captain and SAG / club admins (T9).
+- LEGACY CHANNEL `rail3:ride:<id>`: untouched (the Play build uses only it). Its removal is
+  written at `supabase/cutover/w193_drop_legacy_ride_channel.sql`, OUTSIDE the migrations folder
+  so no push or reset can run it early; W317 copies it in under a new timestamp.
+- APP: `lib/channelLayout.ts` (pure: topics, who joins what, where each event is sent, and the
+  send context), `lib/rideMux.ts` (one object the hooks treat as "the channel"; routes `.on` and
+  `.send` to the right topic and keeps one real listener per underlying channel and event),
+  `useRideChannel(rideId, kind)`, `restBroadcast` routes by role and beacon state (one request
+  per topic), `RideMapScreen` joins `all` + `lead` + (`crew` for a leader, `sos` for a rider).
+  The hooks themselves are unchanged. With no send context a position is routed as an ordinary
+  rider's (crew only): fail closed.
+- BREAKS THE PLAY BUILD ONLY IN THE APP: a new build and versionCode 4 cannot see each other
+  (different topics). The migration itself leaves versionCode 4 working.
+- KNOWN LIMITS: (1) a socket's SEND permission is cached at join, so a modified client that
+  joined `sos` during its beacon could keep sending its own position there over the socket
+  after a cancel until it reconnects; (2) `all` accepts any event name from anyone on the ride,
+  so a modified client can put its own position on it. Both leak only the sender's own data.
+  (3) The rider's role is read when the ride opens; a mid-ride promotion takes effect on the
+  channels at the next open of the ride. (4) Race Control web is not built (Senior PM,
+  2026-11-22: later); the admin rules exist on the server and are proved by T8.
+- TESTS: `tests/denial/layout.mjs` carries the layout; `tests/channelLayout.test.mjs` (9) pins
+  the app's side and fails if the app's layout drifts from the one the denial suite proves.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+

@@ -7,6 +7,8 @@ import { useResume } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 
 // Supabase realtime subscribe lifecycle states.
+import { rideTopic, type ChannelKind } from '../lib/channelLayout';
+
 export type RideChannelStatus =
   | 'SUBSCRIBED'
   | 'TIMED_OUT'
@@ -19,6 +21,8 @@ export type RideChannelStatus =
 export function rail3RideTopic(rideId: string): string {
   return `rail3:ride:${rideId}`;
 }
+// W193: the app now joins role-scoped topics (lib/channelLayout.ts). rail3RideTopic above is
+// the pre-W193 single channel, kept only as a named constant for the cutover.
 
 // D57 — broadcast event the captain emits when ending a ride, so other participants'
 // RideMapScreen leaves the live map in real time (ride end is ephemeral, no DB read
@@ -38,7 +42,12 @@ export const RIDE_ENDED_EVENT = 'ride_ended';
 // `.on('broadcast', { event }, …)` handlers and `.send({ type: 'broadcast', … })` calls.
 // NOTE: only Broadcast (and Presence) bindings may be attached after subscribe(); they
 // bind dynamically. Do NOT use this channel for postgres_changes (those must bind first).
-export function useRideChannel(rideId: string | null): {
+export function useRideChannel(
+  rideId: string | null,
+  // W193: which of the ride's role-scoped topics this instance joins. One instance per topic;
+  // each keeps its own reconnect loop.
+  kind: ChannelKind = 'all',
+): {
   channel: RealtimeChannel | null;
   status: RideChannelStatus;
 } {
@@ -65,7 +74,7 @@ export function useRideChannel(rideId: string | null): {
       return;
     }
 
-    const topic = rail3RideTopic(rideId);
+    const topic = rideTopic(kind, rideId);
     let cancelled = false;
     let ch: RealtimeChannel | null = null;
     let attempt = 0;
@@ -190,7 +199,7 @@ export function useRideChannel(rideId: string | null): {
       setChannel(null);
       setStatus(null);
     };
-  }, [rideId]);
+  }, [rideId, kind]);
 
   return { channel, status };
 }
