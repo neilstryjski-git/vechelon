@@ -2025,4 +2025,11 @@ Notes:
 - TESTS: `tests/denial/layout.mjs` carries the layout; `tests/channelLayout.test.mjs` (9) pins
   the app's side and fails if the app's layout drifts from the one the denial suite proves.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+- STAGING: the migration was APPLIED TO STAGING 2026-11-23 on the Senior PM's approval, to
+  settle whether the hosted Realtime delivers a send from someone who may not receive on the
+  topic. It does. Version 20261123000000 recorded; evidence `~/vechelon-backups/w193-staging/`.
+- CI: test stack moved from CLI 2.89.1 to 2.122.1 (its Realtime drops such a send). The pin is
+  the test stack's only; deploy commands keep their own.
+- TEST HARNESS: a join that times out after another topic's refusal is retried on its own
+  connection. `tests/beaconAudit.test.mjs` fixture riders carry the first-open mark.
 

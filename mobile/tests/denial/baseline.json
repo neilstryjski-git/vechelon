@@ -60,7 +60,9 @@
       "T5.2": "red",
       "T5.3": "red",
       "T5.5": "red",
-      "T5.6": "red"
+      "T5.6": "red",
+      "T9.2": "red",
+      "T9.3": "red"
     }
   },
   "_advisory": "T15.2 is advisory (outside rule T15): red wherever the Supabase project still relays public realtime channels. Staging was set to private channels only on 2026-11-18 (Senior PM approved), so it is green there; the local stack has no such setting.",
@@ -69,5 +71,5 @@
   "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path.",
   "_d94": "D94 (2026-11-22): T1.1 to T1.3 green on the local stack and on staging (applied to staging 2026-11-22, Senior PM approved). T16.1 errors on staging until W313's get_ride_roster is applied there (its in-club control read uses that function).",
   "_d50": "D50 (2026-11-22): T5.1 to T5.3 turned green on the local stack; T5.5, T5.6 added. Not on staging until W317 (breaks the Play build's direct table reads), so staging keeps them red or absent.",
-  "_w193": "W193 (2026-11-22): T2.1, T2.2, T4.3, T4.4, T9.2, T9.3 green on the local stack with the four-channel layout."
+  "_w193": "W193 (2026-11-23): T2.1, T2.2, T4.3, T4.4, T9.2, T9.3 green on the local stack: all 16 rules pass there. W193's migration is on staging (applied 2026-11-23): T2 and T4 pass on staging; T9.2 and T9.3 stay red on staging until D50 (beacon flags read from ride_participants) is applied at W317."
 }
