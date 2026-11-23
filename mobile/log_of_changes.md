@@ -2051,4 +2051,19 @@ Notes:
   re-open; the server refuses what the new role may not do. (8) A REST send refused by policy
   is answered 202, so the app cannot tell refusal from delivery. Limit (3) is now "at the next
   resume" rather than "at the next open".
+- REVIEW r2 (2026-11-23). Fixed: the first-open mark is re-written on every resume (a failed
+  write at open no longer lasts the ride); the mux can be re-activated after a cleanup;
+  `useResume` ignores a null ride id from one caller while others hold the ride.
+  Corrections to the limits above: (7) a demoted leader's SENDS are refused at once, but a
+  `crew` subscription already joined keeps delivering riders' positions until that socket
+  rejoins, at the latest the next resume. (9) A refused topic keeps retrying on purpose (a
+  refusal can be transient: stale token, join before the first-open mark), capped at 15 s
+  with jitter; `channel_status` rows name the topic. (10) Until the first-open mark lands, a
+  Captain or SAG cannot read beacon rows, so a cancel they attempt matches no row: the flag
+  clears, no cancel is broadcast and the row stays open until ride end closes it.
+- OPEN, FOR THE SENIOR PM (not changed here): D50's participant-row policy and fleet seed
+  admit a Captain or SAG by ROLE alone, so one who is suspended or never opened the ride in
+  the app still reads beacon flags and last positions from `ride_participants`, though
+  refused on every channel and on beacon rows. T9.3 proves rows and channels for a leader,
+  not flags.
 

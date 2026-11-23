@@ -32,6 +32,7 @@ export interface RideMux {
   on(type: 'broadcast', filter: { event: string }, handler: Handler): RideMux;
   send(message: Parameters<RealtimeChannel['send']>[0]): ReturnType<RealtimeChannel['send']>;
   attach(channels: SideChannels): void;
+  activate(): void;
   dispose(): void;
 }
 
@@ -79,6 +80,11 @@ export function makeRideMux(
       // A replaced channel has been removed from the client by its hook; just forget it.
       for (const ch of [...attached.keys()]) if (!now.has(ch)) attached.delete(ch);
       sync();
+    },
+    // activate / dispose are an effect's body and cleanup: a cleanup followed by a re-run
+    // with the same mux (strict effects) must leave it live.
+    activate() {
+      disposed = false;
     },
     dispose() {
       disposed = true;

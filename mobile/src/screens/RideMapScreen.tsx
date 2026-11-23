@@ -21,6 +21,7 @@ import { useAuth } from '../auth/AuthContext';
 import { selfRsvpWithIdentity, markRail3Joined, markRail3Rejoined } from '../lib/rideJoin';
 import { listenKinds, receiveKinds, setSendContext, type ChannelKind } from '../lib/channelLayout';
 import { makeRideMux } from '../lib/rideMux';
+import { useResume } from '../hooks/useResume';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   promptOemExclusionOnFirstJoin,
@@ -101,6 +102,13 @@ const RideMapScreen: React.FC = () => {
   // channel waits for it: subscribing first would be refused and only recover on the retry.
   // Settled = the join attempt finished (either way) or 5 s passed; never a permanent gate.
   const [joinSettled, setJoinSettled] = useState(false);
+  // W193 r2: the first-open mark is what admits this device to the ride's channels and beacon
+  // rows. Its write at open is best-effort, so it is repeated on every resume (it only ever
+  // fills an empty mark): one failed write must not keep a rider or leader out all ride.
+  const remarkJoined = useCallback(() => {
+    if (rideId && myRiderId) void markRail3Joined(rideId, myRiderId).catch(() => {});
+  }, [rideId, myRiderId]);
+  useResume(rideId, remarkJoined);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
   // W193: four role-scoped topics per ride (lib/channelLayout.ts). Everyone joins `all`
   // (beacons, departures, ride end) and `lead` (Captain and SAG positions). A leader also joins
@@ -124,7 +132,10 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     mux?.attach({ lead: leadChannel, crew: crewChannel, sos: sosChannel });
   }, [mux, leadChannel, crewChannel, sosChannel]);
-  useEffect(() => () => mux?.dispose(), [mux]);
+  useEffect(() => {
+    mux?.activate();
+    return () => mux?.dispose();
+  }, [mux]);
   const channel = mux as unknown as RealtimeChannel | null;
   // D50: the roster comes from functions that admit only someone with a row on the ride, so it
   // waits for the join as well.

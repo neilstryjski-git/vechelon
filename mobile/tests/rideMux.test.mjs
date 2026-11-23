@@ -101,3 +101,16 @@ test('send goes to the all channel only', async () => {
   assert.equal(all.sent.length, 1);
   assert.equal(lead.sent.length, 0);
 });
+
+test('dispose then activate leaves the same mux live (an effect cleanup followed by a re-run)', () => {
+  const [all, lead] = ['all', 'lead'].map(fake);
+  const mux = makeRideMux(all, listenKinds);
+  mux.attach({ lead });
+  const got = [];
+  mux.on('broadcast', { event: 'pos' }, () => got.push(1));
+  mux.dispose();
+  lead.emit('pos', 0);
+  mux.activate();
+  lead.emit('pos', 0);
+  assert.deepEqual(got, [1]);
+});

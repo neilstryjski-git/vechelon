@@ -107,7 +107,9 @@ function stop(): void {
 // resume, so the consumer can log it (W268) and the sink can tell us which emitter saved us.
 export function useResume(currentRideId: string | null, onResume: Listener): void {
   useEffect(() => {
-    rideId = currentRideId;
+    // W193: several callers now pass null while others hold the ride (a channel hook for a
+    // topic this role does not join). A null must not wipe the ride id the lifecycle log uses.
+    if (currentRideId) rideId = currentRideId;
   }, [currentRideId]);
 
   useEffect(() => {
