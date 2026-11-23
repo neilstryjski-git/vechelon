@@ -62,8 +62,23 @@ Denial suite against staging (`--target staging --only T1,T3,T8,T16`), zero left
 | T16.2, T16.3, T16.4 | Pass |
 | T16.1 | Error, not a D94 result: its in-club control read calls `get_ride_roster` (W313), which is not on staging. The cross-club half did not run. |
 
-Not yet run: the Play build (versionCode 4) on a device against staging with D94. Checks for
-the Senior PM: first open of a ride, re-open, leave, rejoin, raise and cancel a beacon, End Ride.
+**Device check by the Senior PM, 2026-11-22 evening (23 Nov 03:24 to 03:36 UTC), D94 live on
+staging.** Galaxy S23 on the Play open-test build (versionCode 4, commit `bbbde56`) as
+Captain; Galaxy S21 as rider on the older validation build (`3892439`, not versionCode 4).
+Server rows read back from staging for each step.
+
+| Step | Ride | Result |
+|---|---|---|
+| First open (Captain, S23) | Jigsaw, then Lantern | Connected. On Lantern the Senior PM watched for the "CHANNEL DENIED" chip and did not see it |
+| First open (rider, S21) | Jigsaw | Connected; the rider's beacon reached the Captain 34 s after the rider's first open |
+| Raise and cancel own beacon (Captain) | Jigsaw | Row written and closed by the Captain |
+| Rider raises, Captain cancels | Jigsaw | Row closed by the Captain |
+| Leave, then rejoin (Captain) | Jigsaw | Departure mark set 03:28:43, cleared on rejoin 03:31:11 |
+| Leave (rider) | Jigsaw | Departure mark set; last position cleared |
+| End Ride (Captain, after rejoin) | Jigsaw | Ride saved 03:32:19; no beacon left open |
+
+Criterion 6 (the Play build still connects with D94 on staging): met on the S23. The S21
+shows the older build connects too; it is not evidence for versionCode 4.
 
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 
