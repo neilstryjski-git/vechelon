@@ -87,6 +87,12 @@ connected): its build is older, but `useRideChannel.ts`, `rideJoin.ts` and
 member on a Play-installed versionCode 4 phone. (The "code reading only" notes above predate
 this check.)
 
+**Follow-up, same evening (03:41 UTC):** the Senior PM installed the Play build on the S21 and
+opened the Lantern ride as the ordinary member. Reported: connected, no "CHANNEL DENIED" chip
+seen. Server: that member's row was stamped at 03:41:36 and was still receiving position
+writes at 03:46:57. The build on the phone is as reported by the Senior PM; the server does
+not record it. This covers the ordinary-member path on versionCode 4.
+
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 
 Change: `get_ride_roster(ride)` (migration `20261118020000`), the mobile roster screen switched
