@@ -29,6 +29,23 @@ own retry about 2 seconds later; the map shows the "CHANNEL DENIED" chip for tha
 Leaving is unaffected: the app sends its departure message before it writes the departure
 mark. The next build opens the channel after the join has settled, so it never sees the chip.
 
+**Review r1 (2026-11-22), fixed in the same pull request.**
+
+| Finding | Fix | Proof |
+|---|---|---|
+| The admin branch tested the role only, so a suspended or archived admin (who keeps the role) could subscribe to every ride of the club; W304 had refused them | New helper `rail3_ride_admin`: admin role AND `affiliated` status | New case T8.3; SQL gate now evaluates the expression the policy uses |
+| A beacon tap before the channel opened did nothing and said nothing | The tap now shows an error saying the beacon did not go out | Read from code; not on a device |
+| The participant lookup had no usable index | Plain index on (ride_id, account_id) | CI |
+
+**Known limits, not closed by D94 (carried to W193).**
+- T1.3 proves a NEW subscription by a departed rider is refused. Realtime checks at join, so a
+  connection admitted earlier and kept open after its rider leaves keeps receiving until it
+  reconnects. The app closes its channel on leave; a modified client would not.
+- The departure mark is per account. One account live on two devices: when one leaves, the
+  other is refused until it re-opens the ride.
+- Acceptance criterion 6 (the Play build still connects with D94 on staging) is shown by
+  reading the code only. A slow first open can be refused more than once before it connects.
+
 Not yet run: D94 on staging; the Play build against it.
 
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7

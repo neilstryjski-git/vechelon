@@ -91,6 +91,13 @@ BEGIN
       ('11111111-1111-1111-1111-111111111111', 'b2222222-2222-2222-2222-222222222222'),
       ('11111111-1111-1111-1111-111111111111', 'b1111111-1111-1111-1111-111111111111');
     INSERT INTO rail3_breadcrumb (ride_id) VALUES ('11111111-1111-1111-1111-111111111111');
+    -- D94: both fixture participants have OPENED the ride in the app, so the only thing that
+    -- separates them on the channel is the pending member's standing in the club.
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                 AND table_name = 'ride_participants' AND column_name = 'rail3_joined_at') THEN
+      EXECUTE $q$UPDATE ride_participants SET rail3_joined_at = now()
+                  WHERE ride_id = '11111111-1111-1111-1111-111111111111'$q$;
+    END IF;
   END IF;
 END $$;
 
@@ -151,7 +158,7 @@ RESET ROLE;
 -- ── 4. W304: a PENDING member of Tenant B sees none of Tenant B's Rail 3 live data,
 -- while an AFFILIATED Tenant-B member still does (no over-block).
 DO $$
-DECLARE n integer;
+DECLARE n integer; gate boolean;
 BEGIN
   IF to_regprocedure('public.rail3_is_affiliated(uuid)') IS NULL THEN
     RAISE NOTICE 'rail3_is_affiliated absent — W304 pending-member checks skipped';
@@ -193,8 +200,18 @@ BEGIN
     PERFORM set_config('realtime.topic', 'rail3:ride:11111111-1111-1111-1111-111111111111', true);
     IF to_regclass('realtime.messages') IS NOT NULL AND EXISTS (
       SELECT 1 FROM pg_policies WHERE schemaname = 'realtime' AND policyname = 'rail3_broadcast_tenant_receive'
-    ) AND public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic())) THEN
-      RAISE EXCEPTION 'pending LEAK: broadcast receive gate open for an initiated member';
+    ) THEN
+      -- D94: the expression the receive policy now uses (falls back to the W304 one on a
+      -- database that predates D94).
+      IF to_regprocedure('public.rail3_on_ride(uuid)') IS NOT NULL THEN
+        EXECUTE 'SELECT public.rail3_on_ride(public.rail3_topic_ride_id(realtime.topic()))
+                     OR public.rail3_ride_admin(public.rail3_topic_ride_id(realtime.topic()))' INTO gate;
+      ELSE
+        gate := public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic()));
+      END IF;
+      IF gate THEN
+        RAISE EXCEPTION 'pending LEAK: broadcast receive gate open for an initiated member who opened the ride';
+      END IF;
     END IF;
   END IF;
   EXECUTE 'RESET ROLE';
@@ -215,8 +232,13 @@ BEGIN
     IF n <> 1 THEN
       RAISE EXCEPTION 'over-block: affiliated participant saw % rail3_breadcrumb row(s) (expected 1)', n;
     END IF;
-    IF NOT public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic())) THEN
-      RAISE EXCEPTION 'over-block: broadcast receive gate closed for an affiliated member';
+    IF to_regprocedure('public.rail3_on_ride(uuid)') IS NOT NULL THEN
+      EXECUTE 'SELECT public.rail3_on_ride(public.rail3_topic_ride_id(realtime.topic()))' INTO gate;
+    ELSE
+      gate := public.rail3_is_affiliated(public.rail3_topic_tenant_id(realtime.topic()));
+    END IF;
+    IF NOT gate THEN
+      RAISE EXCEPTION 'over-block: broadcast receive gate closed for an affiliated rider on the ride';
     END IF;
   END IF;
   EXECUTE 'RESET ROLE';

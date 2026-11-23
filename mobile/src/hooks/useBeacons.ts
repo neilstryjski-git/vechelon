@@ -246,7 +246,14 @@ export function useBeacons(
   // the audit insert (lat/long snapshot at trigger time; cancel fields null
   // because the beacon is ACTIVE, not because of SD-011's error sentinel).
   const triggerBeacon = useCallback(async () => {
-    if (!rideId || !tenantId || !myRiderId || !channel) return;
+    if (!rideId || !tenantId || !myRiderId) return;
+    if (!channel) {
+      // D94: the channel now opens only after the ride join has settled, so for the first
+      // moments of a ride the tap has nothing to send on. Never swallow an SOS silently.
+      // Placeholder copy, on the Voice & Tone list.
+      setError('Not connected to the ride yet — your beacon did NOT go out. Try again in a moment.');
+      return;
+    }
     setError(null);
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);

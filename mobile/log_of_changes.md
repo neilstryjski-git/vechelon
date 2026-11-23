@@ -1906,6 +1906,14 @@ Notes:
   in this club". Receive: on the ride, or an admin of the ride's club (Race Control). Send: on
   the ride. New helpers `rail3_topic_ride_id(topic)` and `rail3_on_ride(ride)` (SECURITY DEFINER,
   one lookup: participant row, `rail3_joined_at` set, `departed_at` null, still affiliated).
+  `rail3_topic_ride_id` reads no table and is SECURITY INVOKER.
+- REVIEW r1: the admin branch uses a new helper `rail3_ride_admin` (admin role AND affiliated
+  status), not `is_ride_tenant_admin`, which tests the role alone and would have re-admitted
+  suspended admins. Added index `idx_ride_participants_ride_account` (the existing unique
+  indexes are partial). `useBeacons.triggerBeacon` shows an error when tapped before the
+  channel is open (placeholder copy, for the Voice & Tone list) instead of doing nothing.
+  Denial case T8.3 added; `supabase/tests/rail3_rls_isolation.test.sql` now evaluates the
+  expression the receive policy uses.
 - LLD: admins receive but do not send (nothing in Race Control sends). Policy names are kept
   (`rail3_broadcast_tenant_receive` / `_send`) and altered in place; W193 replaces the layout.
   After a ride ends its participants are still admitted (no departure mark is written at ride

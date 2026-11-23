@@ -47,7 +47,8 @@
     "T14.2": "green",
     "T13.2": "green",
     "T5.4": "green",
-    "T6.3": "green"
+    "T6.3": "green",
+    "T8.3": "green"
   },
   "targets": {
     "staging": {
