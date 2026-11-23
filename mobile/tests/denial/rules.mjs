@@ -508,6 +508,25 @@ export const cases = [
       rule(l.joined.length === 0, `another club's admin joined: ${l.joined.join(', ')}`);
     },
   },
+  {
+    id: 'T8.3', rule: 'T8',
+    title: 'A suspended admin of the ride\'s club cannot subscribe (the role alone is not enough)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      const set = (status) => ctx.admin.from('account_tenants').update({ status })
+        .eq('account_id', u.clubAdmin.id).eq('tenant_id', tenants.x.id);
+      try {
+        const { error } = await set('suspended');
+        if (error) throw new Error(`could not suspend the fixture admin: ${error.message}`);
+        const l = await refused(ctx, u.clubAdmin, rides.main);
+        rule(l.joined.length === 0, `a suspended admin joined: ${l.joined.join(', ')}`);
+      } finally {
+        // The fixture admin is shared: a failed restore must fail loudly, not poison later cases.
+        const { error: restoreErr } = await set('affiliated');
+        if (restoreErr) throw new Error(`could not restore the fixture admin: ${restoreErr.message}`);
+      }
+    },
+  },
 
   // ── T9 ─────────────────────────────────────────────────────────────────────
   {
