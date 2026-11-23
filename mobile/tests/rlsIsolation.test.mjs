@@ -170,6 +170,13 @@ before(async () => {
   // Rail 3 rows for tenant B ONLY — so tenant A doubles as the
   // "tenant with no Rail 3 data yet" edge case.
   if (fx.rail3SchemaPresent) {
+    // D94: the ride channel admits only someone ON the ride (opened it in the app, not left).
+    // User B is on ride B; users A and A2 above are web RSVPs who never opened ride A.
+    const { error: onErr } = await admin.from('ride_participants').insert({
+      ride_id: fx.rideB.id, account_id: fx.userB.id, role: 'member', status: 'active',
+      rail3_joined_at: new Date().toISOString(),
+    });
+    assert.ifError(onErr);
     const { error: bErr } = await admin.from('beacon_alerts').insert({
       tenant_id: fx.tenantB.id, ride_id: fx.rideB.id, rider_id: fx.userB.id,
     });
@@ -260,7 +267,7 @@ test('cross-tenant Broadcast channel subscription is DENIED', async (t) => {
     `LEAK (G-1): tenant-A user subscribed to tenant-B's private ride channel`);
 });
 
-test('in-tenant Broadcast channel subscription succeeds and can send', async (t) => {
+test('a rider ON the ride subscribes to its Broadcast channel and can send (D94)', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
   const topic = `rail3:ride:${fx.rideB.id}`;
   const ch = fx.userB.client.channel(topic, { config: { private: true, broadcast: { self: true, ack: true } } });
@@ -270,10 +277,18 @@ test('in-tenant Broadcast channel subscription succeeds and can send', async (t)
       if (s === 'SUBSCRIBED' || s === 'CHANNEL_ERROR' || s === 'CLOSED') { clearTimeout(timer); resolve(s); }
     });
   });
-  assert.equal(status, 'SUBSCRIBED', 'over-block: in-tenant rider denied their own ride channel');
+  assert.equal(status, 'SUBSCRIBED', 'over-block: a rider on the ride was denied its channel');
   const sent = await ch.send({ type: 'broadcast', event: 'w182-ping', payload: { ok: true } });
-  assert.equal(sent, 'ok', 'in-tenant rider could not broadcast on their own ride channel');
+  assert.equal(sent, 'ok', 'a rider on the ride could not broadcast on its channel');
   await fx.userB.client.removeChannel(ch);
+});
+
+test('a club member who has not opened the ride in the app is DENIED its channel (D94)', async (t) => {
+  if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
+  // User A2 is an affiliated member of tenant A with an RSVP row on ride A, but no first-open mark.
+  const status = await subscribeStatus(fx.userA2.client, `rail3:ride:${fx.rideA.id}`);
+  assert.notEqual(status, 'SUBSCRIBED',
+    'LEAK (D94): a club member who is not on the ride subscribed to its private channel');
 });
 
 test('unknown-ride topic is fail-closed (denied even for a valid member)', async (t) => {

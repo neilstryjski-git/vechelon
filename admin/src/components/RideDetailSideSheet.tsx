@@ -139,7 +139,9 @@ const RideDetailSideSheet: React.FC = () => {
       // deployed yet, fall back to what the table returned.
       const { data: names, error: namesErr } = await supabase
         .rpc('get_ride_attendees', { p_ride_id: selectedRideId });
-      if (namesErr || !names) return data || [];
+      // An empty list also falls back: a platform admin of another club has no standing in the
+      // function but reads the table through their own policy.
+      if (namesErr || !names || names.length === 0) return data || [];
       return (names as Array<Omit<ParticipantDetail, 'email'>>).map((p) => ({
         ...p,
         display_name: p.display_name ?? 'Rider',

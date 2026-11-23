@@ -20,7 +20,94 @@ sites and two web read sites. Results are from Rail 3 CI on the D50 pull request
 Not on staging: the Play build (versionCode 4) reads the table directly for its roster, fleet
 seed and beacon seed, so this waits for the cutover (W317). Not on production.
 
+**Review r1, fixed in the same pull request:** the member calendar's head count (missed read
+site), seeds that ran before the join was written, empty-result fallbacks on the web, and
+signed-out reads erroring instead of returning nothing. T5.5 now also proves Captain, SAG and
+the club admin get a rider's position; T5.6 proves an email-shaped name is withheld, the
+calendar counts, the admin and Captain table reads, and a signed-out read.
+
+**Open for the Senior PM:** a club admin can read position and ping columns of their club's
+participant rows (see the dev log). Not a regression: every member could before D50.
+
 Not yet run: the changed web pages in a browser; the changed app reads on a device.
+
+## 2026-11-22 — D94: ride scoping on the channel, rule T1
+
+Change: migration `20261122000000_d94_ride_scoped_broadcast.sql`. Results from Rail 3 CI on
+pull request #170 (local stack).
+
+| Case | Before D94 | After (CI) | What it proves |
+|---|---|---|---|
+| T1.1 | Fails | Passes | A club member off the ride cannot subscribe to the ride's channel |
+| T1.2 | Fails | Passes | Nobody off the ride (off-ride member, departed rider, member who never opened it) can send on it, by REST or socket |
+| T1.3 | Fails | Passes | A rider who has left cannot subscribe again |
+| T3.1, T3.2, T4.1 | Pass | Pass | People on the ride still receive leaders' positions and beacon state |
+| T8.1, T8.2 | Pass | Pass | A club admin who is not on the ride still subscribes (Race Control); another club's admin does not |
+| T16.1 to T16.4 | Pass | Pass | Cross-club isolation holds |
+
+Rules after D94 on the local stack: 12 pass, 4 fail (T2, T4, T5, T9: W193 and D50).
+
+The older isolation matrix (`mobile/tests/rlsIsolation.test.mjs`) asserted the old rule, that
+any club member could join a ride's channel. It now asserts the new one: a rider on the ride
+joins and sends; a member with an RSVP who never opened the ride is refused.
+
+**Play build (versionCode 4) compatibility, read from the code, not yet seen on a device.**
+The app opens the channel at the same moment it writes its join. With D94 on the server, a
+first open of a ride (or a rejoin after leaving) is refused once and connects on the app's
+own retry about 2 seconds later; the map shows the "CHANNEL DENIED" chip for that moment.
+Leaving is unaffected: the app sends its departure message before it writes the departure
+mark. The next build opens the channel after the join has settled, so it never sees the chip.
+
+**Review r1 (2026-11-22), fixed in the same pull request.**
+
+| Finding | Fix | Proof |
+|---|---|---|
+| The admin branch tested the role only, so a suspended or archived admin (who keeps the role) could subscribe to every ride of the club; W304 had refused them | New helper `rail3_ride_admin`: admin role AND `affiliated` status | New case T8.3; SQL gate now evaluates the expression the policy uses |
+| A beacon tap before the channel opened did nothing and said nothing | The tap now shows an error saying the beacon did not go out | Read from code; not on a device |
+| The participant lookup had no usable index | Plain index on (ride_id, account_id) | CI |
+
+**Known limits, not closed by D94 (carried to W193).**
+- T1.3 proves a NEW subscription by a departed rider is refused. Realtime checks at join, so a
+  connection admitted earlier and kept open after its rider leaves keeps receiving until it
+  reconnects. The app closes its channel on leave; a modified client would not.
+- The departure mark is per account. One account live on two devices: when one leaves, the
+  other is refused until it re-opens the ride.
+- Acceptance criterion 6 (the Play build still connects with D94 on staging) is shown by
+  reading the code only. A slow first open can be refused more than once before it connects.
+
+**Staging apply, 2026-11-22 (Senior PM approved "option 1": apply now).** Target
+`xybgtbybdhxuwqjfcfkc` named on every command; production untouched. Method as for W311/W312:
+Management API, one rolled-back trial (policies read back, no helper left behind), then
+`BEGIN; file; schema_migrations row; COMMIT`. No ride was active at the time (one planned
+ride, nobody had opened it). Evidence: `~/vechelon-backups/d94-staging/`.
+
+Denial suite against staging (`--target staging --only T1,T3,T8,T16`), zero leftover rows:
+
+| Case | Staging result |
+|---|---|
+| T1.1, T1.2, T1.3 | Pass (were failing on staging before the apply) |
+| T3.1, T3.2 | Pass |
+| T8.1, T8.2, T8.3 | Pass |
+| T16.2, T16.3, T16.4 | Pass |
+| T16.1 | Error, not a D94 result: its in-club control read calls `get_ride_roster` (W313), which is not on staging. The cross-club half did not run. |
+
+**Device check by the Senior PM, 2026-11-22 evening (23 Nov 03:24 to 03:36 UTC), D94 live on
+staging.** Galaxy S23 on the Play open-test build (versionCode 4, commit `bbbde56`) as
+Captain; Galaxy S21 as rider on the older validation build (`3892439`, not versionCode 4).
+Server rows read back from staging for each step.
+
+| Step | Ride | Result |
+|---|---|---|
+| First open (Captain, S23) | Jigsaw, then Lantern | Connected. On Lantern the Senior PM watched for the "CHANNEL DENIED" chip and did not see it |
+| First open (rider, S21) | Jigsaw | Connected; the rider's beacon reached the Captain 34 s after the rider's first open |
+| Raise and cancel own beacon (Captain) | Jigsaw | Row written and closed by the Captain |
+| Rider raises, Captain cancels | Jigsaw | Row closed by the Captain |
+| Leave, then rejoin (Captain) | Jigsaw | Departure mark set 03:28:43, cleared on rejoin 03:31:11 |
+| Leave (rider) | Jigsaw | Departure mark set; last position cleared |
+| End Ride (Captain, after rejoin) | Jigsaw | Ride saved 03:32:19; no beacon left open |
+
+Criterion 6 (the Play build still connects with D94 on staging): met on the S23. The S21
+shows the older build connects too; it is not evidence for versionCode 4.
 
 ## 2026-11-22 — W313: roster on the server function, rules T5 to T7
 

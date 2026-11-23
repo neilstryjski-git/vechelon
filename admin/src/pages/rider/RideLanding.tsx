@@ -375,7 +375,8 @@ const RideLanding: React.FC = () => {
       const viaFn = await supabase
         .rpc('get_ride_attendee_count', { p_ride_id: rideId })
         .abortSignal(signal);
-      if (!viaFn.error && typeof viaFn.data === 'number') return viaFn.data;
+      // Zero also falls through to the table (platform admin of another club; signed-out visitor).
+      if (!viaFn.error && typeof viaFn.data === 'number' && viaFn.data > 0) return viaFn.data;
       const { count, error } = await supabase
         .from('ride_participants')
         .select('*', { count: 'exact', head: true })

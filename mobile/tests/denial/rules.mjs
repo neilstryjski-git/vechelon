@@ -387,7 +387,12 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
-      const seed = async (who) => (await db(ctx, who).rpc('get_ride_fleet_seed', { p_ride_id: id })).data ?? [];
+      const seed = async (who) => {
+        const res = await db(ctx, who).rpc('get_ride_fleet_seed', { p_ride_id: id });
+        rule(res.error?.code !== 'PGRST202', 'get_ride_fleet_seed is not deployed on this target');
+        return res.data ?? [];
+      };
+      await seed(u.riderB); // fails red here, before any fixture write, where the function is absent
       const capPos = { last_lat: 43.71, last_long: -79.41, last_ping: new Date().toISOString() };
       const setCaptain = (patch) => ctx.admin.from('ride_participants').update(patch).eq('ride_id', id).eq('account_id', u.captain.id);
       const got = [];
@@ -415,6 +420,11 @@ export const cases = [
           const rows = await seed(who);
           if (rows.length) got.push(`${who.key} read ${rows.length} fleet-seed rows`);
         }
+        // Over-block controls: Captain, SAG and the club admin get rider A's position.
+        for (const who of [u.captain, u.sag, u.clubAdmin]) {
+          const row = (await seed(who)).find((r) => r.account_id === u.riderA.id);
+          if (row?.last_lat == null) got.push(`over-block: ${who.key} did not get rider A's position`);
+        }
       } finally {
         await clearBeacons(ctx, rides.main);
         const { error: restoreErr } = await setCaptain({ last_lat: null, last_long: null, last_ping: null });
@@ -429,9 +439,25 @@ export const cases = [
     run: async (ctx) => {
       const { users: u, rides } = ctx.fx;
       const id = rides.main.id;
-      const list = async (who) => (await db(ctx, who).rpc('get_ride_attendees', { p_ride_id: id })).data ?? [];
+      const list = async (who) => {
+        const res = await db(ctx, who).rpc('get_ride_attendees', { p_ride_id: id });
+        rule(res.error?.code !== 'PGRST202', 'get_ride_attendees is not deployed on this target');
+        return res.data ?? [];
+      };
       const got = [];
-      const mine = await list(u.offRide);
+      await list(u.offRide); // red here, before any fixture write, where the function is absent
+      // One row carries an email address as its display name for the length of this case.
+      const setName = (v) => ctx.admin.from('ride_participants').update({ display_name: v }).eq('ride_id', id).eq('account_id', u.neverOpened.id);
+      const { data: before } = await ctx.admin.from('ride_participants').select('display_name').eq('ride_id', id).eq('account_id', u.neverOpened.id).single();
+      let mine;
+      try {
+        const { error } = await setName(u.neverOpened.email);
+        if (error) throw new Error(`could not set the email-shaped name: ${error.message}`);
+        mine = await list(u.offRide);
+      } finally {
+        const { error: restoreErr } = await setName(before?.display_name ?? null);
+        if (restoreErr) throw new Error(`could not restore the display name: ${restoreErr.message}`);
+      }
       control(mine.length > 0, 'a club member off the ride could not read the attendee list (RP-16)');
       const allowed = new Set(['id', 'account_id', 'display_name', 'role', 'status']);
       const extra = [...new Set(mine.flatMap((r) => Object.keys(r)))].filter((k) => !allowed.has(k));
@@ -440,6 +466,18 @@ export const cases = [
       if (mine.some((r) => (r.display_name ?? '').includes('@'))) got.push('an email address as a name');
       const count = (await db(ctx, u.offRide).rpc('get_ride_attendee_count', { p_ride_id: id })).data;
       if (count !== mine.length) got.push(`count ${count} does not match the list (${mine.length})`);
+      const many = (await db(ctx, u.offRide).rpc('get_ride_attendee_counts', { p_ride_ids: [id, rides.other.id] })).data ?? [];
+      if (many.find((r) => r.ride_id === id)?.attendees !== mine.length) got.push('the calendar count does not match the list');
+      if (many.some((r) => r.ride_id === rides.other.id)) got.push('the calendar count covered another club\'s ride');
+      // The club admin and the Captain still read whole rows from the table (web admin pages).
+      for (const who of [u.clubAdmin, u.captain]) {
+        const rows = await read(db(ctx, who).from('ride_participants').select('id, phone').eq('ride_id', id));
+        if (rows.length < mine.length) got.push(`over-block: ${who.key} read ${rows.length} of ${mine.length} participant rows from the table`);
+      }
+      // Signed out: no rows and no permission error.
+      const anon = await db(ctx, null).from('ride_participants').select('id').eq('ride_id', id);
+      if (anon.error) got.push(`a signed-out read of ride_participants errored (${anon.error.code})`);
+      if ((anon.data ?? []).length) got.push('a signed-out caller read participant rows');
       for (const who of [u.otherMember, u.otherAdmin]) {
         const rows = await list(who);
         const n = (await db(ctx, who).rpc('get_ride_attendee_count', { p_ride_id: id })).data;
@@ -578,6 +616,25 @@ export const cases = [
       const { users: u, rides } = ctx.fx;
       const l = await refused(ctx, u.otherAdmin, rides.main);
       rule(l.joined.length === 0, `another club's admin joined: ${l.joined.join(', ')}`);
+    },
+  },
+  {
+    id: 'T8.3', rule: 'T8',
+    title: 'A suspended admin of the ride\'s club cannot subscribe (the role alone is not enough)',
+    run: async (ctx) => {
+      const { users: u, rides, tenants } = ctx.fx;
+      const set = (status) => ctx.admin.from('account_tenants').update({ status })
+        .eq('account_id', u.clubAdmin.id).eq('tenant_id', tenants.x.id);
+      try {
+        const { error } = await set('suspended');
+        if (error) throw new Error(`could not suspend the fixture admin: ${error.message}`);
+        const l = await refused(ctx, u.clubAdmin, rides.main);
+        rule(l.joined.length === 0, `a suspended admin joined: ${l.joined.join(', ')}`);
+      } finally {
+        // The fixture admin is shared: a failed restore must fail loudly, not poison later cases.
+        const { error: restoreErr } = await set('affiliated');
+        if (restoreErr) throw new Error(`could not restore the fixture admin: ${restoreErr.message}`);
+      }
     },
   },
 

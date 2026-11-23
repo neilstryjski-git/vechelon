@@ -43,10 +43,20 @@ function useCalendarRides(year: number, month: number, tenantId: string | null) 
 
       if (error) throw error;
 
+      // D50: a member reads only their own participant row, so the embedded count above is
+      // 0 or 1 for them. The real head counts come from a function; the larger of the two is
+      // shown, so the page still works where the function is absent or gives the caller nothing.
+      const ids = (data || []).map((r: any) => r.id as string);
+      const viaFn: Record<string, number> = {};
+      if (ids.length > 0) {
+        const { data: counts } = await supabase.rpc('get_ride_attendee_counts', { p_ride_ids: ids });
+        for (const c of (counts ?? []) as Array<{ ride_id: string; attendees: number }>) viaFn[c.ride_id] = c.attendees;
+      }
+
       return (data || []).map((r: any) => ({
         ...r,
         status: r.status as RideStatus,
-        riders: (r.ride_participants as any)?.[0]?.count ?? 0
+        riders: Math.max((r.ride_participants as any)?.[0]?.count ?? 0, viaFn[r.id] ?? 0)
       }));
     },
     enabled: !!tenantId,

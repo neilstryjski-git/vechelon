@@ -1899,6 +1899,36 @@ Notes:
   itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
+## 2026-11-22 — D94: ride scoping on broadcast subscribe and send (T1)
+
+- MIGRATION `20261122000000_d94_ride_scoped_broadcast.sql`: the two `realtime.messages`
+  policies for `rail3:ride:<id>` now ask "is the caller on this ride" instead of "is the caller
+  in this club". Receive: on the ride, or an admin of the ride's club (Race Control). Send: on
+  the ride. New helpers `rail3_topic_ride_id(topic)` and `rail3_on_ride(ride)` (SECURITY DEFINER,
+  one lookup: participant row, `rail3_joined_at` set, `departed_at` null, still affiliated).
+  `rail3_topic_ride_id` reads no table and is SECURITY INVOKER.
+- REVIEW r1: the admin branch uses a new helper `rail3_ride_admin` (admin role AND affiliated
+  status), not `is_ride_tenant_admin`, which tests the role alone and would have re-admitted
+  suspended admins. Added index `idx_ride_participants_ride_account` (the existing unique
+  indexes are partial). `useBeacons.triggerBeacon` shows an error when tapped before the
+  channel is open (placeholder copy, for the Voice & Tone list) instead of doing nothing.
+  Denial case T8.3 added; `supabase/tests/rail3_rls_isolation.test.sql` now evaluates the
+  expression the receive policy uses.
+- LLD: admins receive but do not send (nothing in Race Control sends). Policy names are kept
+  (`rail3_broadcast_tenant_receive` / `_send`) and altered in place; W193 replaces the layout.
+  After a ride ends its participants are still admitted (no departure mark is written at ride
+  end), which the ride-end `depart` message needs; stopping delivery after ride end is T4.4, W193.
+- APP: `RideMapScreen` opens the channel once its join attempt has settled (or after 5 s), since
+  the server now refuses a subscribe that arrives before the participant row or mark.
+- PLAY BUILD (vc4): keeps working, with one visible change: on a first open of a ride, or a
+  rejoin, the first subscribe is refused and the app's retry connects about 2 s later, showing
+  "CHANNEL DENIED" for that moment. Departure is unaffected (broadcast first, mark second).
+  APPLIED TO STAGING 2026-11-22 on the Senior PM's approval (version 20261122000000 recorded;
+  rolled-back trial first; evidence `~/vechelon-backups/d94-staging/`). Device check on the
+  Play build is still owed.
+- TESTS: baseline flips T1.1 to T1.3 to green locally and records them red for the staging
+  target until D94 is applied there. `rlsIsolation.test.mjs` updated to the new rule.
+
 ## 2026-11-22 — D50: participant rows readable to Pillar II §4.1 (T5, T6, T7)
 
 - MIGRATION `20261122010000_d50_participant_rows_section_4_1.sql`: `participant_tactical_select`
@@ -1920,10 +1950,29 @@ Notes:
 - WEB: `RideDetailSideSheet` uses `get_ride_attendees` for non-admins; `RideLanding` head count
   uses `get_ride_attendee_count`. Both fall back to the table read if the function is absent,
   so the same web code runs against a database without D50.
-- WEB READ SITES LEFT AS THEY ARE: admin-only pages (Dashboard, RideBuilder,
-  ParticipantDetailSheet, Members) are covered by the admin branch; own-row reads
-  (AdminRideFeed, RiderHome, RideLanding RSVP check) by the own-row branch.
+- WEB READ SITES LEFT AS THEY ARE: admin-only pages (Dashboard incl. its
+  `ride_participants(role)` embed, RideBuilder, ParticipantDetailSheet, Members) are covered by
+  the admin branch; own-row reads (AdminRideFeed, RiderHome, RideLanding RSVP check) by the
+  own-row branch.
+- REVIEW r1 (same PR):
+  - `CalendarGrid` (member-facing, missed at first): its `ride_participants(count)` embed would
+    have shown 0 or 1 to a member. New `get_ride_attendee_counts(ride_ids[])`; the page shows the
+    larger of the embed and the function.
+  - STACKED ON D94: D94's branch is merged into this one. The seed functions admit a rider only
+    once their first-open mark is written, and D94's join-settled gate is what orders that.
+    The roster hook now waits for the join; the last-known and beacon seeds treat a zero-row
+    answer as "not on the ride yet" (the function always returns the caller's own row to anyone
+    it admits), skip it and read again on the next trigger. Merge PR #170 before #171.
+  - Web fallbacks also apply when a function returns nothing (platform admin of another club).
+  - The read policy is now `TO authenticated`; a signed-out read returns no rows, no error.
+- OPEN FOR THE SENIOR PM (not decided in code): the club-admin branch gives an admin whole
+  participant rows of their club's rides, position and ping columns included, because RLS is
+  per row and the web admin pages need the rows (email, phone, role changes, removal). The
+  brief says nobody but Captain and SAG reads another rider's last position or ping. Before
+  D50 every member could read these columns; after D50 only admins, Captains and SAG can.
+- KNOWN, NOT CHANGED: `rail3_ride_admin` requires affiliated status; the web's admin flag and
+  `is_tenant_admin` test the role only. A suspended admin keeps the admin menu but now reads
+  only their own participant rows.
 - NOT ON STAGING (breaks the Play build's direct reads; W317). Not on production.
 - TESTS: T5.5, T5.6 added; T5.2 and T5.3 probe the new functions too.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
-

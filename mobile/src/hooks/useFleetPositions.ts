@@ -319,6 +319,13 @@ export function useFleetPositions(
         ...(error ? { err: error.message } : {}),
       });
       if (cancelled || error || !data) return;
+      // D50: the seed function returns at least the caller's own row to anyone it admits, so
+      // zero rows means "not on the ride yet" (the join write has not landed). Do not treat
+      // that as an answer, and let the next trigger (first SUBSCRIBED, a resume) read again.
+      if ((data as unknown[]).length === 0) {
+        lastFetchMs = 0;
+        return;
+      }
       setLastKnown(split.lastKnown);
       setDeparted((local) => mergeDepartedMarks(split.departed, local, fetchStartedAtMs));
     };

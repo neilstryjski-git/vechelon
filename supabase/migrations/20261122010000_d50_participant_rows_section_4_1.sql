@@ -56,7 +56,11 @@ $$;
 REVOKE ALL ON FUNCTION public.rail3_ride_admin(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.rail3_ride_admin(uuid) TO authenticated, service_role;
 
+-- TO authenticated: the policy used to apply to every role. A signed-out (anon) caller never
+-- matched any branch, so it read nothing; it still reads nothing, without the policy calling
+-- helpers anon has no EXECUTE on (which would turn "no rows" into a permission error).
 ALTER POLICY participant_tactical_select ON public.ride_participants
+  TO authenticated
   USING (
     account_id = auth.uid()
     OR public.is_captain_or_support(ride_id)
@@ -127,7 +131,8 @@ REVOKE ALL ON FUNCTION public.get_ride_fleet_seed(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_ride_fleet_seed(uuid) TO authenticated, service_role;
 
 -- Can the caller see who is attending this ride (names only)? An affiliated member of the
--- ride's club, as before (RP-16), or anyone with a row on the ride.
+-- ride's club, as before (RP-16), or anyone with a row on the ride. The second branch is
+-- deliberate and matches get_ride_roster (W313): a row on the ride is standing for names.
 CREATE OR REPLACE FUNCTION public.rail3_can_list_attendees(p_ride_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -190,4 +195,21 @@ AS $$
               ELSE 0 END;
 $$;
 REVOKE ALL ON FUNCTION public.get_ride_attendee_count(uuid) FROM PUBLIC, anon;
+
+-- The web calendar's head counts for a month of rides in one call.
+CREATE OR REPLACE FUNCTION public.get_ride_attendee_counts(p_ride_ids uuid[])
+RETURNS TABLE (ride_id uuid, attendees integer)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p.ride_id, count(*)::integer
+    FROM public.ride_participants p
+   WHERE p.ride_id = ANY (p_ride_ids)
+     AND public.rail3_can_list_attendees(p.ride_id)
+   GROUP BY p.ride_id;
+$$;
+REVOKE ALL ON FUNCTION public.get_ride_attendee_counts(uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_ride_attendee_counts(uuid[]) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_ride_attendee_count(uuid) TO authenticated, service_role;

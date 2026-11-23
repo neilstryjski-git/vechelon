@@ -108,9 +108,10 @@ export async function sendSleepingPing(args: {
 // identity check ensures we only ever depart AS ourselves. Never throws; a failed departure
 // just leaves the pre-existing (greying) phantom — strictly no worse than today.
 //
-// COLLISION-SAFE: if the same account is still live on another device, that device's live pings
-// re-add the rider on the receiver and repopulate last-known — so this correctly removes only a
-// TRULY departed rider, and self-heals when a second device is still present.
+// TWO DEVICES, ONE ACCOUNT (changed by D94): the departure mark is per account and ride. Before
+// D94 a second device still riding re-added the rider with its next ping. With ride-scoped
+// channels the server refuses that device's sends once the mark is stamped, until it re-opens
+// the ride (which clears the mark). Recorded as a known limit in qa_log.md, carried to W193.
 // W287 (R3-70): `clearLastKnown: false` on a RIDE-END teardown — the 'departed' broadcast still
 // goes out (harmless; clears my marker on any peer not yet torn down) but last_lat / last_long /
 // last_ping are NOT nulled: on a Saved ride they persist to the T+4h Hard Purge. Default true
