@@ -270,9 +270,8 @@ export function useFleetPositions(
   // W262: persisted last-known positions (the W261 write), keyed by account_id like pings
   // and the roster. A rider who STOPS goes quiet (un-forced SDK → no more live pings), so on
   // FOCUS the fleet loop below renders them at this last-known spot instead of dropping them.
-  // §4.1-gated SERVER-SIDE by participant_tactical_select (same policy as the roster read) —
-  // RLS returns only rows this viewer may see; same RP-16 affiliated-tenant breadth caveat as
-  // useRideRoster applies. Fetched on open and on every return-to-foreground: a MEANINGFUL
+  // §4.1-gated SERVER-SIDE by get_ride_fleet_seed (D50): a rider gets positions for leaders and
+  // active beacons only. Fetched on open and on every return-to-foreground: a MEANINGFUL
   // event, never per-ping (Pillar II §2).
   const [lastKnown, setLastKnown] = useState<Record<string, { lat: number; lng: number; ts: number }>>({});
   // W292 (C3 item 7, R3-65/68): the DURABLE departed marks — read from ride_participants.departed_at
@@ -282,6 +281,7 @@ export function useFleetPositions(
   const [departed, setDeparted] = useState<Record<string, DepartedMark>>({});
   // Bridges the ride-scoped fetch closure to the stable resume subscriber below.
   const resumeFetchRef = useRef<((source: ResumeSource) => void) | null>(null);
+  const connectFetchRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
@@ -321,7 +321,7 @@ export function useFleetPositions(
       if (cancelled || error || !data) return;
       // D50: the seed function returns at least the caller's own row to anyone it admits, so
       // zero rows means "not on the ride yet" (the join write has not landed). Do not treat
-      // that as an answer, and let the next trigger (first SUBSCRIBED, a resume) read again.
+      // that as an answer, and let the next trigger (the channel appearing, a resume) read again.
       if ((data as unknown[]).length === 0) {
         lastFetchMs = 0;
         return;
@@ -333,11 +333,22 @@ export function useFleetPositions(
     resumeFetchRef.current = (source: ResumeSource) => {
       void fetchLastKnown(source);
     };
+    connectFetchRef.current = () => {
+      void fetchLastKnown();
+    };
     return () => {
       cancelled = true;
       resumeFetchRef.current = null;
+      connectFetchRef.current = null;
     };
   }, [rideId]);
+
+  // D50: the channel object only exists once the ride join has settled (D94), which is the first
+  // moment the seed function admits a rider. Read then. For a Captain, SAG or admin the mount
+  // read already succeeded and this one is absorbed by the debounce.
+  useEffect(() => {
+    if (channel) connectFetchRef.current?.();
+  }, [channel]);
 
   // W269: last-known refetch now rides the shared resume signal (clock-gap + AppState + staleness),
   // so it can no longer be skipped by an 'active' event that never arrives. The ref keeps the

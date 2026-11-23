@@ -98,8 +98,8 @@ export function useBeacons(
   // W282 SEED — current beacon state from ride_participants.beacon_active (+ last_* as the
   // R3-55 anchor). A meaningful event, never per-ping: mount, every resume (D75 — the field
   // failure was an SOS active during a pocket that never surfaced on unlock), and channel
-  // activation. §4.1-gated SERVER-SIDE by participant_tactical_select (a Rider reads own +
-  // Captain/SAG rows, which is exactly canSeeBeacon's shape). The seed is AUTHORITATIVE for
+  // activation. §4.1-gated SERVER-SIDE by get_ride_fleet_seed (D50: every
+  // beacon flag on the ride reaches a rider who is on it; W315 changes what the app shows). The seed is AUTHORITATIVE for
   // absence: a beacon settled while this device was blind is dropped and never re-raised from
   // beacon_alerts history (mergeSeededBeacons owns the two race exceptions).
   //

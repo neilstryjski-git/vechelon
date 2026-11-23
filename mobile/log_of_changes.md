@@ -1965,11 +1965,13 @@ Notes:
     it admits), skip it and read again on the next trigger. Merge PR #170 before #171.
   - Web fallbacks also apply when a function returns nothing (platform admin of another club).
   - The read policy is now `TO authenticated`; a signed-out read returns no rows, no error.
-- OPEN FOR THE SENIOR PM (not decided in code): the club-admin branch gives an admin whole
+- RULED BY THE SENIOR PM 2026-11-22 ("option 1 is approved": accept and record): the club-admin branch gives an admin whole
   participant rows of their club's rides, position and ping columns included, because RLS is
   per row and the web admin pages need the rows (email, phone, role changes, removal). The
   brief says nobody but Captain and SAG reads another rider's last position or ping. Before
   D50 every member could read these columns; after D50 only admins, Captains and SAG can.
+- REVIEW r2: the last-known fetch also runs when the channel appears (the first moment a rider
+  is admitted); before this a rider in the foreground kept an empty seed until a lock/unlock.
 - KNOWN, NOT CHANGED: `rail3_ride_admin` requires affiliated status; the web's admin flag and
   `is_tenant_admin` test the role only. A suspended admin keeps the admin menu but now reads
   only their own participant rows.

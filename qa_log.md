@@ -26,8 +26,8 @@ signed-out reads erroring instead of returning nothing. T5.5 now also proves Cap
 the club admin get a rider's position; T5.6 proves an email-shaped name is withheld, the
 calendar counts, the admin and Captain table reads, and a signed-out read.
 
-**Open for the Senior PM:** a club admin can read position and ping columns of their club's
-participant rows (see the dev log). Not a regression: every member could before D50.
+**Ruled by the Senior PM 2026-11-22 (accepted):** a club admin can read position and ping
+columns of their club's participant rows (see the dev log). Every member could before D50.
 
 Not yet run: the changed web pages in a browser; the changed app reads on a device.
 
