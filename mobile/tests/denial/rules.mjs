@@ -521,7 +521,9 @@ export const cases = [
         const l = await refused(ctx, u.clubAdmin, rides.main);
         rule(l.joined.length === 0, `a suspended admin joined: ${l.joined.join(', ')}`);
       } finally {
-        await set('affiliated');
+        // The fixture admin is shared: a failed restore must fail loudly, not poison later cases.
+        const { error: restoreErr } = await set('affiliated');
+        if (restoreErr) throw new Error(`could not restore the fixture admin: ${restoreErr.message}`);
       }
     },
   },

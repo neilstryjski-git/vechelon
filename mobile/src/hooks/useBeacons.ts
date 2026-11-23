@@ -21,6 +21,9 @@ import { useResume } from './useResume';
 import type { ResumeSource } from '../lib/resumeDetector';
 
 // Broadcast event name for beacon state changes on the rail3:ride:<id> channel.
+// D94 placeholder copy (Voice & Tone list): shown when the beacon is tapped before the channel opens.
+const NOT_CONNECTED_MSG = 'Not connected to the ride yet — your beacon did NOT go out. Try again in a moment.';
+
 export const BEACON_EVENT = 'beacon';
 // W282: mirrors the fleet's LAST_KNOWN_REFETCH_DEBOUNCE_MS — mount + first SUBSCRIBED, or an
 // AppState flap, must not double-read; a real activation later always runs.
@@ -245,13 +248,18 @@ export function useBeacons(
   // R3-19/R3-23: single tap, no confirmation — strong haptic, broadcast, then
   // the audit insert (lat/long snapshot at trigger time; cancel fields null
   // because the beacon is ACTIVE, not because of SD-011's error sentinel).
+  // D94: the "not connected" message is only true while there is no channel; drop it on connect.
+  useEffect(() => {
+    if (channel) setError((e) => (e === NOT_CONNECTED_MSG ? null : e));
+  }, [channel]);
+
   const triggerBeacon = useCallback(async () => {
     if (!rideId || !tenantId || !myRiderId) return;
     if (!channel) {
       // D94: the channel now opens only after the ride join has settled, so for the first
       // moments of a ride the tap has nothing to send on. Never swallow an SOS silently.
       // Placeholder copy, on the Voice & Tone list.
-      setError('Not connected to the ride yet — your beacon did NOT go out. Try again in a moment.');
+      setError(NOT_CONNECTED_MSG);
       return;
     }
     setError(null);
