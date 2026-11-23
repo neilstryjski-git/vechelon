@@ -125,7 +125,7 @@ const RideDetailSideSheet: React.FC = () => {
   });
 
   const { data: participants = [], isLoading: loadingParticipants } = useQuery<ParticipantDetail[]>({
-    queryKey: ['ride-participants', selectedRideId],
+    queryKey: ['ride-participants', selectedRideId, isAdmin],
     queryFn: async () => {
       if (!selectedRideId) return [];
       const { data, error } = await supabase
@@ -133,7 +133,18 @@ const RideDetailSideSheet: React.FC = () => {
         .select('id, display_name, role, status, account_id, email')
         .eq('ride_id', selectedRideId);
       if (error) throw error;
-      return data || [];
+      if (isAdmin) return data || [];
+      // D50: a member reads only their own row from the table. The attendee list (RP-16,
+      // names only: no email, no phone) comes from a function. If the function is not
+      // deployed yet, fall back to what the table returned.
+      const { data: names, error: namesErr } = await supabase
+        .rpc('get_ride_attendees', { p_ride_id: selectedRideId });
+      if (namesErr || !names) return data || [];
+      return (names as Array<Omit<ParticipantDetail, 'email'>>).map((p) => ({
+        ...p,
+        display_name: p.display_name ?? 'Rider',
+        email: null,
+      }));
     },
     enabled: !!selectedRideId,
   });

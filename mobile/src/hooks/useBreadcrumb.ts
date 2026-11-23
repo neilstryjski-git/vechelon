@@ -173,12 +173,13 @@ export function useBreadcrumb(
     const lid = leaderIdRef.current;
     if (!rid || !lid) return;
     const startedAt = Date.now();
-    const { data, error } = await supabase
-      .from('ride_participants')
-      .select('departed_at')
-      .eq('ride_id', rid)
-      .eq('account_id', lid)
-      .maybeSingle();
+    // D50: a rider cannot read the leader's participant row; the fleet-seed function carries the mark.
+    const seedRes = await supabase.rpc('get_ride_fleet_seed', { p_ride_id: rid });
+    const error = seedRes.error;
+    const data =
+      ((seedRes.data ?? []) as Array<{ account_id: string | null; departed_at: string | null }>).find(
+        (r) => r.account_id === lid,
+      ) ?? null;
     if (rid !== rideIdRef.current || lid !== leaderIdRef.current) return; // ride/leader changed meanwhile
     const atMs = data?.departed_at ? Date.parse(data.departed_at) : NaN;
     const fetched: Record<string, DepartedMark> = Number.isNaN(atMs) ? {} : { [lid]: { atMs, seenAtMs: Date.now() } };

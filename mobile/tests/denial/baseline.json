@@ -14,8 +14,8 @@
     "T4.1": "green",
     "T4.2": "green",
     "T4.3": "red",
-    "T5.1": "red",
-    "T5.2": "red",
+    "T5.1": "green",
+    "T5.2": "green",
     "T6.1": "green",
     "T6.2": "green",
     "T7.1": "green",
@@ -40,22 +40,30 @@
     "T16.1": "green",
     "T16.2": "green",
     "T16.3": "green",
-    "T5.3": "red",
+    "T5.3": "green",
     "T16.4": "green",
     "T15.2": "red",
     "T10.2": "green",
     "T14.2": "green",
     "T13.2": "green",
     "T5.4": "green",
-    "T6.3": "green"
+    "T6.3": "green",
+    "T5.5": "green",
+    "T5.6": "green"
   },
   "targets": {
     "staging": {
-      "T15.2": "green"
+      "T15.2": "green",
+      "T5.1": "red",
+      "T5.2": "red",
+      "T5.3": "red",
+      "T5.5": "error",
+      "T5.6": "error"
     }
   },
   "_advisory": "T15.2 is advisory (outside rule T15): red wherever the Supabase project still relays public realtime channels. Staging was set to private channels only on 2026-11-18 (Senior PM approved), so it is green there; the local stack has no such setting.",
   "_w311": "W311 (2026-11-18): T10.1, T11.1 to T11.4 and T16.2 turned green; T10.2 and T14.2 added.",
   "_w312": "W312 (2026-11-18): T13.1 turned green; T13.2 added.",
-  "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path."
+  "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path.",
+  "_d50": "D50 (2026-11-22): T5.1 to T5.3 turned green on the local stack; T5.5, T5.6 added. Not on staging until W317 (breaks the Play build's direct table reads), so staging keeps them red or absent."
 }

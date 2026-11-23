@@ -113,20 +113,27 @@ export function useRideRoster(rideId: string | null): {
     if (!rideId) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('ride_participants')
-        .select('account_id, role, display_name, phone, status')
-        .eq('ride_id', rideId);
-      if (cancelled || error || !data) return;
+      // D50: a rider can no longer read other riders' participant rows. Names, roles and the
+      // phones this role may see come from the roster function (W313); the participation
+      // status comes from the fleet-seed function. Neither returns anything the role may not see.
+      const [rosterRes, seedRes] = await Promise.all([
+        supabase.rpc('get_ride_roster', { p_ride_id: rideId }),
+        supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId }),
+      ]);
+      if (cancelled || rosterRes.error || !rosterRes.data) return;
+      const statusById: Record<string, string | null> = {};
+      for (const s of (seedRes.data ?? []) as Array<{ account_id: string | null; status: string | null }>) {
+        if (s.account_id) statusById[s.account_id] = s.status ?? null;
+      }
 
       const next: RideRoster = {};
-      for (const row of data) {
-        if (!row.account_id) continue; // guest session rows without an account
+      for (const row of rosterRes.data as Array<{ account_id: string | null; role: string | null; name: string | null; phone: string | null }>) {
+        if (!row.account_id) continue; // guest rows without an account
         next[row.account_id] = {
           role: (row.role as RideRole) ?? 'member',
-          displayName: row.display_name ?? 'Rider',
+          displayName: row.name ?? 'Rider',
           phone: row.phone ?? null,
-          participantStatus: row.status ?? null,
+          participantStatus: statusById[row.account_id] ?? null,
         };
       }
       setRoster(next);
@@ -296,10 +303,8 @@ export function useFleetPositions(
       // W292: a mark learned by broadcast AFTER this instant outranks what the fetch reads (the fetch
       // may have read the row before the departure landed — the pre-existing D87 race).
       const fetchStartedAtMs = Date.now();
-      const { data, error } = await supabase
-        .from('ride_participants')
-        .select('account_id, last_lat, last_long, last_ping, departed_at')
-        .eq('ride_id', rideId);
+      // D50: role-filtered server-side (a rider gets positions for leaders and active beacons only).
+      const { data, error } = await supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId });
       // W271: distinguish "the query ran and found nothing" from "the query never ran". `usable`
       // is the count that survives the null-coordinate filter — the number that can actually render
       // a marker (W292: a departed row never can, whatever it carries). No coordinates logged

@@ -1899,3 +1899,31 @@ Notes:
   itself show "Rider" and no phone on the map. Raised on D50, which owns those reads.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
+## 2026-11-22 — D50: participant rows readable to Pillar II §4.1 (T5, T6, T7)
+
+- MIGRATION `20261122010000_d50_participant_rows_section_4_1.sql`: `participant_tactical_select`
+  loses its "any affiliated member of the club" branch. A row is readable by its own account,
+  the ride's Captain and SAG, and an affiliated admin of the ride's club (new explicit branch;
+  admins used to read through the member branch). `rail3_ride_admin` is repeated from D94's
+  migration with the same body so either order works.
+- NEW FUNCTIONS (SECURITY DEFINER, authenticated only): `get_ride_fleet_seed` (map catch-up:
+  status, beacon flag, departure mark for all; position only for leaders, active beacons and the
+  caller's own row, unless the caller is Captain, SAG or club admin), `get_ride_attendees` and
+  `get_ride_attendee_count` (web RP-16 names-only list; standing = affiliated club member or a
+  row on the ride; an email-looking display name is never returned).
+- LLD: "on the ride" for the fleet seed = first-open mark set, no departure mark, still
+  affiliated (same definition as D94's channel rule).
+- APP: `useFleetPositions` (roster seed via `get_ride_roster` + status from the fleet seed; last
+  known via the fleet seed), `useBeacons` (beacon seed), `useBreadcrumb` (leader departure mark)
+  no longer read the table for other people's rows. This also closes the gap noted on W313
+  (roster seed showing "Rider" once the hydration trigger is dropped).
+- WEB: `RideDetailSideSheet` uses `get_ride_attendees` for non-admins; `RideLanding` head count
+  uses `get_ride_attendee_count`. Both fall back to the table read if the function is absent,
+  so the same web code runs against a database without D50.
+- WEB READ SITES LEFT AS THEY ARE: admin-only pages (Dashboard, RideBuilder,
+  ParticipantDetailSheet, Members) are covered by the admin branch; own-row reads
+  (AdminRideFeed, RiderHome, RideLanding RSVP check) by the own-row branch.
+- NOT ON STAGING (breaks the Play build's direct reads; W317). Not on production.
+- TESTS: T5.5, T5.6 added; T5.2 and T5.3 probe the new functions too.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+

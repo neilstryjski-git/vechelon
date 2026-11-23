@@ -137,11 +137,13 @@ export function useBeacons(
           if (cancelled) return;
         }
       }
-      const { data, error: seedErr } = await supabase
-        .from('ride_participants')
-        .select('account_id, beacon_active, last_lat, last_long, last_ping')
-        .eq('ride_id', rideId)
-        .eq('beacon_active', true);
+      // D50: through the fleet-seed function (the table no longer shows a rider other riders' rows).
+      const seedRes = await supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId });
+      const seedErr = seedRes.error;
+      const data = seedRes.data
+        ? (seedRes.data as Array<{ account_id: string | null; beacon_active: boolean; last_lat: number | null; last_long: number | null; last_ping: string | null }>)
+            .filter((r) => r.beacon_active)
+        : null;
       logFetchResult(rideId, 'beacon', {
         rows: data?.length ?? 0,
         cancelled,
@@ -161,7 +163,9 @@ export function useBeacons(
           beaconId: null, // the flag carries no audit id; cancel is keyed by rider
           riderId: row.account_id,
           triggeredAt: row.last_ping ? Date.parse(row.last_ping) : seedStartedAt,
-          anchor: anchored ? { lat: row.last_lat, lng: row.last_long, ts: Date.parse(row.last_ping) } : null,
+          anchor: anchored
+            ? { lat: row.last_lat as number, lng: row.last_long as number, ts: Date.parse(row.last_ping as string) }
+            : null,
         };
       }
       const protectedIds =
