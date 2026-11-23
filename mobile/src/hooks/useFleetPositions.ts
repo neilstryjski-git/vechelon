@@ -82,14 +82,10 @@ export interface RideRosterEntry {
 
 export type RideRoster = Record<string, RideRosterEntry>;
 
-// RLS-gated roster read at meaningful events only — never per ping.
-// participant_tactical_select encodes the §4.1 matrix server-side for
-// non-affiliated tenants (Captain/SAG: every row; Rider: Captain/SAG + self),
-// and role/name/phone are server-truth, immune to payload spoofing. CAVEAT
-// (review 90480ee): the policy's RP-16 affiliated-tenant disjunct returns ALL
-// participant rows (incl. phone) to affiliated Riders, so there the phone gate
-// is client-side only — pre-existing policy breadth, tracked as a follow-up
-// defect to column-restrict RP-16.
+// Roster read at meaningful events only — never per ping. Since D50 a rider cannot read other
+// riders' participant rows: names, roles and the phones this role may see come from
+// get_ride_roster (W313), the participation status from get_ride_fleet_seed. Both are
+// role-filtered on the server and immune to payload spoofing.
 export function useRideRoster(rideId: string | null): {
   roster: RideRoster;
   refetchRoster: () => void;
@@ -290,6 +286,7 @@ export function useFleetPositions(
     // the sleeping-ping handler. Per-effect-run state (resets on rideId change → a new ride fetches
     // fresh); the first call always runs since lastFetchMs starts at 0.
     let lastFetchMs = 0;
+    let droppedByDebounce = false;
     // `resumeSource` marks the call as a recovery attempt and carries WHICH emitter detected it.
     // The signal is logged INSIDE the debounce gate, after it passes: a resume_signal must mean the
     // refetch actually ran, otherwise a debounced no-op looks identical to a real recovery. It must
@@ -297,8 +294,14 @@ export function useFleetPositions(
     // like AppState fired, which is precisely the question W268/W269 exist to answer.
     const fetchLastKnown = async (resumeSource?: ResumeSource) => {
       const now = Date.now();
-      if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
+      if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) {
+        // D50: remember a call dropped by the debounce; if the read it lost to comes back
+        // "not on the ride yet", that call is the one that would have succeeded.
+        droppedByDebounce = true;
+        return;
+      }
       lastFetchMs = now;
+      droppedByDebounce = false;
       if (resumeSource) logResumeSignal(rideId, resumeSource, 'fleet');
       // W292: a mark learned by broadcast AFTER this instant outranks what the fetch reads (the fetch
       // may have read the row before the departure landed — the pre-existing D87 race).
@@ -324,6 +327,7 @@ export function useFleetPositions(
       // that as an answer, and let the next trigger (the channel appearing, a resume) read again.
       if ((data as unknown[]).length === 0) {
         lastFetchMs = 0;
+        if (droppedByDebounce) void fetchLastKnown();
         return;
       }
       setLastKnown(split.lastKnown);
