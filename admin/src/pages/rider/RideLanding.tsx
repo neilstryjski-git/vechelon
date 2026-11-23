@@ -370,6 +370,13 @@ const RideLanding: React.FC = () => {
   const { data: participantCount } = useQuery<number>({
     queryKey: ['ride-participant-count', rideId],
     queryFn: async ({ signal }) => {
+      // D50: members no longer read other riders' rows, so the head count comes from a function.
+      // Falls back to the table count where the function is not deployed yet.
+      const viaFn = await supabase
+        .rpc('get_ride_attendee_count', { p_ride_id: rideId })
+        .abortSignal(signal);
+      // Zero also falls through to the table (platform admin of another club; signed-out visitor).
+      if (!viaFn.error && typeof viaFn.data === 'number' && viaFn.data > 0) return viaFn.data;
       const { count, error } = await supabase
         .from('ride_participants')
         .select('*', { count: 'exact', head: true })

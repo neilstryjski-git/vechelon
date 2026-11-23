@@ -1928,5 +1928,53 @@ Notes:
   the Senior PM the same evening (qa_log.md); baseline no longer records T1 red for staging.
 - TESTS: baseline flips T1.1 to T1.3 to green locally and records them red for the staging
   target until D94 is applied there. `rlsIsolation.test.mjs` updated to the new rule.
-- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
 
+## 2026-11-22 — D50: participant rows readable to Pillar II §4.1 (T5, T6, T7)
+
+- MIGRATION `20261122010000_d50_participant_rows_section_4_1.sql`: `participant_tactical_select`
+  loses its "any affiliated member of the club" branch. A row is readable by its own account,
+  the ride's Captain and SAG, and an affiliated admin of the ride's club (new explicit branch;
+  admins used to read through the member branch). `rail3_ride_admin` is repeated from D94's
+  migration with the same body so either order works.
+- NEW FUNCTIONS (SECURITY DEFINER, authenticated only): `get_ride_fleet_seed` (map catch-up:
+  status, beacon flag, departure mark for all; position only for leaders, active beacons and the
+  caller's own row, unless the caller is Captain, SAG or club admin), `get_ride_attendees` and
+  `get_ride_attendee_count` (web RP-16 names-only list; standing = affiliated club member or a
+  row on the ride; an email-looking display name is never returned).
+- LLD: "on the ride" for the fleet seed = first-open mark set, no departure mark, still
+  affiliated (same definition as D94's channel rule).
+- APP: `useFleetPositions` (roster seed via `get_ride_roster` + status from the fleet seed; last
+  known via the fleet seed), `useBeacons` (beacon seed), `useBreadcrumb` (leader departure mark)
+  no longer read the table for other people's rows. This also closes the gap noted on W313
+  (roster seed showing "Rider" once the hydration trigger is dropped).
+- WEB: `RideDetailSideSheet` uses `get_ride_attendees` for non-admins; `RideLanding` head count
+  uses `get_ride_attendee_count`. Both fall back to the table read if the function is absent,
+  so the same web code runs against a database without D50.
+- WEB READ SITES LEFT AS THEY ARE: admin-only pages (Dashboard incl. its
+  `ride_participants(role)` embed, RideBuilder, ParticipantDetailSheet, Members) are covered by
+  the admin branch; own-row reads (AdminRideFeed, RiderHome, RideLanding RSVP check) by the
+  own-row branch.
+- REVIEW r1 (same PR):
+  - `CalendarGrid` (member-facing, missed at first): its `ride_participants(count)` embed would
+    have shown 0 or 1 to a member. New `get_ride_attendee_counts(ride_ids[])`; the page shows the
+    larger of the embed and the function.
+  - STACKED ON D94: D94's branch is merged into this one. The seed functions admit a rider only
+    once their first-open mark is written, and D94's join-settled gate is what orders that.
+    The roster hook now waits for the join; the last-known and beacon seeds treat a zero-row
+    answer as "not on the ride yet" (the function always returns the caller's own row to anyone
+    it admits), skip it and read again on the next trigger. Merge PR #170 before #171.
+  - Web fallbacks also apply when a function returns nothing (platform admin of another club).
+  - The read policy is now `TO authenticated`; a signed-out read returns no rows, no error.
+- RULED BY THE SENIOR PM 2026-11-22 ("option 1 is approved": accept and record): the club-admin branch gives an admin whole
+  participant rows of their club's rides, position and ping columns included, because RLS is
+  per row and the web admin pages need the rows (email, phone, role changes, removal). The
+  brief says nobody but Captain and SAG reads another rider's last position or ping. Before
+  D50 every member could read these columns; after D50 only admins, Captains and SAG can.
+- REVIEW r2: the last-known fetch also runs when the channel appears (the first moment a rider
+  is admitted); before this a rider in the foreground kept an empty seed until a lock/unlock.
+- KNOWN, NOT CHANGED: `rail3_ride_admin` requires affiliated status; the web's admin flag and
+  `is_tenant_admin` test the role only. A suspended admin keeps the admin menu but now reads
+  only their own participant rows.
+- NOT ON STAGING (breaks the Play build's direct reads; W317). Not on production.
+- TESTS: T5.5, T5.6 added; T5.2 and T5.3 probe the new functions too.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.

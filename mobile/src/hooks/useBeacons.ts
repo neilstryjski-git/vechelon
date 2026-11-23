@@ -98,8 +98,8 @@ export function useBeacons(
   // W282 SEED — current beacon state from ride_participants.beacon_active (+ last_* as the
   // R3-55 anchor). A meaningful event, never per-ping: mount, every resume (D75 — the field
   // failure was an SOS active during a pocket that never surfaced on unlock), and channel
-  // activation. §4.1-gated SERVER-SIDE by participant_tactical_select (a Rider reads own +
-  // Captain/SAG rows, which is exactly canSeeBeacon's shape). The seed is AUTHORITATIVE for
+  // activation. §4.1-gated SERVER-SIDE by get_ride_fleet_seed (D50: every
+  // beacon flag on the ride reaches a rider who is on it; W315 changes what the app shows). The seed is AUTHORITATIVE for
   // absence: a beacon settled while this device was blind is dropped and never re-raised from
   // beacon_alerts history (mergeSeededBeacons owns the two race exceptions).
   //
@@ -140,11 +140,13 @@ export function useBeacons(
           if (cancelled) return;
         }
       }
-      const { data, error: seedErr } = await supabase
-        .from('ride_participants')
-        .select('account_id, beacon_active, last_lat, last_long, last_ping')
-        .eq('ride_id', rideId)
-        .eq('beacon_active', true);
+      // D50: through the fleet-seed function (the table no longer shows a rider other riders' rows).
+      const seedRes = await supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId });
+      const seedErr = seedRes.error;
+      const data = seedRes.data
+        ? (seedRes.data as Array<{ account_id: string | null; beacon_active: boolean; last_lat: number | null; last_long: number | null; last_ping: string | null }>)
+            .filter((r) => r.beacon_active)
+        : null;
       logFetchResult(rideId, 'beacon', {
         rows: data?.length ?? 0,
         cancelled,
@@ -156,6 +158,12 @@ export function useBeacons(
         console.warn('[Rail3] beacon seed read failed', seedErr);
         return;
       }
+      // D50: zero rows from the function (before the beacon filter) means "not on the ride
+      // yet", not "no beacons". Skip the merge and let the next trigger read again.
+      if (((seedRes.data ?? []) as unknown[]).length === 0) {
+        lastSeedMs = 0;
+        return;
+      }
       const active: Record<string, ActiveBeacon> = {};
       for (const row of data) {
         if (!row.account_id) continue;
@@ -164,7 +172,9 @@ export function useBeacons(
           beaconId: null, // the flag carries no audit id; cancel is keyed by rider
           riderId: row.account_id,
           triggeredAt: row.last_ping ? Date.parse(row.last_ping) : seedStartedAt,
-          anchor: anchored ? { lat: row.last_lat, lng: row.last_long, ts: Date.parse(row.last_ping) } : null,
+          anchor: anchored
+            ? { lat: row.last_lat as number, lng: row.last_long as number, ts: Date.parse(row.last_ping as string) }
+            : null,
         };
       }
       const protectedIds =

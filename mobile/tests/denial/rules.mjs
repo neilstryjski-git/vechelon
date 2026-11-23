@@ -313,6 +313,8 @@ export const cases = [
       if (leaks(embed.data, ...secrets).length) found.push('accounts embed');
       await probe('get_ride_roster_contacts', c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }));
       await probe('ride_participants_pa_view', c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id));
+      await probe('get_ride_fleet_seed', c.rpc('get_ride_fleet_seed', { p_ride_id: rides.main.id }));
+      await probe('get_ride_attendees', c.rpc('get_ride_attendees', { p_ride_id: rides.main.id }));
       const roster = await riderRoster(c, rides.main.id);
       const a = roster.rows.find((r) => r.account_id === u.riderA.id);
       if (a?.phone || leaks(roster.rows, POS.lat, POS.lng).length) found.push('rider roster path');
@@ -335,6 +337,8 @@ export const cases = [
           get_ride_roster_contacts: c.rpc('get_ride_roster_contacts', { p_ride_id: rides.main.id }),
           ride_participants_pa_view: c.from('ride_participants_pa_view').select('*').eq('ride_id', rides.main.id),
           get_ride_roster: c.rpc('get_ride_roster', { p_ride_id: rides.main.id }),
+          get_ride_fleet_seed: c.rpc('get_ride_fleet_seed', { p_ride_id: rides.main.id }),
+          get_ride_attendees: c.rpc('get_ride_attendees', { p_ride_id: rides.main.id }),
         };
         for (const [label, q] of Object.entries(probes)) {
           if (leaks(await read(q), ...secrets).length) found.push(`${who.key}: ${label}`);
@@ -374,6 +378,112 @@ export const cases = [
         if (a?.phone) got.push(`${who.key} read rider A's phone`);
       }
       rule(got.length === 0, `through get_ride_roster: ${got.join('; ')}`);
+    },
+  },
+
+  {
+    id: 'T5.5', rule: 'T5',
+    title: 'The fleet-seed function gives a rider positions for leaders and active beacons only, and nothing to anyone off the ride (D50)',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const id = rides.main.id;
+      const seed = async (who) => {
+        const res = await db(ctx, who).rpc('get_ride_fleet_seed', { p_ride_id: id });
+        rule(res.error?.code !== 'PGRST202', 'get_ride_fleet_seed is not deployed on this target');
+        return res.data ?? [];
+      };
+      await seed(u.riderB); // fails red here, before any fixture write, where the function is absent
+      const capPos = { last_lat: 43.71, last_long: -79.41, last_ping: new Date().toISOString() };
+      const setCaptain = (patch) => ctx.admin.from('ride_participants').update(patch).eq('ride_id', id).eq('account_id', u.captain.id);
+      const got = [];
+      try {
+        const { error } = await setCaptain(capPos);
+        if (error) throw new Error(`could not give the captain a position: ${error.message}`);
+        const mine = await seed(u.riderB);
+        control(mine.length > 0, 'rider B, on the ride, got no fleet-seed rows');
+        const a = mine.find((r) => r.account_id === u.riderA.id);
+        const cap = mine.find((r) => r.account_id === u.captain.id);
+        control(a && cap, 'the seed is missing rider A or the captain');
+        if (a.last_lat != null || a.last_long != null || a.last_ping) got.push('rider B read rider A\'s position with no beacon active');
+        if (cap.last_lat == null) got.push('over-block: rider B did not get the captain\'s position');
+        // §4.1: a rider's position reaches riders while that rider's beacon is active.
+        await setBeaconFlag(ctx, rides.main, u.riderA, true);
+        const during = (await seed(u.riderB)).find((r) => r.account_id === u.riderA.id);
+        if (during?.last_lat == null) got.push('over-block: rider B did not get rider A\'s position while A\'s beacon was active');
+        await clearBeacons(ctx, rides.main);
+        const after = (await seed(u.riderB)).find((r) => r.account_id === u.riderA.id);
+        if (after?.last_lat != null) got.push('rider B still read rider A\'s position after the beacon was cleared');
+        const allowed = new Set(['account_id', 'role', 'status', 'beacon_active', 'departed_at', 'last_lat', 'last_long', 'last_ping']);
+        const extra = [...new Set(mine.flatMap((r) => Object.keys(r)))].filter((k) => !allowed.has(k));
+        if (extra.length) got.push(`unexpected columns: ${extra.join(', ')}`);
+        for (const who of [u.offRide, u.departed, u.neverOpened, u.otherMember, u.otherAdmin]) {
+          const rows = await seed(who);
+          if (rows.length) got.push(`${who.key} read ${rows.length} fleet-seed rows`);
+        }
+        // Over-block controls: Captain, SAG and the club admin get rider A's position.
+        for (const who of [u.captain, u.sag, u.clubAdmin]) {
+          const row = (await seed(who)).find((r) => r.account_id === u.riderA.id);
+          if (row?.last_lat == null) got.push(`over-block: ${who.key} did not get rider A's position`);
+        }
+      } finally {
+        await clearBeacons(ctx, rides.main);
+        const { error: restoreErr } = await setCaptain({ last_lat: null, last_long: null, last_ping: null });
+        if (restoreErr) throw new Error(`could not restore the captain's row: ${restoreErr.message}`);
+      }
+      rule(got.length === 0, `through get_ride_fleet_seed: ${got.join('; ')}`);
+    },
+  },
+  {
+    id: 'T5.6', rule: 'T5',
+    title: 'The attendee list gives club members names only, and nothing to another club (D50, RP-16)',
+    run: async (ctx) => {
+      const { users: u, rides } = ctx.fx;
+      const id = rides.main.id;
+      const list = async (who) => {
+        const res = await db(ctx, who).rpc('get_ride_attendees', { p_ride_id: id });
+        rule(res.error?.code !== 'PGRST202', 'get_ride_attendees is not deployed on this target');
+        return res.data ?? [];
+      };
+      const got = [];
+      await list(u.offRide); // red here, before any fixture write, where the function is absent
+      // One row carries an email address as its display name for the length of this case.
+      const setName = (v) => ctx.admin.from('ride_participants').update({ display_name: v }).eq('ride_id', id).eq('account_id', u.neverOpened.id);
+      const { data: before } = await ctx.admin.from('ride_participants').select('display_name').eq('ride_id', id).eq('account_id', u.neverOpened.id).single();
+      let mine;
+      try {
+        const { error } = await setName(u.neverOpened.email);
+        if (error) throw new Error(`could not set the email-shaped name: ${error.message}`);
+        mine = await list(u.offRide);
+      } finally {
+        const { error: restoreErr } = await setName(before?.display_name ?? null);
+        if (restoreErr) throw new Error(`could not restore the display name: ${restoreErr.message}`);
+      }
+      control(mine.length > 0, 'a club member off the ride could not read the attendee list (RP-16)');
+      const allowed = new Set(['id', 'account_id', 'display_name', 'role', 'status']);
+      const extra = [...new Set(mine.flatMap((r) => Object.keys(r)))].filter((k) => !allowed.has(k));
+      if (extra.length) got.push(`unexpected columns: ${extra.join(', ')}`);
+      if (leaks(mine, u.riderA.phone, u.riderA.email, POS.lat, POS.lng).length) got.push('a phone, email or position');
+      if (mine.some((r) => (r.display_name ?? '').includes('@'))) got.push('an email address as a name');
+      const count = (await db(ctx, u.offRide).rpc('get_ride_attendee_count', { p_ride_id: id })).data;
+      if (count !== mine.length) got.push(`count ${count} does not match the list (${mine.length})`);
+      const many = (await db(ctx, u.offRide).rpc('get_ride_attendee_counts', { p_ride_ids: [id, rides.other.id] })).data ?? [];
+      if (many.find((r) => r.ride_id === id)?.attendees !== mine.length) got.push('the calendar count does not match the list');
+      if (many.some((r) => r.ride_id === rides.other.id)) got.push('the calendar count covered another club\'s ride');
+      // The club admin and the Captain still read whole rows from the table (web admin pages).
+      for (const who of [u.clubAdmin, u.captain]) {
+        const rows = await read(db(ctx, who).from('ride_participants').select('id, phone').eq('ride_id', id));
+        if (rows.length < mine.length) got.push(`over-block: ${who.key} read ${rows.length} of ${mine.length} participant rows from the table`);
+      }
+      // Signed out: no rows and no permission error.
+      const anon = await db(ctx, null).from('ride_participants').select('id').eq('ride_id', id);
+      if (anon.error) got.push(`a signed-out read of ride_participants errored (${anon.error.code})`);
+      if ((anon.data ?? []).length) got.push('a signed-out caller read participant rows');
+      for (const who of [u.otherMember, u.otherAdmin]) {
+        const rows = await list(who);
+        const n = (await db(ctx, who).rpc('get_ride_attendee_count', { p_ride_id: id })).data;
+        if (rows.length || n) got.push(`${who.key} read ${rows.length} attendees (count ${n})`);
+      }
+      rule(got.length === 0, `through get_ride_attendees: ${got.join('; ')}`);
     },
   },
 

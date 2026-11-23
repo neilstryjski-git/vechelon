@@ -2,6 +2,35 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-22 — D50: participant rows readable to §4.1, rules T5, T6, T7
+
+Change: migration `20261122010000_d50_participant_rows_section_4_1.sql`, three mobile read
+sites and two web read sites. Results are from Rail 3 CI on the D50 pull request (local stack).
+
+| Case | Before D50 | After (CI) | What it proves |
+|---|---|---|---|
+| T5.1 | Fails | Passes | A rider cannot read another rider's phone, position or ping from the table |
+| T5.2 | Fails | Passes | Nor by any other path (accounts, embeds, contact function, admin view, roster, fleet seed, attendee list) |
+| T5.3 | Fails | Passes | Nobody off the ride reads a rider's phone or position |
+| T5.5 (new) | n/a | Passes | Fleet seed: a rider gets positions for leaders and active beacons only; nothing off the ride |
+| T5.6 (new) | n/a | Passes | Attendee list: club members get names only; another club gets nothing |
+| T6, T7 | Pass | Pass | Riders still read the roster and leaders' phones; Captain and SAG read everything |
+| T16 | Pass | Pass | Cross-club isolation holds |
+
+Not on staging: the Play build (versionCode 4) reads the table directly for its roster, fleet
+seed and beacon seed, so this waits for the cutover (W317). Not on production.
+
+**Review r1, fixed in the same pull request:** the member calendar's head count (missed read
+site), seeds that ran before the join was written, empty-result fallbacks on the web, and
+signed-out reads erroring instead of returning nothing. T5.5 now also proves Captain, SAG and
+the club admin get a rider's position; T5.6 proves an email-shaped name is withheld, the
+calendar counts, the admin and Captain table reads, and a signed-out read.
+
+**Ruled by the Senior PM 2026-11-22 (accepted):** a club admin can read position and ping
+columns of their club's participant rows (see the dev log). Every member could before D50.
+
+Not yet run: the changed web pages in a browser; the changed app reads on a device.
+
 ## 2026-11-22 — D94: ride scoping on the channel, rule T1
 
 Change: migration `20261122000000_d94_ride_scoped_broadcast.sql`. Results from Rail 3 CI on

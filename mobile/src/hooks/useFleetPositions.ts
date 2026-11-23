@@ -82,14 +82,10 @@ export interface RideRosterEntry {
 
 export type RideRoster = Record<string, RideRosterEntry>;
 
-// RLS-gated roster read at meaningful events only — never per ping.
-// participant_tactical_select encodes the §4.1 matrix server-side for
-// non-affiliated tenants (Captain/SAG: every row; Rider: Captain/SAG + self),
-// and role/name/phone are server-truth, immune to payload spoofing. CAVEAT
-// (review 90480ee): the policy's RP-16 affiliated-tenant disjunct returns ALL
-// participant rows (incl. phone) to affiliated Riders, so there the phone gate
-// is client-side only — pre-existing policy breadth, tracked as a follow-up
-// defect to column-restrict RP-16.
+// Roster read at meaningful events only — never per ping. Since D50 a rider cannot read other
+// riders' participant rows: names, roles and the phones this role may see come from
+// get_ride_roster (W313), the participation status from get_ride_fleet_seed. Both are
+// role-filtered on the server and immune to payload spoofing.
 export function useRideRoster(rideId: string | null): {
   roster: RideRoster;
   refetchRoster: () => void;
@@ -113,20 +109,27 @@ export function useRideRoster(rideId: string | null): {
     if (!rideId) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('ride_participants')
-        .select('account_id, role, display_name, phone, status')
-        .eq('ride_id', rideId);
-      if (cancelled || error || !data) return;
+      // D50: a rider can no longer read other riders' participant rows. Names, roles and the
+      // phones this role may see come from the roster function (W313); the participation
+      // status comes from the fleet-seed function. Neither returns anything the role may not see.
+      const [rosterRes, seedRes] = await Promise.all([
+        supabase.rpc('get_ride_roster', { p_ride_id: rideId }),
+        supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId }),
+      ]);
+      if (cancelled || rosterRes.error || !rosterRes.data) return;
+      const statusById: Record<string, string | null> = {};
+      for (const s of (seedRes.data ?? []) as Array<{ account_id: string | null; status: string | null }>) {
+        if (s.account_id) statusById[s.account_id] = s.status ?? null;
+      }
 
       const next: RideRoster = {};
-      for (const row of data) {
-        if (!row.account_id) continue; // guest session rows without an account
+      for (const row of rosterRes.data as Array<{ account_id: string | null; role: string | null; name: string | null; phone: string | null }>) {
+        if (!row.account_id) continue; // guest rows without an account
         next[row.account_id] = {
           role: (row.role as RideRole) ?? 'member',
-          displayName: row.display_name ?? 'Rider',
+          displayName: row.name ?? 'Rider',
           phone: row.phone ?? null,
-          participantStatus: row.status ?? null,
+          participantStatus: statusById[row.account_id] ?? null,
         };
       }
       setRoster(next);
@@ -263,9 +266,8 @@ export function useFleetPositions(
   // W262: persisted last-known positions (the W261 write), keyed by account_id like pings
   // and the roster. A rider who STOPS goes quiet (un-forced SDK → no more live pings), so on
   // FOCUS the fleet loop below renders them at this last-known spot instead of dropping them.
-  // §4.1-gated SERVER-SIDE by participant_tactical_select (same policy as the roster read) —
-  // RLS returns only rows this viewer may see; same RP-16 affiliated-tenant breadth caveat as
-  // useRideRoster applies. Fetched on open and on every return-to-foreground: a MEANINGFUL
+  // §4.1-gated SERVER-SIDE by get_ride_fleet_seed (D50): a rider gets positions for leaders and
+  // active beacons only. Fetched on open and on every return-to-foreground: a MEANINGFUL
   // event, never per-ping (Pillar II §2).
   const [lastKnown, setLastKnown] = useState<Record<string, { lat: number; lng: number; ts: number }>>({});
   // W292 (C3 item 7, R3-65/68): the DURABLE departed marks — read from ride_participants.departed_at
@@ -275,6 +277,7 @@ export function useFleetPositions(
   const [departed, setDeparted] = useState<Record<string, DepartedMark>>({});
   // Bridges the ride-scoped fetch closure to the stable resume subscriber below.
   const resumeFetchRef = useRef<((source: ResumeSource) => void) | null>(null);
+  const connectFetchRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
@@ -283,6 +286,7 @@ export function useFleetPositions(
     // the sleeping-ping handler. Per-effect-run state (resets on rideId change → a new ride fetches
     // fresh); the first call always runs since lastFetchMs starts at 0.
     let lastFetchMs = 0;
+    let droppedByDebounce = false;
     // `resumeSource` marks the call as a recovery attempt and carries WHICH emitter detected it.
     // The signal is logged INSIDE the debounce gate, after it passes: a resume_signal must mean the
     // refetch actually ran, otherwise a debounced no-op looks identical to a real recovery. It must
@@ -290,16 +294,20 @@ export function useFleetPositions(
     // like AppState fired, which is precisely the question W268/W269 exist to answer.
     const fetchLastKnown = async (resumeSource?: ResumeSource) => {
       const now = Date.now();
-      if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) return;
+      if (now - lastFetchMs < LAST_KNOWN_REFETCH_DEBOUNCE_MS) {
+        // D50: remember a call dropped by the debounce; if the read it lost to comes back
+        // "not on the ride yet", that call is the one that would have succeeded.
+        droppedByDebounce = true;
+        return;
+      }
       lastFetchMs = now;
+      droppedByDebounce = false;
       if (resumeSource) logResumeSignal(rideId, resumeSource, 'fleet');
       // W292: a mark learned by broadcast AFTER this instant outranks what the fetch reads (the fetch
       // may have read the row before the departure landed — the pre-existing D87 race).
       const fetchStartedAtMs = Date.now();
-      const { data, error } = await supabase
-        .from('ride_participants')
-        .select('account_id, last_lat, last_long, last_ping, departed_at')
-        .eq('ride_id', rideId);
+      // D50: role-filtered server-side (a rider gets positions for leaders and active beacons only).
+      const { data, error } = await supabase.rpc('get_ride_fleet_seed', { p_ride_id: rideId });
       // W271: distinguish "the query ran and found nothing" from "the query never ran". `usable`
       // is the count that survives the null-coordinate filter — the number that can actually render
       // a marker (W292: a departed row never can, whatever it carries). No coordinates logged
@@ -314,6 +322,14 @@ export function useFleetPositions(
         ...(error ? { err: error.message } : {}),
       });
       if (cancelled || error || !data) return;
+      // D50: the seed function returns at least the caller's own row to anyone it admits, so
+      // zero rows means "not on the ride yet" (the join write has not landed). Do not treat
+      // that as an answer, and let the next trigger (the channel appearing, a resume) read again.
+      if ((data as unknown[]).length === 0) {
+        lastFetchMs = 0;
+        if (droppedByDebounce) void fetchLastKnown();
+        return;
+      }
       setLastKnown(split.lastKnown);
       setDeparted((local) => mergeDepartedMarks(split.departed, local, fetchStartedAtMs));
     };
@@ -321,11 +337,22 @@ export function useFleetPositions(
     resumeFetchRef.current = (source: ResumeSource) => {
       void fetchLastKnown(source);
     };
+    connectFetchRef.current = () => {
+      void fetchLastKnown();
+    };
     return () => {
       cancelled = true;
       resumeFetchRef.current = null;
+      connectFetchRef.current = null;
     };
   }, [rideId]);
+
+  // D50: the channel object only exists once the ride join has settled (D94), which is the first
+  // moment the seed function admits a rider. Read then. For a Captain, SAG or admin the mount
+  // read already succeeded and this one is absorbed by the debounce.
+  useEffect(() => {
+    if (channel) connectFetchRef.current?.();
+  }, [channel]);
 
   // W269: last-known refetch now rides the shared resume signal (clock-gap + AppState + staleness),
   // so it can no longer be skipped by an 'active' event that never arrives. The ref keeps the
