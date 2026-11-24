@@ -19,8 +19,20 @@ new functions are SECURITY DEFINER with `search_path=public`, EXECUTE held by `a
 and `service_role` only (not PUBLIC, not anon); the participant read policy, the hydration
 trigger and both legacy channel policies are unchanged. No denial run on staging yet.
 
-Still to record here: the staging denial run after Phase 1, the device check of the new build,
-the cutover applies, the full `denial:staging --strict` run, and the schema comparison.
+**Staging denial run after Phase 1, 2026-11-23.** 48 cases: 41 green, 6 red, 1 error in the
+full run. The six red cases are the ones held for the cutover (T2.3, T5.1, T5.2, T5.3, T9.2,
+T9.3). The error was T16.2, on a dropped Realtime connection in its control, not on the rule;
+a re-run of T16 errored on T16.3 the same way ("transport failure") and a third run passed all
+four T16 cases. Rules passing on staging: 13 of 16 (T2, T5, T9 fail until the cutover).
+Reports: `~/vechelon-backups/w317-staging/denial-phase1*/`.
+
+**Staging portal, 2026-11-23.** Redeployed from the trunk (version 5c2e2046). Checked by HTTP
+only: both staging hosts return 200 and serve the new bundle, which names the staging project
+and contains the attendee function calls. **Not checked in a browser as a signed-in user.**
+
+Still to record here: a signed-in page check of the staging portal, the device check of the
+new build, the cutover applies, the full `denial:staging --strict` run, and the schema
+comparison.
 
 ## 2026-11-23 — W315: riders see every beacon on the ride; reduced sheet; disclosure wording
 

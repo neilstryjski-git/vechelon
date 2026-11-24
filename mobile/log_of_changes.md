@@ -2166,3 +2166,25 @@ Notes:
 - Evidence: `~/vechelon-backups/w317-staging/` (`apply.py`, the two SQL files as applied,
   `after-phase1.json`).
 - NOT DONE YET: staging portal redeploy, the staging denial run, the build.
+
+## 2026-11-23 — W317: Phase 1 finished (staging denial run, staging portal redeploy)
+
+- STAGING DENIAL RUN (Senior PM approved): full run, 48 cases. Moved as expected: T16.1 no
+  longer errors, T5.5 and T5.6 pass (the functions they call now exist). Still red, all waiting
+  for the cutover: T2.3 (legacy channel), T5.1 to T5.3 (table read), T9.2, T9.3 (beacon flags).
+  Rules passing on staging: 13 of 16 (T2, T5, T9 fail). `baseline.json` staging exceptions
+  updated to match. No test rows left behind.
+- FLAKE, not a rule failure: T16.2 errored in the full run and T16.3 in the first re-run, each
+  on a Realtime connection drop ("the captain's connection went quiet", "transport failure").
+  A third run of T16 passed all four cases. Each T16 case has passed on staging today.
+- STAGING PORTAL REDEPLOYED (Senior PM approved): Worker `vechelon-web-staging` built from
+  `rail3-integration` at 3458417 with the staging Supabase URL and publishable key
+  (`npm install --legacy-peer-deps` at the root, `npm run build`, `wrangler deploy --env
+  staging`). New version 5c2e2046; previous version 4591d115 (2026-09-23) is the rollback
+  (`wrangler rollback 4591d115-d463-48a1-90dc-a63a0c025545 --env staging`). Both staging hosts
+  answer 200 with the new bundle; the production portal bundle is unchanged.
+- FINDING: the staging portal had not been redeployed since 2026-09-23, so this deploy also
+  carries two months of `master` web changes to staging for the first time. The W307/W308
+  page check of 2026-11-16 was therefore made against the September bundle, not the merged
+  trunk code. A fresh page check of the staging portal is owed (Senior PM).
+- The build leaves untracked files under `public/` in the worktree: not committed.
