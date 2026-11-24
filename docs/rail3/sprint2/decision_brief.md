@@ -135,8 +135,9 @@ What this brief does NOT establish, because the ticket allows a count only:
 - how they came to exist despite the web guard (before the guard, by an admin, by an import,
   or by a test).
 
-**Senior PM, 2026-11-23: "they are all my accounts."** So the three are the Senior PM's own
-accounts, not club riders. This is his statement; it was not checked against the data (the
+**Senior PM, 2026-11-23: "they are all my accounts" and "I've reused these accounts for
+testing purposes."** So the three are the Senior PM's own accounts, given extra memberships
+for testing, not club riders. This is his statement; it was not checked against the data (the
 ticket allows a count only). On that basis no real rider is in two clubs today, and "one
 rider, one club" holds for riders. Still open, for the Senior PM: whether to leave his three
 accounts as they are for the production move or reduce each to one membership first, since
