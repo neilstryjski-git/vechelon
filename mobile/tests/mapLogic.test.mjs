@@ -19,6 +19,7 @@ import {
 import {
   visibleParticipants,
   sheetMode,
+  resolveSheetParticipant,
   canOpenSheet,
   canSeePhone,
   canExpandCluster,
@@ -176,4 +177,30 @@ test("parsePoint mirrors the web app: '(lng,lat)' string and {x,y} object", () =
   assert.deepEqual(parsePoint({ x: -79.3832, y: 43.6532 }), { lat: 43.6532, lng: -79.3832 });
   assert.equal(parsePoint(null), null);
   assert.equal(parsePoint('garbage'), null);
+});
+
+// ── W315: the open sheet follows the live participant ────────────────────────
+test('W315 sheet participant: drawn from the live fleet, not the tap-time snapshot', () => {
+  const tapped = { ...P('r2', 'member'), lastPingAt: 1 };
+  const live = { ...P('r2', 'member'), lastPingAt: 999 };
+  const got = resolveSheetParticipant('member', tapped, [P('cap', 'captain'), live], (id) => id === 'r2');
+  assert.equal(got.lastPingAt, 999);
+});
+
+test('W315 sheet participant: a Rider\'s sheet on a beaconing rider closes when the beacon clears or the rider leaves the map', () => {
+  const tapped = P('r2', 'member');
+  assert.equal(resolveSheetParticipant('member', tapped, [P('r2', 'member')], () => false), null);
+  assert.equal(resolveSheetParticipant('member', tapped, [P('cap', 'captain')], () => true), null);
+});
+
+test('W315 sheet participant: a leader keeps a rider\'s sheet after that rider leaves the map', () => {
+  const tapped = P('r2', 'member');
+  assert.equal(resolveSheetParticipant('captain', tapped, [], () => false), tapped);
+  assert.equal(resolveSheetParticipant('support', tapped, [], () => false), tapped);
+});
+
+test('W315 sheet participant: a Rider keeps the full sheet on a leader, live', () => {
+  const live = { ...P('cap', 'captain'), lastPingAt: 5 };
+  assert.equal(resolveSheetParticipant('member', P('cap', 'captain'), [live], () => false), live);
+  assert.equal(resolveSheetParticipant('member', null, [live], () => false), null);
 });

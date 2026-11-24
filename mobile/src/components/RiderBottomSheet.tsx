@@ -75,7 +75,7 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
           <Text style={styles.name}>{participant.displayName}</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaChip}>{ROLE_LABEL[participant.role]}</Text>
-            <Text style={styles.metaChip}>Needs help</Text>
+            <Text style={[styles.metaChip, styles.beaconChip]}>Needs help</Text>
           </View>
           <Text style={styles.noPhone}>{beaconPositionLine(participant.lastPingAt, Date.now())}</Text>
           <Text style={styles.noPhone}>Your Captain and support crew can see this Beacon.</Text>
@@ -106,7 +106,7 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
               onClose();
             }}
           >
-            <Text style={styles.cancelBeaconText}>Cancel Support</Text>
+            <Text style={styles.cancelBeaconText}>Cancel Beacon</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -198,6 +198,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     overflow: 'hidden',
   },
+  // W315: the beacon state is a sentence-case phrase ("Needs help"), not a shouted status.
+  beaconChip: { textTransform: 'none', letterSpacing: 0 },
   // Large monospace number (§5.1 bold/large typography in the sheet).
   phone: {
     color: '#FFFFFF',
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   // W211 — Navigate: full-width primary, maps-blue (distinct from the red Dial and
-  // the amber Cancel Support). 64dp per §5.1.
+  // the amber Cancel Beacon). 64dp per §5.1.
   navigateButton: {
     backgroundColor: '#2563EB',
     borderRadius: 12,

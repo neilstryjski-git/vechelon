@@ -2100,4 +2100,11 @@ Notes:
   background-location declaration text 4.4, the retention sentence 4.6; Data Safety form
   answers stay as they are (4.5). List: docs/rail3/sprint2/voice_tone_copy_list.md section 4.
 - STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+- REVIEW r1 (2026-11-23): the sheet is now drawn from the live participant
+  (`resolveSheetParticipant`), so the reduced sheet's position line cannot go stale while it
+  is open; a leader's sheet is no longer closed when the rider leaves the map; row 2.5
+  (`Cancel Beacon`) applied; "Needs help" is sentence case; four comments brought up to the
+  v1.2.0 rule. NOT CHANGED: the two iOS permission strings in `app.config.ts` (old "Captain
+  and SAG" wording): they were not on the passed list, so they are added to it as row 1.7
+  for a decision before any iOS build. Android does not show them.
 

@@ -40,7 +40,7 @@ import { clearActiveRide, clearPersistedActiveRide } from '../lib/activeRide';
 import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
-import { visibleParticipants, sheetMode, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
+import { visibleParticipants, sheetMode, resolveSheetParticipant, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { canSeeBeacon, canCancelBeacon, isStaleUnderBeacon, anchorBeaconedFleet } from '../lib/beaconLogic';
 import { canEndRide } from '../lib/rideControlsLogic';
 import { deriveRenderState } from '../state/riderState';
@@ -527,11 +527,18 @@ const RideMapScreen: React.FC = () => {
     () => (myRiderId ? visibleParticipants(myRole, myRiderId, anchoredFleet, new Set(Object.keys(beacons))) : []),
     [myRiderId, myRole, anchoredFleet, beacons],
   );
-  // W315: a sheet must not outlive the marker it was opened from. When a beaconing rider's
-  // beacon is cancelled (or the ride ends) they leave a Rider's map; close their sheet too.
+  // W315: the sheet is drawn from the LIVE participant, not the snapshot taken at the tap, so
+  // its position line and state stay true while it is open. `selected` only remembers who.
+  // When that rider is no longer on this viewer's map: a leader keeps the sheet they opened
+  // (phone and Dial stay reachable after a departure, as before); a Rider's sheet on a
+  // beaconing rider closes with the beacon. Decided at render, so no frame shows the wrong sheet.
+  const sheetParticipant = useMemo(
+    () => resolveSheetParticipant(myRole, selected, visible, (id) => Boolean(beacons[id])),
+    [myRole, selected, visible, beacons],
+  );
   useEffect(() => {
-    if (selected && !visible.some((p) => p.riderId === selected.riderId)) setSelected(null);
-  }, [visible, selected]);
+    if (selected && !sheetParticipant) setSelected(null); // forget who, so a later beacon cannot reopen it
+  }, [selected, sheetParticipant]);
 
   // R3-13/R3-14: indicator only when a finish exists AND is off-screen.
   const finishOffscreen = Boolean(ride?.finish && !regionContains(region, ride.finish));
@@ -676,8 +683,8 @@ const RideMapScreen: React.FC = () => {
         showsMyLocationButton={false}
         toolbarEnabled={false}
         // R3-11: clusters expand on tap — gated to Captain/SAG per §4.1.
-        // Riders render ≤2 markers (Captain+SAG) so clusters cannot form; the
-        // explicit flag keeps the gate by role, not by coincidence.
+        // Riders render Captain + SAG and, since W315, any beaconing rider: never
+        // clustered. The explicit flag keeps the gate by role, not by coincidence.
         clusteringEnabled={canExpandCluster(myRole)}
         clusterColor="#E11D2A"
         spiralEnabled={false}
@@ -729,7 +736,7 @@ const RideMapScreen: React.FC = () => {
               key={p.riderId}
               participant={p}
               // An active beacon makes the marker tappable for Captain/SAG so
-              // the sheet's Cancel Support is reachable (§4.1).
+              // the sheet's Cancel Beacon is reachable (§4.1).
               tappable={sheetMode(myRole, p.role, showBeacon) !== 'none' || (showBeacon && myRiderId != null && canCancelBeacon(myRole, myRiderId, p.riderId))}
               beaconActive={showBeacon}
               // W282 / §5.3: overlay only when the beacon is anchored at last-known AND the
@@ -896,14 +903,17 @@ const RideMapScreen: React.FC = () => {
       </TouchableOpacity>
 
       <RiderBottomSheet
-        participant={selected}
+        participant={sheetParticipant}
         myRole={myRole}
-        reducedBeacon={Boolean(selected) && sheetMode(myRole, selected!.role, Boolean(beacons[selected!.riderId])) === 'reduced'}
+        reducedBeacon={
+          sheetParticipant != null &&
+          sheetMode(myRole, sheetParticipant.role, Boolean(beacons[sheetParticipant.riderId])) === 'reduced'
+        }
         onClose={() => setSelected(null)}
         onCancelBeacon={
-          selected && myRiderId && beacons[selected.riderId] &&
-          canCancelBeacon(myRole, myRiderId, selected.riderId)
-            ? () => void cancelBeacon(beacons[selected.riderId])
+          sheetParticipant && myRiderId && beacons[sheetParticipant.riderId] &&
+          canCancelBeacon(myRole, myRiderId, sheetParticipant.riderId)
+            ? () => void cancelBeacon(beacons[sheetParticipant.riderId])
             : null
         }
       />

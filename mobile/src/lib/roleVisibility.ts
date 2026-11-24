@@ -63,6 +63,28 @@ export function sheetMode(myRole: RideRole, targetRole: RideRole, targetBeaconAc
   return 'none';
 }
 
+// W315: who the open sheet shows. `selected` is the participant as tapped (a snapshot);
+// the sheet is drawn from the same rider in the CURRENT visible fleet so position and state
+// stay live. If the rider is no longer visible to this viewer: a viewer entitled to the full
+// sheet keeps the snapshot (a leader's phone and Dial survive a departure); anyone else gets
+// no sheet. A visible rider who warrants no sheet for this viewer (a Rider's reduced sheet
+// after the beacon clears) also gets none.
+export function resolveSheetParticipant(
+  myRole: RideRole,
+  selected: FleetParticipant | null,
+  visible: ReadonlyArray<FleetParticipant>,
+  beaconActive: (riderId: string) => boolean,
+): FleetParticipant | null {
+  if (!selected) return null;
+  const live = visible.find((p) => p.riderId === selected.riderId) ?? null;
+  const who = live ?? selected;
+  const mode = sheetMode(myRole, who.role, live != null && beaconActive(who.riderId));
+  if (mode === 'full') return who;
+  if (mode === 'reduced') return live;
+  // 'none': a leader may still have opened it to cancel a beacon on a co-leader.
+  return live && isCommand(myRole) && beaconActive(who.riderId) ? live : null;
+}
+
 // §4.1 Bottom Sheet rows:
 //   Captain → riders + SAG (not other captains; '—' in the matrix is self).
 //   SAG     → riders + Captain.
@@ -84,14 +106,14 @@ export function canSeePhone(myRole: RideRole, targetRole: RideRole): boolean {
 // W211 §4.1 (new row): NAVIGATE to a rider (launch Maps directions) is SAG ONLY.
 // A Captain rides a bike and won't run turn-by-turn; the SAG is the support
 // VEHICLE whose job is reaching a stranded/Dark/dropped rider. Captain keeps Dial
-// (canSeePhone), not Navigate. Riders never reach a peer sheet, so they never see
-// it. Distinct from isCommand on purpose — this is narrower than Captain+SAG.
+// (canSeePhone), not Navigate. A Rider's only sheet on another rider is the reduced
+// beacon sheet (W315), which has no Navigate. Distinct from isCommand on purpose — this is narrower than Captain+SAG.
 export function canNavigateToRider(myRole: RideRole): boolean {
   return myRole === 'support';
 }
 
-// §4.1: cluster expand on tap is Captain/SAG only. (Riders render at most
-// Captain+SAG markers, so clusters are unreachable for them anyway — this
+// §4.1: cluster expand on tap is Captain/SAG only. (Riders render Captain + SAG and, since
+// W315, any beaconing rider, never clustered — this
 // predicate makes the gate explicit rather than incidental.)
 export function canExpandCluster(myRole: RideRole): boolean {
   return isCommand(myRole);
