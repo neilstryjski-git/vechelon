@@ -2108,3 +2108,14 @@ Notes:
   and SAG" wording): they were not on the passed list, so they are added to it as row 1.7
   for a decision before any iOS build. Android does not show them.
 
+## 2026-11-23 — W316: the five readings for the Decision Brief (read-only)
+
+- `docs/rail3/sprint2/decision_brief.md` written: readings 1 to 4 answered with evidence;
+  reading 5 (production membership count) answered from a read-only count the Senior PM ran
+  himself on 2026-11-23: THREE production accounts hold two or more memberships. That
+  contradicts Ledger §16.7 item 4; flagged for the Brain, nothing changed.
+- No code changed. Flagged, not fixed: three of Pillar II Feature 4's four Sleeping conditions
+  are not built (state not stored; no age on the leaders' sheet; no Race Control). The brief
+  already lists the Sleeping conditions as later work.
+- Staging reads only (`~/vechelon-backups/w316/readings-staging.json`).
+
