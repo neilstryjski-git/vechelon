@@ -2111,8 +2111,9 @@ Notes:
 ## 2026-11-23 — W316: the five readings for the Decision Brief (read-only)
 
 - `docs/rail3/sprint2/decision_brief.md` written: readings 1 to 4 answered with evidence;
-  reading 5 (production membership count) NOT YET ANSWERED: the production read was refused by
-  the session's permission system and awaits the Senior PM.
+  reading 5 (production membership count) answered from a read-only count the Senior PM ran
+  himself on 2026-11-23: THREE production accounts hold two or more memberships. That
+  contradicts Ledger §16.7 item 4; flagged for the Brain, nothing changed.
 - No code changed. Flagged, not fixed: three of Pillar II Feature 4's four Sleeping conditions
   are not built (state not stored; no age on the leaders' sheet; no Race Control). The brief
   already lists the Sleeping conditions as later work.
