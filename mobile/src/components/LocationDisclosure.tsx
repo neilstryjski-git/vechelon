@@ -33,6 +33,14 @@ export const DISCLOSURE_TEXT =
   'Vechelon collects location data to show your position to your club during a ride, ' +
   'even when the app is closed or not in use.';
 
+// Who sees the position, and why (Voice & Tone list row 1.3, passed 2026-11-23). It must say
+// what the server does: a rider's position goes to the ride's Captain and support crew; a
+// raised Beacon shows it to everyone on the ride until cancel or ride end (Pillar II §4.1).
+export const WHO_SEES_TEXT =
+  "During a ride, your position is shared with your ride's Captain and support crew so they can keep the group together. " +
+  'If you raise a Beacon, everyone on the ride can see where you are until it\'s cancelled or the ride ends, so help can reach you. ' +
+  'You can turn location sharing off any time.';
+
 type Props = {
   visible: boolean;
   // Rider granted the disclosure — caller proceeds to the OS background-location prompt.
@@ -58,9 +66,7 @@ const LocationDisclosure: React.FC<Props> = ({ visible, onAllow, onDeny }) => {
 
           {/* Who sees it + why — the second half of the prominent-disclosure contract. */}
           <Text style={styles.body}>
-            Only your club&apos;s ride captain and support crew can see your position,
-            and only while a ride is active — so they can keep the group together and
-            reach you if you need help. You can turn this off any time.
+            {WHO_SEES_TEXT}
           </Text>
 
           <TouchableOpacity

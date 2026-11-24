@@ -12,26 +12,29 @@ import type { FleetParticipant, RideRole, TacticalState } from './roleVisibility
 
 const isCommand = (role?: RideRole) => role === 'captain' || role === 'support';
 
-// §4.1 SUPPORT BEACON visibility (amended W206, ratified 2026-06-15):
-//  - every rider always sees their OWN beacon state;
-//  - Captain/SAG see ALL beacons (command overview);
-//  - a COMMAND rider's beacon (a Captain/SAG SOS) is visible to EVERYONE. The
-//    Captain/SAG marker is already on every rider's map (§4.1), so surfacing
-//    their SOS *state change* on that marker is a safety extension, not new
-//    peer visibility.
-// PEER (member→member) beacons remain hidden from other riders — F-07 (full
-// peer-beacon visibility) is still a PENDING Brain decision and is NOT opened
-// here. `beaconOwnerRole` is optional for back-compat; absent it, a non-command
-// viewer only sees their own beacon (the pre-W206 behavior).
+// §4.1 SUPPORT BEACON visibility (Pillar II v1.2.0, W315): EVERY app participant on the ride
+// sees EVERY active beacon on that ride: their own, a Captain's or SAG's, and another
+// rider's. (Before v1.2.0 a rider saw only their own and a leader's: W206.) The parameters are
+// kept so call sites read as the rule they apply; the answer no longer depends on role.
+// Who is "on the ride" is the server's decision (W193): this only renders what arrived.
 export function canSeeBeacon(
-  myRole: RideRole,
-  myRiderId: string,
-  beaconRiderId: string,
-  beaconOwnerRole?: RideRole,
+  _myRole: RideRole,
+  _myRiderId: string,
+  _beaconRiderId: string,
+  _beaconOwnerRole?: RideRole,
 ): boolean {
-  if (beaconRiderId === myRiderId) return true; // own beacon — every role
-  if (isCommand(myRole)) return true; // Captain/SAG see all beacons
-  return isCommand(beaconOwnerRole); // W206: everyone sees a Captain/SAG SOS
+  return true;
+}
+
+// W315: the position line on the reduced beacon sheet (copy list 2.4, passed 2026-11-23).
+// A fix within the last minute reads as live; anything older says how old, in whole minutes
+// (never "0 min"). No position at all is said plainly.
+export const BEACON_LIVE_WINDOW_MS = 60_000;
+export function beaconPositionLine(lastPingAt: number | null | undefined, nowMs: number): string {
+  if (lastPingAt == null || !Number.isFinite(lastPingAt)) return 'No position received yet';
+  const age = Math.max(0, nowMs - lastPingAt);
+  if (age <= BEACON_LIVE_WINDOW_MS) return 'On the map now';
+  return `Last seen ${Math.max(1, Math.round(age / 60_000))} min ago`;
 }
 
 // §4.1: cancel own beacon — every role; cancel ANY rider's beacon — Captain/SAG

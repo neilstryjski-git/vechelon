@@ -40,7 +40,7 @@ import { clearActiveRide, clearPersistedActiveRide } from '../lib/activeRide';
 import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
 import { useBreadcrumb } from '../hooks/useBreadcrumb';
-import { visibleParticipants, canOpenSheet, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
+import { visibleParticipants, sheetMode, canExpandCluster, FleetParticipant } from '../lib/roleVisibility';
 import { canSeeBeacon, canCancelBeacon, isStaleUnderBeacon, anchorBeaconedFleet } from '../lib/beaconLogic';
 import { canEndRide } from '../lib/rideControlsLogic';
 import { deriveRenderState } from '../state/riderState';
@@ -524,9 +524,14 @@ const RideMapScreen: React.FC = () => {
     [fleet, beacons, roster, ride?.thresholds],
   );
   const visible = useMemo(
-    () => (myRiderId ? visibleParticipants(myRole, myRiderId, anchoredFleet) : []),
-    [myRiderId, myRole, anchoredFleet],
+    () => (myRiderId ? visibleParticipants(myRole, myRiderId, anchoredFleet, new Set(Object.keys(beacons))) : []),
+    [myRiderId, myRole, anchoredFleet, beacons],
   );
+  // W315: a sheet must not outlive the marker it was opened from. When a beaconing rider's
+  // beacon is cancelled (or the ride ends) they leave a Rider's map; close their sheet too.
+  useEffect(() => {
+    if (selected && !visible.some((p) => p.riderId === selected.riderId)) setSelected(null);
+  }, [visible, selected]);
 
   // R3-13/R3-14: indicator only when a finish exists AND is off-screen.
   const finishOffscreen = Boolean(ride?.finish && !regionContains(region, ride.finish));
@@ -716,10 +721,8 @@ const RideMapScreen: React.FC = () => {
         ) : null}
         {visible.map((p) => {
           const beacon = beacons[p.riderId];
-          // W206 (§4.1 amended): self + Captain/SAG see all beacons, AND every
-          // rider sees a COMMAND rider's SOS (the Captain/SAG is already on the
-          // map). Peer member→member beacons stay hidden (F-07 still pending) —
-          // p.role is the beacon OWNER's role, which gates that command case.
+          // W315 (Pillar II v1.2.0 §4.1): every app participant on the ride sees every active
+          // beacon on it. `visible` already holds a beaconing rider for a Rider viewer.
           const showBeacon = Boolean(beacon) && myRiderId != null && canSeeBeacon(myRole, myRiderId, p.riderId, p.role);
           return (
             <RiderMarker
@@ -727,7 +730,7 @@ const RideMapScreen: React.FC = () => {
               participant={p}
               // An active beacon makes the marker tappable for Captain/SAG so
               // the sheet's Cancel Support is reachable (§4.1).
-              tappable={canOpenSheet(myRole, p.role) || (showBeacon && myRiderId != null && canCancelBeacon(myRole, myRiderId, p.riderId))}
+              tappable={sheetMode(myRole, p.role, showBeacon) !== 'none' || (showBeacon && myRiderId != null && canCancelBeacon(myRole, myRiderId, p.riderId))}
               beaconActive={showBeacon}
               // W282 / §5.3: overlay only when the beacon is anchored at last-known AND the
               // viewer is command (a Rider watching a Captain SOS gets the plain beacon).
@@ -803,7 +806,7 @@ const RideMapScreen: React.FC = () => {
           {channelStatus !== 'SUBSCRIBED' ? (
             <View style={styles.statusChip}>
               <Text style={styles.chipText}>
-                {channelStatus === 'CHANNEL_ERROR' ? 'CHANNEL DENIED' : 'CONNECTING…'}
+                {channelStatus === 'CHANNEL_ERROR' ? 'Not connected to this ride' : 'Connecting…'}
               </Text>
             </View>
           ) : null}
@@ -895,6 +898,7 @@ const RideMapScreen: React.FC = () => {
       <RiderBottomSheet
         participant={selected}
         myRole={myRole}
+        reducedBeacon={Boolean(selected) && sheetMode(myRole, selected!.role, Boolean(beacons[selected!.riderId])) === 'reduced'}
         onClose={() => setSelected(null)}
         onCancelBeacon={
           selected && myRiderId && beacons[selected.riderId] &&

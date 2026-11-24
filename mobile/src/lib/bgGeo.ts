@@ -446,13 +446,13 @@ export async function startBgGeo(
       backgroundPermissionRationale: {
         title: 'Keep sharing your position while pocketed?',
         message:
-          'Vechelon shares your position with your ride Captain and SAG while a ride is active, even when your screen is locked.',
+          "Vechelon shares your position with your ride's Captain and support crew while a ride is active, even when your screen is locked. If you raise a Beacon, the riders on your ride see it too.",
         positiveAction: 'Allow',
         negativeAction: 'Cancel',
       },
       notification: {
         title: 'Vechelon — sharing your position',
-        text: 'Live with your ride Captain while the ride is active.',
+        text: "Shared with your ride's Captain and support crew while the ride is active.",
       },
       // W232: debug OFF. The W231 audible-ping toggle now owns the "hear tracking from a
       // pocketed phone" signal (TS playSound on each fix) — WITHOUT debug:true's developer

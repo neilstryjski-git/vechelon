@@ -35,14 +35,32 @@ const isCommand = (role: RideRole) => role === 'captain' || role === 'support';
 // §4.1 MAP & VISIBILITY:
 //   Captain/SAG → all riders. Rider/Guest → Captain + SAG icons only (own blue
 //   dot is the OS location dot, not a marker, so self never appears here).
+// W315 (Pillar II v1.2.0 §4.1, Feature 2): a Rider/Guest ALSO sees any rider on the ride whose
+// Support Beacon is active, for as long as it is active. `beaconing` is the set of rider ids
+// with an active beacon; the moment an id leaves it, that rider is gone from a Rider's map.
+// This is display only: what a Rider's device RECEIVES is decided by the server (W193).
 export function visibleParticipants(
   myRole: RideRole,
   myRiderId: string,
   fleet: FleetParticipant[],
+  beaconing?: ReadonlySet<string>,
 ): FleetParticipant[] {
   const others = fleet.filter((p) => p.riderId !== myRiderId);
   if (isCommand(myRole)) return others;
-  return others.filter((p) => isCommand(p.role));
+  return others.filter((p) => isCommand(p.role) || Boolean(beaconing?.has(p.riderId)));
+}
+
+// W315: which sheet a tap opens.
+//   'full'    — the §4.1 sheet (contact, dial, navigate, cancel), unchanged.
+//   'reduced' — a Rider tapping ANOTHER RIDER whose beacon is active: name, position and
+//               beacon state only. No phone, no dial; the phone is not even fetched (the
+//               roster function sends a Rider only the leaders' numbers).
+//   'none'    — no sheet.
+export type SheetMode = 'full' | 'reduced' | 'none';
+export function sheetMode(myRole: RideRole, targetRole: RideRole, targetBeaconActive: boolean): SheetMode {
+  if (canOpenSheet(myRole, targetRole)) return 'full';
+  if (!isCommand(myRole) && !isCommand(targetRole) && targetBeaconActive) return 'reduced';
+  return 'none';
 }
 
 // §4.1 Bottom Sheet rows:

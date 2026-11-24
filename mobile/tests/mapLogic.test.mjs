@@ -18,6 +18,7 @@ import {
 } from '../src/lib/geo.ts';
 import {
   visibleParticipants,
+  sheetMode,
   canOpenSheet,
   canSeePhone,
   canExpandCluster,
@@ -47,6 +48,46 @@ const FLEET = [
 test('R3-10: Rider sees only Captain + SAG — never other riders', () => {
   const visible = visibleParticipants('member', 'r1', FLEET);
   assert.deepEqual(visible.map((p) => p.riderId).sort(), ['cap', 'sag']);
+});
+
+test('W315: a Rider also sees a rider whose beacon is active, and only that rider', () => {
+  const visible = visibleParticipants('member', 'r1', FLEET, new Set(['r2']));
+  assert.deepEqual(visible.map((p) => p.riderId).sort(), ['cap', 'r2', 'sag']);
+});
+
+test('W315: the beaconing rider is gone from a Rider\'s map the moment the beacon is no longer active', () => {
+  assert.deepEqual(visibleParticipants('member', 'r1', FLEET, new Set()).map((p) => p.riderId).sort(), ['cap', 'sag']);
+});
+
+test('W315: a Rider never sees themselves, even with their own beacon in the set', () => {
+  assert.ok(!visibleParticipants('member', 'r1', FLEET, new Set(['r1'])).some((p) => p.riderId === 'r1'));
+});
+
+test('W315: Captain and SAG see the full fleet with or without beacons (unchanged)', () => {
+  assert.equal(visibleParticipants('captain', 'cap', FLEET, new Set(['r2'])).length, 4);
+  assert.equal(visibleParticipants('support', 'sag', FLEET, new Set()).length, 4);
+});
+
+test('W315 sheet: a Rider tapping a beaconing rider gets the reduced sheet, with no phone and no dial', () => {
+  assert.equal(sheetMode('member', 'member', true), 'reduced');
+  assert.equal(sheetMode('guest', 'member', true), 'reduced');
+  assert.equal(sheetMode('member', 'guest', true), 'reduced');
+  // the phone and dial gate stays shut for exactly that pairing
+  assert.equal(canSeePhone('member', 'member'), false);
+  assert.equal(canSeePhone('guest', 'member'), false);
+  // no beacon, no sheet: a Rider still cannot tap another rider
+  assert.equal(sheetMode('member', 'member', false), 'none');
+});
+
+test('W315 sheet: Captain and SAG keep the full sheet on every rider, beacon or not; a Rider keeps it on leaders', () => {
+  for (const beacon of [true, false]) {
+    assert.equal(sheetMode('captain', 'member', beacon), 'full');
+    assert.equal(sheetMode('support', 'member', beacon), 'full');
+    assert.equal(sheetMode('member', 'captain', beacon), 'full');
+    assert.equal(sheetMode('member', 'support', beacon), 'full');
+    assert.equal(canSeePhone('captain', 'member'), true);
+    assert.equal(canSeePhone('support', 'member'), true);
+  }
 });
 
 test('guest rider has identical visibility to member rider (role gates, not account type)', () => {

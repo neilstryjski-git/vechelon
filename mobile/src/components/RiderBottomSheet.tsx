@@ -11,6 +11,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 
 import { canNavigateToRider, canSeePhone, FleetParticipant, RideRole } from '../lib/roleVisibility';
+import { beaconPositionLine } from '../lib/beaconLogic';
 import { buildMapsDirUrl } from '../lib/geo';
 
 // Role-gated contact sheet (R3-15/R3-16, Pillar II Feature 1 + §5.1):
@@ -30,6 +31,9 @@ interface Props {
   // W173: present when the participant has an active beacon AND the viewer may
   // cancel it (canCancelBeacon — Captain/SAG; §4.1 "Cancel any rider's beacon").
   onCancelBeacon?: (() => void) | null;
+  // W315: a Rider looking at ANOTHER RIDER's active beacon (roleVisibility.sheetMode
+  // 'reduced'). Name, position and beacon state only: no phone, no dial, no navigate.
+  reducedBeacon?: boolean;
 }
 
 const ROLE_LABEL: Record<RideRole, string> = {
@@ -39,7 +43,7 @@ const ROLE_LABEL: Record<RideRole, string> = {
   guest: 'Guest Rider',
 };
 
-const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCancelBeacon }) => {
+const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCancelBeacon, reducedBeacon }) => {
   const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -58,6 +62,27 @@ const RiderBottomSheet: React.FC<Props> = ({ participant, myRole, onClose, onCan
   const roleCanSeeContact = canSeePhone(myRole, participant.role);
   const showPhone = roleCanSeeContact && Boolean(participant.phone);
   const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [320, 0] });
+
+  // W315 — the reduced sheet. It returns before any contact row exists, so nothing below can
+  // ever render a number here; participant.phone is not read (and for a Rider viewer the
+  // server never sent one). Copy: Voice & Tone list rows 2.1 to 2.4, passed 2026-11-23.
+  if (reducedBeacon) {
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Dismiss" />
+        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+          <View style={styles.grabber} />
+          <Text style={styles.name}>{participant.displayName}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaChip}>{ROLE_LABEL[participant.role]}</Text>
+            <Text style={styles.metaChip}>Needs help</Text>
+          </View>
+          <Text style={styles.noPhone}>{beaconPositionLine(participant.lastPingAt, Date.now())}</Text>
+          <Text style={styles.noPhone}>Your Captain and support crew can see this Beacon.</Text>
+        </Animated.View>
+      </View>
+    );
+  }
 
   return (
     <View style={StyleSheet.absoluteFill}>
