@@ -6,10 +6,11 @@
 // the layout they edit THIS file and the same rules prove the new behaviour.
 // W313 moved the two roster readers to get_ride_roster.
 //
-// Before W193: one private channel per ride, `rail3:ride:<id>`, carrying every event. That
-// topic still exists until the cutover and stays in allTopics() so the rules keep probing it. The roster is read straight off ride_participants.
+// Before W193: one private channel per ride, `rail3:ride:<id>`, carrying every event. Its
+// policies are dropped by 20261123020000 (W317); the topic stays in allTopics() so the rules
+// keep probing it, and T2.3 proves nobody on the ride can join it.
 
-export const LAYOUT = 'four role-scoped channels per ride: crew, lead, all, sos (W193); legacy rail3:ride kept open until the W317 cutover';
+export const LAYOUT = 'four role-scoped channels per ride: crew, lead, all, sos (W193); legacy rail3:ride closed (W317)';
 
 // Event names on the wire (mobile/src/hooks: useFleetPositions, useBeacons, useRideChannel).
 export const EVENTS = { pos: 'pos', beacon: 'beacon', depart: 'depart', rideEnded: 'ride_ended' };

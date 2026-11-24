@@ -3,8 +3,9 @@
 // Behavioral proof that NO cross-tenant access to Rail 3 data is possible,
 // across BOTH enforcement layers (Sprint-0 gap G-1):
 //   1. DB RLS        — beacon_alerts / rider_states reads (W169 policies)
-//   2. Broadcast authz — private `rail3:ride:<uuid>` channel subscription
-//                        (W170 realtime.messages policies)
+//   2. Broadcast authz — private `rail3:all:<uuid>` channel subscription (the W193 topic
+//                        everyone on a ride uses; the legacy `rail3:ride:<uuid>` topic was
+//                        closed by W317 and must refuse everyone)
 // plus the ISOLATION regression control: existing web-app in-tenant access on
 // shared tables (rides / ride_participants / tenants) is unaffected by the
 // Rail 3 schema.
@@ -262,14 +263,14 @@ test('tenant with no Rail 3 data yet reads cleanly (empty, no error)', async (t)
 
 test('cross-tenant Broadcast channel subscription is DENIED', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
-  const status = await subscribeStatus(fx.userA.client, `rail3:ride:${fx.rideB.id}`);
+  const status = await subscribeStatus(fx.userA.client, `rail3:all:${fx.rideB.id}`);
   assert.notEqual(status, 'SUBSCRIBED',
     `LEAK (G-1): tenant-A user subscribed to tenant-B's private ride channel`);
 });
 
 test('a rider ON the ride subscribes to its Broadcast channel and can send (D94)', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
-  const topic = `rail3:ride:${fx.rideB.id}`;
+  const topic = `rail3:all:${fx.rideB.id}`;
   const ch = fx.userB.client.channel(topic, { config: { private: true, broadcast: { self: true, ack: true } } });
   const status = await new Promise((resolve) => {
     const timer = setTimeout(() => resolve('TIMED_OUT'), 8000);
@@ -283,10 +284,18 @@ test('a rider ON the ride subscribes to its Broadcast channel and can send (D94)
   await fx.userB.client.removeChannel(ch);
 });
 
+test('the legacy single ride channel is closed to a rider ON the ride (W317)', async (t) => {
+  if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
+  // The pre-W193 topic carried every rider's position to every member. Its policies were
+  // dropped at the cutover (20261123020000): nobody may join it, not even someone on the ride.
+  const status = await subscribeStatus(fx.userB.client, `rail3:ride:${fx.rideB.id}`);
+  assert.notEqual(status, 'SUBSCRIBED', 'LEAK (W317): the legacy rail3:ride channel accepted a subscriber');
+});
+
 test('a club member who has not opened the ride in the app is DENIED its channel (D94)', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
   // User A2 is an affiliated member of tenant A with an RSVP row on ride A, but no first-open mark.
-  const status = await subscribeStatus(fx.userA2.client, `rail3:ride:${fx.rideA.id}`);
+  const status = await subscribeStatus(fx.userA2.client, `rail3:all:${fx.rideA.id}`);
   assert.notEqual(status, 'SUBSCRIBED',
     'LEAK (D94): a club member who is not on the ride subscribed to its private channel');
 });
@@ -294,8 +303,8 @@ test('a club member who has not opened the ride in the app is DENIED its channel
 test('unknown-ride topic is fail-closed (denied even for a valid member)', async (t) => {
   if (!fx.rail3SchemaPresent) return t.skip('Rail 3 schema not applied');
   // Covers the Ad Hoc edge: an Ad Hoc ride only gets a channel once its rides row
-  // exists — any rail3:ride:<uuid> topic with no backing ride authorizes NOBODY.
-  const status = await subscribeStatus(fx.userB.client, 'rail3:ride:00000000-0000-0000-0000-000000000000');
+  // exists — any rail3:all:<uuid> topic with no backing ride authorizes NOBODY.
+  const status = await subscribeStatus(fx.userB.client, 'rail3:all:00000000-0000-0000-0000-000000000000');
   assert.notEqual(status, 'SUBSCRIBED', 'fail-open: channel for a nonexistent ride accepted a subscriber');
 });
 

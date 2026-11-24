@@ -9,6 +9,7 @@
     "T1.3": "green",
     "T2.1": "green",
     "T2.2": "green",
+    "T2.3": "green",
     "T3.1": "green",
     "T3.2": "green",
     "T4.1": "green",
@@ -56,6 +57,7 @@
     "staging": {
       "T15.2": "green",
       "T16.1": "error",
+      "T2.3": "red",
       "T5.1": "red",
       "T5.2": "red",
       "T5.3": "red",
@@ -71,5 +73,6 @@
   "_w313": "W313 (2026-11-22): the roster cases (T5.2 roster path, T6, T7) now read get_ride_roster; T5.4 and T6.3 added. T5.1 to T5.3 stay red until D50 closes the table path.",
   "_d94": "D94 (2026-11-22): T1.1 to T1.3 green on the local stack and on staging (applied to staging 2026-11-22, Senior PM approved). T16.1 errors on staging until W313's get_ride_roster is applied there (its in-club control read uses that function).",
   "_d50": "D50 (2026-11-22): T5.1 to T5.3 turned green on the local stack; T5.5, T5.6 added. Not on staging until W317 (breaks the Play build's direct table reads), so staging keeps them red or absent.",
-  "_w193": "W193 (2026-11-23): T2.1, T2.2, T4.3, T4.4, T9.2, T9.3 green on the local stack: all 16 rules pass there. W193's migration is on staging (applied 2026-11-23): T2 and T4 pass on staging; T9.2 and T9.3 stay red on staging until D50 (beacon flags read from ride_participants) is applied at W317."
+  "_w193": "W193 (2026-11-23): T2.1, T2.2, T4.3, T4.4, T9.2, T9.3 green on the local stack: all 16 rules pass there. W193's migration is on staging (applied 2026-11-23): T2 and T4 pass on staging; T9.2 and T9.3 stay red on staging until D50 (beacon flags read from ride_participants) is applied at W317.",
+  "_w317": "W317 (2026-11-23): T2.3 added with migration 20261123020000 (legacy rail3:ride policies dropped): green on the local stack. Red on staging until that migration is applied at the cutover; every targets.staging exception except T15.2 is to be removed in the cutover's closing change."
 }

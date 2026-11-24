@@ -2119,3 +2119,31 @@ Notes:
   already lists the Sleeping conditions as later work.
 - Staging reads only (`~/vechelon-backups/w316/readings-staging.json`).
 
+
+## 2026-11-23 — W317: cutover preparation (Phase 0; nothing applied to staging)
+
+- PLAN agreed with the Senior PM in session: additive staging writes first (W313 function, D50
+  functions, staging portal redeploy), then ONE EAS build checked on a device while
+  versionCode 4 still works, then the Play open-test release, and only then the three changes
+  that cut versionCode 4 off (D50 policy, hydration trigger drop, legacy channel drop). Each
+  staging write and each cut-off step needs the Senior PM's OK at that step.
+- `supabase/cutover/w193_drop_legacy_ride_channel.sql` moved into the migrations folder as
+  `20261123020000_w317_drop_legacy_ride_channel.sql` (same two `DROP POLICY IF EXISTS`
+  statements, header rewritten). NOT applied to staging. A bulk push to staging still cannot
+  reach it early: the hydration-drop migration sorts before it and refuses to run.
+- Denial suite: T2.3 added (a rider and a Captain on the ride are refused the legacy
+  `rail3:ride:<id>` topic; W317 acceptance criterion 3). Green on the local stack with the new
+  migration; recorded red for staging until the cutover.
+- Staging state read before any change (reads only), kept at `~/vechelon-backups/w317-staging/`
+  (`before.json`: ledger, policies, hydration function and trigger definitions, Rail 3
+  function fingerprints; `functions.json`: edge function versions). Staging ledger 86 of the
+  trunk's 89 (now 90 with the file above); missing 20261118020000, 20261118030000,
+  20261122010000.
+- FLAGGED, not changed: the Play Console shows the background-location declaration still in
+  review (Senior PM, 2026-11-23). The cut-off steps wait for that to clear. The staging
+  `hard-purge-location` edge function is version 3 of 2026-06-11, older than the trunk's; it
+  is not on any schedule there (retention runs from the `rail3-retention-purge` cron job), so
+  it is not a cutover item.
+- NOT STAMPED: `EXPO_PUBLIC_GIT_COMMIT` in the production profile still reads `b056cbe`; it is
+  stamped with the trunk head immediately before the build is started (Phase 2).
+- STRIDE HOOKS: claimed from python urllib; worktree and PR made by hand.

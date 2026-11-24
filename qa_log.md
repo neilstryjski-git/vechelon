@@ -2,6 +2,19 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-23 — W317: cutover preparation (in progress)
+
+Phase 0 only. Nothing applied to staging; no build made; nothing run on a device.
+
+| Item | Evidence | Status |
+|---|---|---|
+| Legacy channel drop is a migration (`20261123020000`) | CI builds the trunk from empty with it; T2.3 on the local stack | See the CI run on the W317 preparation PR |
+| The legacy single ride channel can no longer be subscribed to by a rider (acceptance criterion 3) | New case T2.3: a rider and a Captain on the ride are refused `rail3:ride:<id>` by policy | Local stack: expected green. **Staging: red until the cutover** (recorded in `baseline.json` `targets.staging`) |
+| Staging state before the cutover | Read-only capture, `~/vechelon-backups/w317-staging/before.json` | Ledger 86 versions; hydration trigger present; both legacy policies present; no active ride, no beacon flag set |
+
+Still to record here: the additive staging applies, the device check of the new build, the
+cutover applies, the full `denial:staging --strict` run, and the schema comparison.
+
 ## 2026-11-23 — W315: riders see every beacon on the ride; reduced sheet; disclosure wording
 
 App-only change on `rail3-integration`. No migration. Not built, not run on a device.

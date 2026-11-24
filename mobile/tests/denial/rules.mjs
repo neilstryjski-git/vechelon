@@ -22,7 +22,7 @@ import {
   beaconPayload, adminBeacon, beaconTruth, clearBeacons, setBeaconFlag, POS, GUEST,
 } from './harness.mjs';
 import {
-  EVENTS, receiveTopics, sendTopics, allTopics, publicWebTopic, PUBLIC_WEB_POSITION_EVENT,
+  EVENTS, receiveTopics, sendTopics, allTopics, legacyTopic, publicWebTopic, PUBLIC_WEB_POSITION_EVENT,
   riderRoster, leaderRoster,
 } from './layout.mjs';
 
@@ -164,6 +164,22 @@ export const cases = [
         payload: posPayload(u.riderA, n), n, allowed: cap, denied: [rb],
       });
       rule(got.length === 0, `rider B received rider A's position after joining: ${rb.joined.join(', ')}`);
+    },
+  },
+
+  {
+    id: 'T2.3', rule: 'T2',
+    title: 'Nobody on the ride can subscribe to the legacy single ride channel (rail3:ride:<id>)',
+    run: async (ctx) => {
+      // W317: the pre-W193 channel carried every rider's position to every member. Its two
+      // policies are dropped at the cutover; a join must now be refused by policy for a rider
+      // and for a Captain alike (the control inside joinAttempt shows Realtime is up).
+      const { users: u, rides } = ctx.fx;
+      const id = rides.main.id;
+      const rb = await joinAttempt(ctx, u.riderB, [legacyTopic(id)], u.riderB, receiveTopics('rider', id));
+      rule(rb.joined.length === 0, 'rider B (on the ride) joined the legacy ride channel');
+      const cap = await joinAttempt(ctx, u.captain, [legacyTopic(id)], u.captain, receiveTopics('captain', id));
+      rule(cap.joined.length === 0, 'the Captain joined the legacy ride channel');
     },
   },
 
