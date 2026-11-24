@@ -8,30 +8,33 @@ import assert from 'node:assert/strict';
 
 import {
   canSeeBeacon,
+  beaconPositionLine,
   canCancelBeacon,
   buildCancelPatch,
   latencyDeltaMs,
 } from '../src/lib/beaconLogic.ts';
 
-// ── §4.1 visibility (W206 amended): self always; Captain/SAG see all beacons;
-//    EVERYONE sees a Captain/SAG SOS; peer member→member beacons stay hidden
-//    (F-07 still pending). 4th arg is the beacon OWNER's role. ────────────────
+// ── §4.1 visibility (Pillar II v1.2.0, W315): every app participant on the ride sees every
+//    active beacon on it. Before v1.2.0 a rider did not see another rider's. ──────────────────
 
-test('beacon visibility (W206): self + command see all; everyone sees a Captain/SAG SOS; peer beacons hidden', () => {
-  // Captain/SAG see every beacon
+test('beacon visibility (W315): a rider sees another rider\'s active beacon; every role sees every beacon', () => {
+  assert.equal(canSeeBeacon('member', 'r1', 'r2', 'member'), true);
+  assert.equal(canSeeBeacon('guest', 'g1', 'r2', 'member'), true);
+  assert.equal(canSeeBeacon('member', 'r1', 'r2'), true);
   assert.equal(canSeeBeacon('captain', 'cap', 'r1', 'member'), true);
   assert.equal(canSeeBeacon('support', 'sag', 'r1', 'member'), true);
-  // own beacon — every role
   assert.equal(canSeeBeacon('member', 'r1', 'r1'), true);
-  // W206: a rider/guest SEES a Captain's or SAG's SOS (command-owned beacon)
   assert.equal(canSeeBeacon('member', 'r1', 'cap', 'captain'), true);
-  assert.equal(canSeeBeacon('member', 'r1', 'sag', 'support'), true);
-  assert.equal(canSeeBeacon('guest', 'g1', 'cap', 'captain'), true);
-  // PEER (member→member) beacons stay hidden — F-07 not opened here
-  assert.equal(canSeeBeacon('member', 'r1', 'r2', 'member'), false);
-  assert.equal(canSeeBeacon('guest', 'g1', 'r2', 'member'), false);
-  // back-compat: 3-arg call (no owner role) → non-command viewer sees own only
-  assert.equal(canSeeBeacon('member', 'r1', 'r2'), false);
+});
+
+test('reduced sheet position line: live within a minute, otherwise its age in whole minutes', () => {
+  const now = 1_000_000_000;
+  assert.equal(beaconPositionLine(now - 5_000, now), 'On the map now');
+  assert.equal(beaconPositionLine(now - 60_000, now), 'On the map now');
+  assert.equal(beaconPositionLine(now - 61_000, now), 'Last seen 1 min ago');
+  assert.equal(beaconPositionLine(now - 7 * 60_000, now), 'Last seen 7 min ago');
+  assert.equal(beaconPositionLine(now + 5_000, now), 'On the map now'); // sender clock ahead
+  assert.equal(beaconPositionLine(null, now), 'No position received yet');
 });
 
 test('R3-22: Captain/SAG can cancel any beacon; rider only their own', () => {

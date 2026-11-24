@@ -59,7 +59,7 @@ interface Props {
   participant: FleetParticipant;
   tappable: boolean; // canOpenSheet(myRole, participant.role) — OR an active beacon the viewer may cancel (W173)
   // W173: pulsing high-visibility distress state. The CALLER gates this with
-  // canSeeBeacon (Captain/SAG + self only) — this component just renders it.
+  // canSeeBeacon (every app participant on the ride, since W315) — this component just renders it.
   beaconActive?: boolean;
   // W282 / §5.3 "Stale under beacon": the beacon is anchored at the rider's LAST-KNOWN (no live
   // fix yet). Presentation only — the CALLER computes it with isStaleUnderBeacon (Captain/SAG

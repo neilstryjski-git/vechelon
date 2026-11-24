@@ -2,6 +2,27 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-23 — W315: riders see every beacon on the ride; reduced sheet; disclosure wording
+
+App-only change on `rail3-integration`. No migration. Not built, not run on a device.
+
+| Acceptance criterion | Evidence | Status |
+|---|---|---|
+| A rider sees the beacon marker of any beaconing rider, at the live position | Unit: `visibleParticipants` with the beaconing set; `canSeeBeacon`. Server delivery: T4.1, T4.2 (CI and staging) | Unit and server proven; not seen on a device |
+| Marker and position disappear on cancel and on ride end | Unit: rider leaves the visible set when the id leaves the beaconing set. Server: T4.3, T4.4 | Same |
+| Tapping a beaconing rider as a rider: name, position, beacon state; no phone, no dial | Unit: `sheetMode` reduced, `canSeePhone` false, `beaconPositionLine`. The reduced branch returns before any contact row. Server: T6, T7 (a rider is sent no other rider's phone) | Same; no component render test exists in this repo |
+| Captain and SAG unchanged, phone and dial on every rider | Unit: `sheetMode` full for leaders, beacon or not | Unit proven |
+| A rider still sees no other rider without an active beacon | Unit (existing R3-10 test still passes); server T2 | Proven |
+| A beacon outranks Sleeping on every map | Read of `RiderMarker`: beacon style overrides every tactical state. No test | Read, not tested |
+| Disclosure text updated in the same build and matches the server | `WHO_SEES_TEXT` (copy list 1.3) against the W193 layout: position to Captain and SAG; beacon to everyone on the ride until cancel or ride end | Text changed; build pending |
+| The PWA roster page shows no beacons | `grep -rl beacon admin/src`: no page or component renders one | Checked by search |
+
+Unit tests: 272 pass (the 2 files that need a live Supabase run in CI). Type-check: only the
+two long-standing `deepLinkAuth.ts` errors.
+
+Not yet run: the three manual steps on the ticket (two riders and a Captain on development
+builds). They need a new build.
+
 ## 2026-11-23 — W193: role-scoped channels, rules T2, T3, T4, T8, T9
 
 Change: migration `20261123000000_w193_role_scoped_channels.sql` and the app's channel

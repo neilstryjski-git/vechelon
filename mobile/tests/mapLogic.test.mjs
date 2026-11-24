@@ -18,6 +18,8 @@ import {
 } from '../src/lib/geo.ts';
 import {
   visibleParticipants,
+  sheetMode,
+  resolveSheetParticipant,
   canOpenSheet,
   canSeePhone,
   canExpandCluster,
@@ -47,6 +49,46 @@ const FLEET = [
 test('R3-10: Rider sees only Captain + SAG — never other riders', () => {
   const visible = visibleParticipants('member', 'r1', FLEET);
   assert.deepEqual(visible.map((p) => p.riderId).sort(), ['cap', 'sag']);
+});
+
+test('W315: a Rider also sees a rider whose beacon is active, and only that rider', () => {
+  const visible = visibleParticipants('member', 'r1', FLEET, new Set(['r2']));
+  assert.deepEqual(visible.map((p) => p.riderId).sort(), ['cap', 'r2', 'sag']);
+});
+
+test('W315: the beaconing rider is gone from a Rider\'s map the moment the beacon is no longer active', () => {
+  assert.deepEqual(visibleParticipants('member', 'r1', FLEET, new Set()).map((p) => p.riderId).sort(), ['cap', 'sag']);
+});
+
+test('W315: a Rider never sees themselves, even with their own beacon in the set', () => {
+  assert.ok(!visibleParticipants('member', 'r1', FLEET, new Set(['r1'])).some((p) => p.riderId === 'r1'));
+});
+
+test('W315: Captain and SAG see the full fleet with or without beacons (unchanged)', () => {
+  assert.equal(visibleParticipants('captain', 'cap', FLEET, new Set(['r2'])).length, 4);
+  assert.equal(visibleParticipants('support', 'sag', FLEET, new Set()).length, 4);
+});
+
+test('W315 sheet: a Rider tapping a beaconing rider gets the reduced sheet, with no phone and no dial', () => {
+  assert.equal(sheetMode('member', 'member', true), 'reduced');
+  assert.equal(sheetMode('guest', 'member', true), 'reduced');
+  assert.equal(sheetMode('member', 'guest', true), 'reduced');
+  // the phone and dial gate stays shut for exactly that pairing
+  assert.equal(canSeePhone('member', 'member'), false);
+  assert.equal(canSeePhone('guest', 'member'), false);
+  // no beacon, no sheet: a Rider still cannot tap another rider
+  assert.equal(sheetMode('member', 'member', false), 'none');
+});
+
+test('W315 sheet: Captain and SAG keep the full sheet on every rider, beacon or not; a Rider keeps it on leaders', () => {
+  for (const beacon of [true, false]) {
+    assert.equal(sheetMode('captain', 'member', beacon), 'full');
+    assert.equal(sheetMode('support', 'member', beacon), 'full');
+    assert.equal(sheetMode('member', 'captain', beacon), 'full');
+    assert.equal(sheetMode('member', 'support', beacon), 'full');
+    assert.equal(canSeePhone('captain', 'member'), true);
+    assert.equal(canSeePhone('support', 'member'), true);
+  }
 });
 
 test('guest rider has identical visibility to member rider (role gates, not account type)', () => {
@@ -135,4 +177,39 @@ test("parsePoint mirrors the web app: '(lng,lat)' string and {x,y} object", () =
   assert.deepEqual(parsePoint({ x: -79.3832, y: 43.6532 }), { lat: 43.6532, lng: -79.3832 });
   assert.equal(parsePoint(null), null);
   assert.equal(parsePoint('garbage'), null);
+});
+
+// ── W315: the open sheet follows the live participant ────────────────────────
+test('W315 sheet participant: drawn from the live fleet, not the tap-time snapshot', () => {
+  const tapped = { ...P('r2', 'member'), lastPingAt: 1 };
+  const live = { ...P('r2', 'member'), lastPingAt: 999 };
+  const got = resolveSheetParticipant('member', tapped, [P('cap', 'captain'), live], (id) => id === 'r2');
+  assert.equal(got.lastPingAt, 999);
+});
+
+test('W315 sheet participant: a Rider\'s sheet on a beaconing rider closes when the beacon clears or the rider leaves the map', () => {
+  const tapped = P('r2', 'member');
+  assert.equal(resolveSheetParticipant('member', tapped, [P('r2', 'member')], () => false), null);
+  assert.equal(resolveSheetParticipant('member', tapped, [P('cap', 'captain')], () => true), null);
+});
+
+test('W315 sheet participant: a leader keeps a rider\'s sheet after that rider leaves the map', () => {
+  const tapped = P('r2', 'member');
+  assert.equal(resolveSheetParticipant('captain', tapped, [], () => false), tapped);
+  assert.equal(resolveSheetParticipant('support', tapped, [], () => false), tapped);
+});
+
+test('W315 sheet participant: a Rider keeps the full sheet on a leader, live', () => {
+  const live = { ...P('cap', 'captain'), lastPingAt: 5 };
+  assert.equal(resolveSheetParticipant('member', P('cap', 'captain'), [live], () => false), live);
+  assert.equal(resolveSheetParticipant('member', null, [live], () => false), null);
+});
+
+test('W315 sheet participant: a leader keeps the sheet on a beaconing co-leader (to cancel it), live; not without a beacon', () => {
+  const live = { ...P('cap2', 'captain'), lastPingAt: 7 };
+  // captain → captain has no contact sheet (sheetMode 'none'), but an active beacon the viewer may cancel keeps it open
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [live], (id) => id === 'cap2'), live);
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [live], () => false), null);
+  // and it closes once that co-leader is no longer on the map
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [], (id) => id === 'cap2'), null);
 });

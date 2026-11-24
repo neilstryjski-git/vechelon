@@ -24,6 +24,9 @@ import type { ResumeSource } from '../lib/resumeDetector';
 // D94 placeholder copy (Voice & Tone list): shown when the beacon is tapped before the channel opens.
 const NOT_CONNECTED_MSG = 'Not connected to the ride yet — your beacon did NOT go out. Try again in a moment.';
 
+// Voice & Tone list row 3.3 (passed 2026-11-23). The server's own message goes to the log.
+const CANCEL_FAILED_MSG = "Couldn't cancel this Beacon. Ask your Captain or support crew.";
+
 export const BEACON_EVENT = 'beacon';
 // W282: mirrors the fleet's LAST_KNOWN_REFETCH_DEBOUNCE_MS — mount + first SUBSCRIBED, or an
 // AppState flap, must not double-read; a real activation later always runs.
@@ -360,7 +363,8 @@ export function useBeacons(
     } else if (sent !== 'ok') {
       setError('NO SIGNAL — your beacon may NOT have reached the Captain/SAG. Retry when you have signal.');
     } else if (insErr) {
-      setError(`Beacon alert sent, but the audit write failed: ${insErr.message}`);
+      console.warn('[Rail3] beacon audit write failed', insErr.message);
+      setError("Your Beacon went out, but we couldn't save a record of it.");
     }
     if (sent !== 'ok') console.error(`[Rail3] beacon alert send failed (${sent}), channel ${channelStatus}`);
     if (insErr) console.error('[Rail3] beacon_alerts insert failed after retry', insErr);
@@ -407,7 +411,8 @@ export function useBeacons(
           .is('beacon_cancelled_at', null) // idempotent under racing cancels
           .select('id');
         if (updErr) {
-          setError(`Beacon cancel failed: ${updErr.message}`);
+          console.warn('[Rail3] beacon cancel failed', updErr.message);
+          setError(CANCEL_FAILED_MSG);
           console.error('[Rail3] beacon cancel update failed', updErr);
           return; // no broadcast, no flag change: the audit row still says active
         }
@@ -472,7 +477,8 @@ export function useBeacons(
       } catch (e) {
         // Includes the SD-011 guard throw — loud, never a stranded silent state.
         const msg = e instanceof Error ? e.message : String(e);
-        setError(`Beacon cancel failed: ${msg}`);
+        console.warn('[Rail3] beacon cancel failed', msg);
+        setError(CANCEL_FAILED_MSG);
         console.error('[Rail3] beacon cancel error', e);
       }
     },

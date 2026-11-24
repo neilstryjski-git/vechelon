@@ -2067,3 +2067,44 @@ Notes:
   refused on every channel and on beacon rows. T9.3 proves rows and channels for a leader,
   not flags.
 
+## 2026-11-23 — W315: riders see every beacon on the ride, with a reduced sheet; disclosure wording
+
+- RULE (Pillar II v1.2.0 §4.1, Features 1 and 2): every app participant on the ride sees every
+  active beacon on it, at that rider's live position, until cancel or ride end. The server
+  decides what a rider's device receives (W193: the `sos` topic and the fleet seed); this
+  ticket only renders it.
+- `lib/beaconLogic.ts`: `canSeeBeacon` is now true for every viewer (signature kept);
+  `beaconPositionLine` gives the reduced sheet's position line.
+- `lib/roleVisibility.ts`: `visibleParticipants` takes the set of beaconing rider ids: a Rider
+  sees Captain + SAG + any beaconing rider, and that rider is gone the moment the beacon is no
+  longer active. `sheetMode` = full | reduced | none.
+- `RideMapScreen`: the beaconing set comes from `useBeacons`; a tapped beaconing rider opens
+  the reduced sheet for a Rider; a sheet closes when its marker leaves the map (cancel, ride
+  end). `RiderBottomSheet`: the reduced branch returns before any contact row and never reads
+  the phone. The phone is not fetched either: `get_ride_roster` (W313) sends a Rider only the
+  leaders' numbers.
+- BEACON OUTRANKS SLEEPING: unchanged code, now reachable for riders. `RiderMarker` paints the
+  beacon over any tactical state, and a Sleeping rider with an active beacon still sends their
+  sleeping ping on `sos`.
+- COPY (Voice & Tone list, passed whole by the Senior PM 2026-11-23): disclosure who-sees
+  sentence (1.3, now the exported `WHO_SEES_TEXT`), background-permission rationale (1.5),
+  tracking notification (1.6), reduced sheet strings (2.2 to 2.4), connection chip (3.1,
+  3.2), cancel failed (3.3), record not saved (3.5). The policy sentence `DISCLOSURE_TEXT`
+  (1.2) is unchanged, so the Play declaration video still matches. Server messages that used
+  to be shown raw (3.3, 3.5) now go to the log only.
+- NOT APPLIED: section 5 of the list (carried from Sprint 1) and the Play-facing sentences in
+  section 4, which are Play Console edits made when the build ships.
+- NEEDS A NEW BUILD. Not built: an EAS build is metered (15 Android builds a month) and is the
+  Senior PM's call. Not run on a device.
+- HANDOFF, to change when this build ships: Play store listing sentences 4.2 to 4.4, the
+  background-location declaration text 4.4, the retention sentence 4.6; Data Safety form
+  answers stay as they are (4.5). List: docs/rail3/sprint2/voice_tone_copy_list.md section 4.
+- STRIDE HOOKS: claim and complete from python urllib; worktree and PR made by hand.
+- REVIEW r1 (2026-11-23): the sheet is now drawn from the live participant
+  (`resolveSheetParticipant`), so the reduced sheet's position line cannot go stale while it
+  is open; a leader's sheet is no longer closed when the rider leaves the map; row 2.5
+  (`Cancel Beacon`) applied; "Needs help" is sentence case; four comments brought up to the
+  v1.2.0 rule. NOT CHANGED: the two iOS permission strings in `app.config.ts` (old "Captain
+  and SAG" wording): they were not on the passed list, so they are added to it as row 1.7
+  for a decision before any iOS build. Android does not show them.
+
