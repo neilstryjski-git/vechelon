@@ -2188,3 +2188,14 @@ Notes:
   page check of 2026-11-16 was therefore made against the September bundle, not the merged
   trunk code. A fresh page check of the staging portal is owed (Senior PM).
 - The build leaves untracked files under `public/` in the worktree: not committed.
+
+## 2026-11-23 — W317: Phase 2, the cutover build (versionCode 5)
+
+- THE ONE APPROVED EAS BUILD IS SPENT: build `801c2d1d-df8f-4978-9841-e42bbda5d0fc`,
+  production profile (AAB, `ca.vechelon`, staging-backed), versionCode 5, FINISHED. Built from
+  branch `W317` at 3b7d03c; the commit stamp in the app reads `ff9a88e`; `mobile/src` is the
+  trunk's at 3458417. EAS Android builds in November: 5 of 15.
+- ROUTE (Senior PM, in session): Play internal testing first, open testing afterwards.
+- BUILT, NOT VALIDATED: not installed on any device yet. Owed: the Senior PM's device check on
+  the internal track (sign-in incl. the reviewer account, join, map, roster, beacon raise and
+  cancel, end ride, ride-start timing for W245).
