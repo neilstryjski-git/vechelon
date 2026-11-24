@@ -204,3 +204,12 @@ test('W315 sheet participant: a Rider keeps the full sheet on a leader, live', (
   assert.equal(resolveSheetParticipant('member', P('cap', 'captain'), [live], () => false), live);
   assert.equal(resolveSheetParticipant('member', null, [live], () => false), null);
 });
+
+test('W315 sheet participant: a leader keeps the sheet on a beaconing co-leader (to cancel it), live; not without a beacon', () => {
+  const live = { ...P('cap2', 'captain'), lastPingAt: 7 };
+  // captain → captain has no contact sheet (sheetMode 'none'), but an active beacon the viewer may cancel keeps it open
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [live], (id) => id === 'cap2'), live);
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [live], () => false), null);
+  // and it closes once that co-leader is no longer on the map
+  assert.equal(resolveSheetParticipant('captain', P('cap2', 'captain'), [], (id) => id === 'cap2'), null);
+});

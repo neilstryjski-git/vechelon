@@ -17,7 +17,7 @@ App-only change on `rail3-integration`. No migration. Not built, not run on a de
 | Disclosure text updated in the same build and matches the server | `WHO_SEES_TEXT` (copy list 1.3) against the W193 layout: position to Captain and SAG; beacon to everyone on the ride until cancel or ride end | Text changed; build pending |
 | The PWA roster page shows no beacons | `grep -rl beacon admin/src`: no page or component renders one | Checked by search |
 
-Unit tests: 267 pass (the 2 files that need a live Supabase run in CI). Type-check: only the
+Unit tests: 272 pass (the 2 files that need a live Supabase run in CI). Type-check: only the
 two long-standing `deepLinkAuth.ts` errors.
 
 Not yet run: the three manual steps on the ticket (two riders and a Captain on development
