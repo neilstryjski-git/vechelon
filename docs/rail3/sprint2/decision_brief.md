@@ -9,7 +9,7 @@ from a Pillar it is flagged, not fixed.
 | 1 | A Sleeping rider still receives Captain and SAG positions when the app is open | **Yes.** Receiving does not depend on the rider's own tracking state |
 | 2 | What the map draws for a beaconing rider who goes Sleeping | **A red pulsing beacon marker at the last position sent. The Sleeping style is not drawn.** Three of the four Sleeping conditions in Pillar II are not built (flagged) |
 | 3 | What travels on the public web channel | **Nothing.** The code was unused and W310 deleted it |
-| 4 | Whether `beacon_active` is reset at ride end or at purge | **At ride end**, by a database trigger. The purge does not touch it |
+| 4 | Whether `beacon_active` is reset at ride end or at purge | **At ride end**, by a database trigger. The purge has no statement on the flag; it can end a ride left active over 24 hours, and that ride end resets it the same way |
 | 5 | No production account holds two memberships | **FALSE. Three production accounts hold two or more memberships.** This contradicts the Brain's inference (Ledger §16.7 item 4). Flagged, not fixed |
 
 ## 1. A Sleeping rider still receives Captain and SAG positions when the app is open
@@ -47,10 +47,12 @@ from a Pillar it is flagged, not fixed.
   "a beacon outranks it", holds for the marker.
 - The marker stays at the last position sent. Sleeping is sticky on the receiver: it never
   decays to Dark (`mobile/src/state/riderState.ts:125`).
-- Bottom sheet, Captain or SAG: the state chip reads `SLEEPING`, with phone, Dial, Navigate
-  and Cancel Beacon. **No age of the position is shown.**
+- Bottom sheet, Captain or SAG: the state chip reads `SLEEPING`
+  (`mobile/src/components/RiderBottomSheet.tsx:98`), with phone, Dial and Cancel Beacon, and
+  Navigate for the SAG only (`mobile/src/lib/roleVisibility.ts:111-113`). **No age of the
+  position is shown.**
 - Bottom sheet, another rider (new in W315): `Needs help`, and a position line that does give
-  the age (`Last seen {n} min ago`).
+  the age (`Last seen {n} min ago`): `RiderBottomSheet.tsx:78-80`.
 
 **Flagged against Pillar II Feature 4 (the four Sleeping conditions), not fixed:**
 
@@ -74,7 +76,7 @@ unless `private_only` is set; web Race Control is not on the trunk):
 
 ## 4. Whether `beacon_active` is reset at ride end or at purge
 
-**At ride end. The purge never touches it.**
+**At ride end. The purge has no statement of its own on the flag, but it can cause a ride end.**
 
 - When a ride's status becomes ended, the trigger `trg_rail3_close_beacons_on_ride_end` closes
   every open beacon row for the ride with reason `ride_ended` and sets `beacon_active = false`
@@ -83,8 +85,16 @@ unless `private_only` is set; web Race Control is not on the trunk):
   trigger closes a beacon inserted after the ride ended (`:122`).
 - The retention purge (`supabase/migrations/20261109010000_d100_location_retention_purge.sql`)
   clears last position, last ping and phone four hours after ride end, and beacon coordinates
-  after 30 days. It has no statement that reads or writes `beacon_active`.
-- The flag is also cleared on a cancel, by the app, beside the cancel record.
+  after 30 days. It has no statement that reads or writes `beacon_active`. One indirect path:
+  its first step ends any ride still active more than 24 hours after its start (`:53-56`);
+  that status change fires the ride-end trigger above, so the flag is reset inside the purge
+  run, by the ride-end rule.
+- A guard trigger, `trg_rail3_no_beacon_flag_after_ride_end`
+  (`supabase/migrations/20261114010000_d81_guard_beacon_close_fields.sql:59-78`), stops the
+  flag being set on a ride that has ended. It exists because the app re-asserts its own flag
+  while it believes its beacon is active (`mobile/src/hooks/useBeacons.ts:141`).
+- The flag is also cleared on a cancel, by the app, beside the cancel record
+  (`mobile/src/hooks/useBeacons.ts:384`, `:425`, `:464`).
 - Staging, read-only, 2026-11-23 (`~/vechelon-backups/w316/readings-staging.json`):
 
 | Query | Result |
