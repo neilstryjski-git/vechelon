@@ -53,3 +53,11 @@ Edit `layout.mjs` only. The rules never name a topic or a table for the things W
 and W313 are changing; they ask `layout.mjs` which topics a role receives on and sends on, and
 how a rider's device reads the roster. The pre-W193 topic stays in `allTopics()` permanently,
 so a layout that leaves the old channel open is still caught.
+
+## Supabase CLI version for a local run (W193)
+
+Start the local stack with CLI **2.122.1 or newer 2.x** (`npx supabase@2.122.1 start`). On the
+stack CLI 2.89.1 starts, a send on a topic the sender may not receive on is not delivered, and
+T1.2, T2 and T4.3 report "control failed". The repo's own `supabase` dependency still resolves
+2.89.1, which is the version used for deploy commands; do not use it to start the test stack.
+

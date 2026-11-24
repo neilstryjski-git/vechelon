@@ -2,6 +2,70 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-23 — W193: role-scoped channels, rules T2, T3, T4, T8, T9
+
+Change: migration `20261123000000_w193_role_scoped_channels.sql` and the app's channel
+routing. Results from Rail 3 CI on pull request #172 (local stack) and from a run against staging.
+
+**All 16 rules pass on the local stack** (47 cases; the advisory T15.2 aside).
+
+| Case | Before W193 | Local (CI) | Staging | What it proves |
+|---|---|---|---|---|
+| T2.1 | Fails | Passes | Passes | A rider's position reaches the Captain and no other rider |
+| T2.2 | Fails | Passes | Passes | A rider who tries every topic of the ride still gets no other rider's position (refused on crew) |
+| T3.1, T3.2 | Pass | Pass | Pass | Riders receive Captain and SAG positions |
+| T4.1, T4.2 | Pass | Pass | Pass | Riders receive beacon state, and the beaconing rider's position while it is active |
+| T4.3 | Fails | Passes | Passes | After a cancel the server refuses that rider's position on every path riders can hear |
+| T4.4 | Fails | Passes | Passes | Same after the ride ends |
+| T8.1 to T8.3 | Pass | Pass | Pass | Club admin subscribes and sees beacons; another club's admin and a suspended admin do not |
+| T9.1 | Pass | Pass | Pass | Beacon rows reach riders on the ride and the club's admins |
+| T9.2, T9.3 | Fail | Pass | Fail | Beacon rows are closed to people off the ride on both. On staging the beacon FLAG is still readable from `ride_participants`: that is D50, not on staging until W317 |
+| T1.1, T1.2 | Pass | Pass | Pass | Nobody off the ride joins or sends on any of the five topics |
+| T1.3 | Pass | Passes | Not judged | One of five joins timed out on the staging run (before the harness retry below); not re-run |
+| T16 | Pass | Pass | Not run | Cross-club isolation |
+
+**Staging apply, 2026-11-23, Senior PM approved ("apply").** Target `xybgtbybdhxuwqjfcfkc`;
+production untouched; rolled-back trial first; no active ride, no open beacon at the time.
+Evidence: `~/vechelon-backups/w193-staging/`. The migration adds topics and narrows who reads
+beacon rows; the Play build's own channel and its two policies are unchanged.
+
+**Why staging was needed.** On the local stack started by CLI 2.89.1, a rider's send on the
+crew topic (may send, may not receive) was accepted with HTTP 202 and never delivered. A
+diagnostic case showed the Captain joined crew and received their own send, and the rider was
+refused the join. The same diagnostic on staging delivered the rider's send. So the hosted
+service supports send-without-receive and that older local Realtime does not. CI now starts
+its stack with CLI 2.122.1, where the cases pass. The diagnostic case is removed.
+
+**Harness change.** With five topics per ride, one refused join could leave the other joins
+on the same socket unanswered (newer local Realtime; once on staging). A timeout is not a
+refusal, so `listen` now asks each timed-out topic again on a connection of its own.
+
+**Review r1, 2026-11-23.** Found: beacon rows were readable by the Captain / SAG role alone
+(suspended, or never opened the ride). Fixed by migration `20261123010000`; T9.3 now also
+tries a SAG with no first-open mark and a suspended SAG, with a control that the same SAG
+reads the row normally. That migration is NOT on staging yet. Also added: unit tests for the
+channel multiplexer (8), role-read retry, and four more known limits (dev log, 5 to 8).
+
+**Follow-up migration on staging, 2026-11-23, Senior PM approved ("apply").** Target
+`xybgtbybdhxuwqjfcfkc`; rolled-back trial first; no active ride or open beacon; production
+untouched. Staging run after it: T1.1 to T1.3, T4.1 to T4.4, T8.1 to T8.3, T9.1, T10, T14.1
+pass. T9.3 on staging no longer reaches beacon rows as a never-opened or suspended SAG; it
+and T9.2 stay red there only for the beacon flag (D50, at W317). Evidence:
+`~/vechelon-backups/w193-staging/denial-staging-r1/`.
+
+**Review r2, 2026-11-23.** All nine acceptance criteria met. One important finding, ACCEPTED
+FOR NOW by the Senior PM (2026-11-23): D50's participant-row policy and fleet seed admit a
+Captain or SAG by role alone, so a suspended or never-opened leader still reads beacon flags
+and last positions from the participant rows. Not changed; recorded as a known limit. Five
+minor findings fixed or recorded (dev log, limits 7, 9, 10).
+
+**Known limits** (also in the dev log): a socket's send permission is cached at join; the
+`all` topic accepts any event name from anyone on the ride (both leak only the sender's own
+position); the rider's role is read when the ride opens.
+
+Not yet run: the new app build on a device (it cannot talk to the Play build: different
+topics); T1.3 and T16 on staging after the harness change; Race Control on the web (not built).
+
 ## 2026-11-22 — D50: participant rows readable to §4.1, rules T5, T6, T7
 
 Change: migration `20261122010000_d50_participant_rows_section_4_1.sql`, three mobile read

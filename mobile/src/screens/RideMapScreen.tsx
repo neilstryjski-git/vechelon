@@ -19,6 +19,10 @@ import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
 import { selfRsvpWithIdentity, markRail3Joined, markRail3Rejoined } from '../lib/rideJoin';
+import { listenKinds, receiveKinds, setSendContext, type ChannelKind } from '../lib/channelLayout';
+import { makeRideMux } from '../lib/rideMux';
+import { useResume } from '../hooks/useResume';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   promptOemExclusionOnFirstJoin,
   promptIfBatterySaverOn,
@@ -98,8 +102,41 @@ const RideMapScreen: React.FC = () => {
   // channel waits for it: subscribing first would be refused and only recover on the retry.
   // Settled = the join attempt finished (either way) or 5 s passed; never a permanent gate.
   const [joinSettled, setJoinSettled] = useState(false);
+  // W193 r2: the first-open mark is what admits this device to the ride's channels and beacon
+  // rows. Its write at open is best-effort, so it is repeated on every resume (it only ever
+  // fills an empty mark): one failed write must not keep a rider or leader out all ride.
+  const remarkJoined = useCallback(() => {
+    if (rideId && myRiderId) void markRail3Joined(rideId, myRiderId).catch(() => {});
+  }, [rideId, myRiderId]);
+  useResume(rideId, remarkJoined);
   // ONE channel per ride, shared by positions and beacons (see useFleetPositions).
-  const { channel, status } = useRideChannel(joinSettled ? rideId : null);
+  // W193: four role-scoped topics per ride (lib/channelLayout.ts). Everyone joins `all`
+  // (beacons, departures, ride end) and `lead` (Captain and SAG positions). A leader also joins
+  // `crew` (riders' positions); a rider joins `sos` (a beaconing rider's position) instead. The
+  // server refuses a rider on `crew` whatever this screen asks for. Role comes from the ride
+  // details; until they load this device behaves as a rider. `status` (the connection chip,
+  // beacon NO SIGNAL) follows `all`, the channel the safety events travel on.
+  const channelRideId = joinSettled ? rideId : null;
+  // Which topics this device joins comes from the same table the tests pin (receiveKinds).
+  const joins = receiveKinds(ride?.myRole);
+  const topicRide = (kind: ChannelKind) => (joins.includes(kind) ? channelRideId : null);
+  const { channel: allChannel, status } = useRideChannel(channelRideId, 'all');
+  const { channel: leadChannel } = useRideChannel(topicRide('lead'), 'lead');
+  const { channel: crewChannel } = useRideChannel(topicRide('crew'), 'crew');
+  const { channel: sosChannel } = useRideChannel(topicRide('sos'), 'sos');
+  // The hooks below still take one "channel"; the mux routes each handler and send to the
+  // right topic. It lives as long as `all` does (as the single channel did), so `lead`, `crew`
+  // or `sos` reconnecting on its own never resets the map. Cast: the hooks are typed for a
+  // RealtimeChannel and use only .on and .send.
+  const mux = useMemo(() => makeRideMux(allChannel, listenKinds), [allChannel]);
+  useEffect(() => {
+    mux?.attach({ lead: leadChannel, crew: crewChannel, sos: sosChannel });
+  }, [mux, leadChannel, crewChannel, sosChannel]);
+  useEffect(() => {
+    mux?.activate();
+    return () => mux?.dispose();
+  }, [mux]);
+  const channel = mux as unknown as RealtimeChannel | null;
   // D50: the roster comes from functions that admit only someone with a row on the ride, so it
   // waits for the join as well.
   const { roster, refetchRoster } = useRideRoster(joinSettled ? rideId : null);
@@ -170,6 +207,13 @@ const RideMapScreen: React.FC = () => {
   useEffect(() => {
     if (selfHealth.notReaching) setOsCoords(osCoordsRef.current);
   }, [selfHealth.notReaching]);
+  // W193: tell the REST sender (restBroadcast) who is sending. A leader's position goes to
+  // `lead`; a rider's to `crew`, and to `sos` as well only while their own beacon is active.
+  useEffect(() => {
+    if (!rideId) return;
+    setSendContext({ rideId, role: ride?.myRole ?? null, beaconActive: Boolean(myBeacon) });
+  }, [rideId, ride?.myRole, myBeacon]);
+  useEffect(() => () => setSendContext(null), []);
   const selfHealthAnchor = myBeacon && myCoords ? myCoords : osCoords;
   const onUserLocationChange = useCallback(
     (e: { nativeEvent: { coordinate?: { latitude: number; longitude: number } } }) => {

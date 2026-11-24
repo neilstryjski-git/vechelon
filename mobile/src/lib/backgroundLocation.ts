@@ -3,7 +3,7 @@ import type { RiderTacticalState } from '../state/riderState';
 import { supabase } from './supabase';
 import { logMeasurement } from './measure';
 import { isCurrentIdentity } from './identity';
-import { rail3RideTopic } from '../hooks/useRideChannel';
+import { sendTopicsFor } from './channelLayout';
 
 // Mirror of useFleetPositions.POSITION_EVENT / DEPARTED_EVENT — inlined to avoid a circular
 // import. Keep these in sync with the exports in useFleetPositions.ts.
@@ -48,20 +48,34 @@ export async function restBroadcast(
     const claimed = typeof payload.riderId === 'string' ? payload.riderId : null;
     const ok = await isCurrentIdentity(claimed, rideId, 'broadcast', s.session?.user?.id ?? null);
     if (!ok) return false;
-    await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: [
-          { topic: rail3RideTopic(rideId), event, private: true, payload },
-        ],
+    // W193: the topic depends on the event, the sender's role and whether their beacon is
+    // active (lib/channelLayout.ts). One request per topic: the server authorises each topic
+    // by its own rule, and a refusal on one (sos, in the moment before the beacon flag lands
+    // or after it clears) must not take the other with it.
+    // The result is true if at least one topic's request got through. NOTE: a send the
+    // topic's policy refuses is still answered 202 and simply not delivered, so the status
+    // cannot tell a refusal from a delivery; only transport and server errors show here.
+    const results = await Promise.all(
+      sendTopicsFor(rideId, event).map(async (topic) => {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ messages: [{ topic, event, private: true, payload }] }),
+          });
+          if (!res.ok) console.warn(`[Rail3] broadcast ${event} answered ${res.status} on ${topic.split(':')[1]}`);
+          return res.ok;
+        } catch (e) {
+          console.warn(`[Rail3] broadcast ${event} failed on ${topic.split(':')[1]}`, e);
+          return false;
+        }
       }),
-    });
-    return true;
+    );
+    return results.some(Boolean);
   } catch (e) {
     console.warn('[Rail3] broadcast failed', e);
     return false;

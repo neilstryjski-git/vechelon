@@ -6,10 +6,10 @@
 // the layout they edit THIS file and the same rules prove the new behaviour.
 // W313 moved the two roster readers to get_ride_roster.
 //
-// Today (before W193): one private channel per ride, `rail3:ride:<id>`, carrying every event
-// to every affiliated club member. The roster is read straight off ride_participants.
+// Before W193: one private channel per ride, `rail3:ride:<id>`, carrying every event. That
+// topic still exists until the cutover and stays in allTopics() so the rules keep probing it. The roster is read straight off ride_participants.
 
-export const LAYOUT = 'single-channel, club-wide (pre-W193)';
+export const LAYOUT = 'four role-scoped channels per ride: crew, lead, all, sos (W193); legacy rail3:ride kept open until the W317 cutover';
 
 // Event names on the wire (mobile/src/hooks: useFleetPositions, useBeacons, useRideChannel).
 export const EVENTS = { pos: 'pos', beacon: 'beacon', depart: 'depart', rideEnded: 'ride_ended' };
@@ -20,16 +20,33 @@ export function legacyTopic(rideId) {
   return `rail3:ride:${rideId}`;
 }
 
+// W193: four role-scoped topics per ride (migration 20261123000000). Mirrors
+// mobile/src/lib/channelLayout.ts, which is what the app uses.
+//   crew  riders' positions            receive: Captain, SAG           send: anyone on the ride
+//   lead  Captain and SAG positions    receive: anyone on the ride     send: Captain, SAG
+//   all   beacon, depart, ride ended   receive: on the ride + admins   send: anyone on the ride
+//   sos   a beaconing rider's position receive: on the ride + admins   send: rider with an active beacon
+export const crewTopic = (rideId) => `rail3:crew:${rideId}`;
+export const leadTopic = (rideId) => `rail3:lead:${rideId}`;
+export const everyoneTopic = (rideId) => `rail3:all:${rideId}`;
+export const sosTopic = (rideId) => `rail3:sos:${rideId}`;
+const isLeader = (role) => role === 'captain' || role === 'sag';
+
 // Topics a device in `role` subscribes to. role: 'rider' | 'captain' | 'sag' | 'admin'
 // ('admin' = a club admin watching from Race Control, not a participant).
 export function receiveTopics(role, rideId) {
-  return [legacyTopic(rideId)];
+  if (isLeader(role)) return [crewTopic(rideId), leadTopic(rideId), everyoneTopic(rideId)];
+  if (role === 'admin') return [everyoneTopic(rideId), sosTopic(rideId)];
+  return [leadTopic(rideId), everyoneTopic(rideId), sosTopic(rideId)];
 }
 
 // Topics a device in `role` publishes `event` on. `state.beaconActive` is true while the
 // sender's own Support Beacon is active (§4.1: that rider's live position reaches riders then).
 export function sendTopics(role, event, rideId, state = {}) {
-  return [legacyTopic(rideId)];
+  if (role === 'admin') return []; // Race Control watches; it sends nothing
+  if (event !== EVENTS.pos) return [everyoneTopic(rideId)];
+  if (isLeader(role)) return [leadTopic(rideId)];
+  return state.beaconActive ? [crewTopic(rideId), sosTopic(rideId)] : [crewTopic(rideId)];
 }
 
 // Every topic that exists for the ride, in any role. Used by the "cannot subscribe to ANY

@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
+import { useResume } from './useResume';
 
 import { supabase } from '../lib/supabase';
 import { parsePoint, LatLng } from '../lib/geo';
@@ -44,6 +46,34 @@ export function useRideDetails(rideId: string | null): {
   const [ride, setRide] = useState<RideDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Read my role on this ride and patch it onto the ride. True once a role was read.
+  const hydrateRole = useCallback(async (forRideId: string): Promise<boolean> => {
+    try {
+      const { data: s } = await supabase.auth.getSession();
+      const userId = s.session?.user?.id;
+      if (!userId) return false;
+      const { data: me } = await supabase
+        .from('ride_participants')
+        .select('role')
+        .eq('ride_id', forRideId)
+        .eq('account_id', userId)
+        .maybeSingle();
+      if (!me?.role) return false;
+      setRide((cur) =>
+        cur && cur.id === forRideId && cur.myRole !== me.role ? { ...cur, myRole: me.role as RideRole } : cur,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // W193: a promotion or demotion during the ride reaches the channels at the next resume.
+  const onResume = useCallback(() => {
+    if (rideId) void hydrateRole(rideId);
+  }, [rideId, hydrateRole]);
+  useResume(rideId, onResume);
 
   useEffect(() => {
     if (!rideId) {
@@ -132,22 +162,19 @@ export function useRideDetails(rideId: string | null): {
 
       // Hydrate the real role asynchronously and patch it onto the already-rendered
       // ride. Guarded against a ride change mid-flight (cur.id === row.id).
-      const userId = auth.user?.id;
-      if (!userId) return;
-      const { data: me } = await supabase
-        .from('ride_participants')
-        .select('role')
-        .eq('ride_id', rideId)
-        .eq('account_id', userId)
-        .maybeSingle();
-      if (cancelled || !me?.role) return;
-      setRide((cur) => (cur && cur.id === row.id ? { ...cur, myRole: me.role as RideRole } : cur));
+      // W193: the role now also decides which channels this device sends and listens on, so
+      // a failed read must not stand for the session. Retry (2 s doubling to 15 s, about three
+      // minutes) until a role is read; the resume signal below re-reads it after that.
+      for (let attempt = 0; attempt < 14 && !cancelled; attempt += 1) {
+        if (await hydrateRole(rideId)) return;
+        await new Promise((r) => setTimeout(r, Math.min(15000, 2000 * 2 ** Math.min(attempt, 3))));
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [rideId]);
+  }, [rideId, hydrateRole]);
 
   return { ride, loading, error };
 }

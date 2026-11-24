@@ -133,12 +133,13 @@ export function logChannelStatus(
   status: string,
   attempt: number,
   errorMessage?: string,
+  topicKind?: string, // W193: which of the ride's channels (all, lead, crew, sos)
 ): void {
   if (!rideId) return;
   void logMeasurement({
     rideId,
     kind: 'channel_status',
-    payload: { status, attempt, ...(errorMessage ? { error: errorMessage } : {}) },
+    payload: { status, attempt, ...(topicKind ? { channel: topicKind } : {}), ...(errorMessage ? { error: errorMessage } : {}) },
   });
 }
 
