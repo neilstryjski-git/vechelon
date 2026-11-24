@@ -139,9 +139,8 @@ What this brief does NOT establish, because the ticket allows a count only:
 testing purposes."** So the three are the Senior PM's own accounts, given extra memberships
 for testing, not club riders. This is his statement; it was not checked against the data (the
 ticket allows a count only). On that basis no real rider is in two clubs today, and "one
-rider, one club" holds for riders. Still open, for the Senior PM: whether to leave his three
-accounts as they are for the production move or reduce each to one membership first, since
-the app resolves one active club per account.
+rider, one club" holds for riders. DECIDED by the Senior PM, 2026-11-23: the three accounts stay as they are. A later run of
+this count will therefore return 3, not 0, and that is expected.
 
 Why it matters for the production move: the mobile app resolves ONE active club per account
 at runtime (W303), and the Rail 3 rules assume a rider acts in one club. An account with two
