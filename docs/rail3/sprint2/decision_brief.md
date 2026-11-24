@@ -10,7 +10,7 @@ from a Pillar it is flagged, not fixed.
 | 2 | What the map draws for a beaconing rider who goes Sleeping | **A red pulsing beacon marker at the last position sent. The Sleeping style is not drawn.** Three of the four Sleeping conditions in Pillar II are not built (flagged) |
 | 3 | What travels on the public web channel | **Nothing.** The code was unused and W310 deleted it |
 | 4 | Whether `beacon_active` is reset at ride end or at purge | **At ride end**, by a database trigger. The purge has no statement on the flag; it can end a ride left active over 24 hours, and that ride end resets it the same way |
-| 5 | No production account holds two memberships | **FALSE. Three production accounts hold two or more memberships.** This contradicts the Brain's inference (Ledger §16.7 item 4). Flagged, not fixed |
+| 5 | No production account holds two memberships | **FALSE as written: three production accounts hold two or more memberships.** The Senior PM states all three are his own accounts, so no club rider is affected. Flagged against Ledger §16.7 item 4, not fixed |
 
 ## 1. A Sleeping rider still receives Captain and SAG positions when the app is open
 
@@ -134,6 +134,13 @@ What this brief does NOT establish, because the ticket allows a count only:
   suspended, pending or archived second membership would count);
 - how they came to exist despite the web guard (before the guard, by an admin, by an import,
   or by a test).
+
+**Senior PM, 2026-11-23: "they are all my accounts."** So the three are the Senior PM's own
+accounts, not club riders. This is his statement; it was not checked against the data (the
+ticket allows a count only). On that basis no real rider is in two clubs today, and "one
+rider, one club" holds for riders. Still open, for the Senior PM: whether to leave his three
+accounts as they are for the production move or reduce each to one membership first, since
+the app resolves one active club per account.
 
 Why it matters for the production move: the mobile app resolves ONE active club per account
 at runtime (W303), and the Rail 3 rules assume a rider acts in one club. An account with two
