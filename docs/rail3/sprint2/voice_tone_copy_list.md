@@ -4,6 +4,8 @@
 **Scope:** every user-facing string Sprint 2 adds or changes, plus the Play-facing sentences that stop being true when the widened build ships.
 **Status:** the **Proposed placeholder** column is the Hands' wording, offered so the build is not blocked. Voice & Tone decides. Nothing here has been changed in the app, the Play listing or the Play forms.
 
+**PASSED 2026-11-23 by the Senior PM: the whole list, as proposed.** The Proposed placeholder column is now the approved wording, row 3.7 included. **The wording changes need a new build:** nothing here is live until the app strings ship in the next build (W315 applies them on `rail3-integration`) and the Play-facing sentences in section 4 are updated with that build's release. The Play open-test build (versionCode 4) keeps its current wording until then.
+
 This list sits beside `docs/rail3/sprint1/voice_tone_copy_list.md` and does not replace it. The tone rules summarised at the top of that list apply here unchanged. Where a string is already on the Sprint 1 list, the row says so.
 
 Legend: ⚠ **SAFETY**: the rider reads this while something is wrong. **BLOCKS**: brief item 10 (the app change, W315) cannot ship its wording until this row is decided.
@@ -53,6 +55,7 @@ Sprint 2 moves the rules to the server. Each row is a place where a refusal that
 | 3.4 | `permission_denied: a beacon cannot be inserted already cancelled` · `permission_denied: only beacon_cancelled_at and beacon_cancelled_by can be changed` · `permission_denied: this beacon is already closed` · `permission_denied: a cancel sets beacon_cancelled_at and records the caller as beacon_cancelled_by` | Server refusals added by W311 (four), visible only through 3.3 (the three update refusals) and 3.5 (the insert refusal) | `supabase/migrations/20261118000000_w311_beacon_write_guard.sql` | | (not copy: never show) | Recommend the app stops printing server text and uses 3.3's wording. The app's own cancel never triggers these; they are for tampering |
 | 3.5 | `Beacon alert sent, but the audit write failed: {server message}` | Error chip after raising, when the record could not be saved | `useBeacons.ts:338` | ⚠ SAFETY | `Your Beacon went out, but we couldn't save a record of it.` | On the Sprint 1 list as pre-existing. After W311 the server message can be a row-security refusal. Same recommendation: no raw server text |
 | 3.6 | `Could not load the roster.` | Roster screen, when the roster cannot be read | `mobile/src/screens/RosterScreen.tsx:164` | | (no change proposed) | W313 moves the roster to a server function and D50 narrows the rows; a refusal lands here. The code shows the raw error message when there is one, and this text only as a fallback, so rule 4 below applies |
+| 3.7 | `Not connected to the ride yet — your beacon did NOT go out. Try again in a moment.` | Error chip when the Beacon button is tapped before the ride connection exists | `mobile/src/hooks/useBeacons.ts` (`NOT_CONNECTED_MSG`) | ⚠ SAFETY | (as written) | Added by D94 on 2026-11-22, after this list was prepared. Before D94 the tap did nothing and said nothing |
 
 Nothing is shown when a cancel changes no row (someone else cancelled first, or the caller has no standing). That is deliberate and unchanged.
 
