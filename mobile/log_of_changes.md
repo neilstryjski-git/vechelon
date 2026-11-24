@@ -2036,7 +2036,7 @@ Notes:
 - REVIEW r1 (2026-11-23), migration `20261123010000_w193_r1_beacon_rows_and_null_action.sql`:
   beacon rows no longer open to the Captain / SAG ROLE alone (a suspended or never-opened
   leader read them; T9.3 now covers both); `rail3_channel_can(topic, NULL)` returns false.
-  NOT YET ON STAGING: staging carries 20261123000000 only until this one is approved.
+  APPLIED TO STAGING 2026-11-23 on the Senior PM's approval (migration count 86).
 - REVIEW r1, APP: the mux now lives as long as the `all` channel and re-binds its handlers
   when `lead` / `crew` / `sos` is replaced, so one topic reconnecting no longer resets the
   map (`tests/rideMux.test.mjs`, 8). The screen's joins come from `receiveKinds`, the table
@@ -2061,7 +2061,7 @@ Notes:
   with jitter; `channel_status` rows name the topic. (10) Until the first-open mark lands, a
   Captain or SAG cannot read beacon rows, so a cancel they attempt matches no row: the flag
   clears, no cancel is broadcast and the row stays open until ride end closes it.
-- OPEN, FOR THE SENIOR PM (not changed here): D50's participant-row policy and fleet seed
+- ACCEPTED FOR NOW BY THE SENIOR PM, 2026-11-23 (known limit 11, not changed here): D50's participant-row policy and fleet seed
   admit a Captain or SAG by ROLE alone, so one who is suspended or never opened the ride in
   the app still reads beacon flags and last positions from `ride_participants`, though
   refused on every channel and on beacon rows. T9.3 proves rows and channels for a leader,

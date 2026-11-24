@@ -46,6 +46,19 @@ tries a SAG with no first-open mark and a suspended SAG, with a control that the
 reads the row normally. That migration is NOT on staging yet. Also added: unit tests for the
 channel multiplexer (8), role-read retry, and four more known limits (dev log, 5 to 8).
 
+**Follow-up migration on staging, 2026-11-23, Senior PM approved ("apply").** Target
+`xybgtbybdhxuwqjfcfkc`; rolled-back trial first; no active ride or open beacon; production
+untouched. Staging run after it: T1.1 to T1.3, T4.1 to T4.4, T8.1 to T8.3, T9.1, T10, T14.1
+pass. T9.3 on staging no longer reaches beacon rows as a never-opened or suspended SAG; it
+and T9.2 stay red there only for the beacon flag (D50, at W317). Evidence:
+`~/vechelon-backups/w193-staging/denial-staging-r1/`.
+
+**Review r2, 2026-11-23.** All nine acceptance criteria met. One important finding, ACCEPTED
+FOR NOW by the Senior PM (2026-11-23): D50's participant-row policy and fleet seed admit a
+Captain or SAG by role alone, so a suspended or never-opened leader still reads beacon flags
+and last positions from the participant rows. Not changed; recorded as a known limit. Five
+minor findings fixed or recorded (dev log, limits 7, 9, 10).
+
 **Known limits** (also in the dev log): a socket's send permission is cached at join; the
 `all` topic accepts any event name from anyone on the ride (both leak only the sender's own
 position); the rider's role is read when the ride opens.
