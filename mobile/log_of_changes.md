@@ -2147,3 +2147,22 @@ Notes:
 - NOT STAMPED: `EXPO_PUBLIC_GIT_COMMIT` in the production profile still reads `b056cbe`; it is
   stamped with the trunk head immediately before the build is started (Phase 2).
 - STRIDE HOOKS: claimed from python urllib; worktree and PR made by hand.
+
+## 2026-11-23 — W317: Phase 1, additive staging writes (versionCode 4 unaffected)
+
+- PR #175 merged to `rail3-integration` (3458417) on the Senior PM's approval.
+- APPLIED TO STAGING (`xybgtbybdhxuwqjfcfkc`), Senior PM approved in session, each after a
+  trial inside a transaction forced to roll back:
+  1. `20261118020000_w313_ride_roster_function.sql`, whole file, with its ledger row
+     (staging ledger 87).
+  2. The D50 migration's functions and grants WITHOUT its `ALTER POLICY`, and with NO ledger
+     row: `rail3_ride_admin` (same body as D94's), `get_ride_fleet_seed`,
+     `rail3_can_list_attendees`, `get_ride_attendees`, `get_ride_attendee_count`,
+     `get_ride_attendee_counts`. The whole file `20261122010000` runs at the cutover and is
+     idempotent (`CREATE OR REPLACE`), and its ledger row is written then.
+- VERIFIED UNTOUCHED on staging after the applies: `participant_tactical_select` still has
+  the member branch, the hydration trigger is present, both legacy channel policies are
+  present. So versionCode 4 reads and channels are as before.
+- Evidence: `~/vechelon-backups/w317-staging/` (`apply.py`, the two SQL files as applied,
+  `after-phase1.json`).
+- NOT DONE YET: staging portal redeploy, the staging denial run, the build.

@@ -12,8 +12,15 @@ Phase 0 only. Nothing applied to staging; no build made; nothing run on a device
 | The legacy single ride channel can no longer be subscribed to by a rider (acceptance criterion 3) | New case T2.3: a rider and a Captain on the ride are refused `rail3:ride:<id>` by policy | Local stack: expected green. **Staging: red until the cutover** (recorded in `baseline.json` `targets.staging`) |
 | Staging state before the cutover | Read-only capture, `~/vechelon-backups/w317-staging/before.json` | Ledger 86 versions; hydration trigger present; both legacy policies present; no active ride, no beacon flag set |
 
-Still to record here: the additive staging applies, the device check of the new build, the
-cutover applies, the full `denial:staging --strict` run, and the schema comparison.
+**Phase 1, 2026-11-23 (staging `xybgtbybdhxuwqjfcfkc`, Senior PM approved).** The roster function
+(`20261118020000`, with ledger row) and the D50 functions without the policy change (no ledger
+row) were applied, each after a rolled-back trial. Checked afterwards by catalog read: all six
+new functions are SECURITY DEFINER with `search_path=public`, EXECUTE held by `authenticated`
+and `service_role` only (not PUBLIC, not anon); the participant read policy, the hydration
+trigger and both legacy channel policies are unchanged. No denial run on staging yet.
+
+Still to record here: the staging denial run after Phase 1, the device check of the new build,
+the cutover applies, the full `denial:staging --strict` run, and the schema comparison.
 
 ## 2026-11-23 — W315: riders see every beacon on the ride; reduced sheet; disclosure wording
 
