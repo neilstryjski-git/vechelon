@@ -2243,3 +2243,16 @@ Notes:
   the caller's own participant row, readable under the old policy and under D50.
 - STILL BY CODE READING ONLY: the refresh on resume and reconnect, the join send and its
   delivery on staging. Device validation owed on the next build.
+
+## 2026-11-24 — W317: second build (versionCode 6, carries D103)
+
+- Senior PM approved a second EAS build so D103 is fixed before the open test. Build
+  `a64c21c0-6420-47fb-8954-228567674723`, production profile (AAB, `ca.vechelon`,
+  staging-backed), versionCode 6, FINISHED. Built from branch `W317` at 88188b7; the commit
+  stamp in the app reads `c3b73e0`; `mobile/src` is the trunk's at 90cd1d2 (PR #176 merged).
+  EAS Android builds in November: 6 of 15.
+- versionCode 5 stays on the Play internal track as a check build and is not promoted.
+- BUILT, NOT VALIDATED: not installed on any device yet. Owed: the D103 device check (a
+  stationary late joiner appears after unlock without reopening the map) and a short
+  regression of roster and beacon.
+- W245 closed as not needed on the Senior PM's ruling (ride start proven on versionCode 5).
