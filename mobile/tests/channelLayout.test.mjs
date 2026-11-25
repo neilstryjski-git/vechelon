@@ -57,7 +57,7 @@ test('a leader position goes to lead only, beacon or not', () => {
 });
 
 test('beacon, depart and ride-ended events go to all, for every role', () => {
-  for (const ev of ['beacon', 'depart', 'ride_ended']) {
+  for (const ev of ['beacon', 'depart', 'ride_ended', 'join']) {
     for (const r of ['member', 'captain', 'support', null]) assert.deepEqual(sendKinds(r, ev, { beaconActive: true }), ['all']);
   }
 });
@@ -66,6 +66,7 @@ test('position handlers bind on every position-carrying topic; other events on a
   assert.deepEqual([...listenKinds('pos')].sort(), ['crew', 'lead', 'sos']);
   assert.deepEqual(listenKinds('beacon'), ['all']);
   assert.deepEqual(listenKinds('depart'), ['all']);
+  assert.deepEqual(listenKinds('join'), ['all'], 'D103: the join announcement is heard on all, by every role');
 });
 
 test('with no send context a position is routed as an ordinary rider with no beacon (least exposure)', () => {

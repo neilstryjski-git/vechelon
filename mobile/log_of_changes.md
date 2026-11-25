@@ -2147,3 +2147,48 @@ Notes:
 - NOT STAMPED: `EXPO_PUBLIC_GIT_COMMIT` in the production profile still reads `b056cbe`; it is
   stamped with the trunk head immediately before the build is started (Phase 2).
 - STRIDE HOOKS: claimed from python urllib; worktree and PR made by hand.
+
+## 2026-11-24 — D103: a late joiner standing still is missing from the map after unlock
+
+- FOUND on the W317 device check (versionCode 5, staging). The map keeps its own copy of the
+  roster, read when the map opens and re-read only on a LIVE ping from an unknown rider. A
+  resume refreshed stored positions but not names, and the map draws only named riders. So
+  someone who joined while the viewer's phone was locked, and who has stood still since, had a
+  position on that phone and no marker. Evidence: staging `analytics_events`, ride e746e536,
+  02:17 UTC: stored positions 4 (Captain) and 3 (rider) received, roster still 2, fleet 2.
+- RULED by the Senior PM (2026-11-24): a big user-experience problem; fix before the open
+  test; add a join announcement as well.
+- LLD (app only, no server change):
+  1. `useRideRoster.refetchRoster` defers a refresh asked for inside the 10 s debounce window
+     to the end of the window instead of dropping it (one deferred read per window). The read
+     on open now starts the window.
+  2. The roster is refreshed on every resume and on every channel RE-connect (not the first
+     connect, whose roster was just read).
+  3. `composeFleet` reports `unknownStoredRiderIds` (a stored position with no roster entry,
+     no live ping, no departure mark); the hook asks for a refresh once per set of unknown
+     ids, and only once the roster has loaded.
+  4. New broadcast event `join` on `rail3:all` (`JOINED_EVENT`), sent over REST when THIS open
+     wrote the join (new row, first-open mark, or rejoin). Payload `{ riderId, ts }`, never a
+     position. Receivers refresh the roster; the payload is never used as data.
+- PILLARS: no departure. Reads stay at meaningful events (Pillar II §2: never per ping); the
+  announcement carries no position and section 4.1 is enforced by the same server functions
+  as before. The event layout is the Hands' LLD (Pillar II §2, Real-time Pattern).
+- NOT CHANGED: the roster screen (it reads on open); the server; the denial rules (the suite's
+  event list gains `join`, which routes to `all` like every non-position event).
+- KNOWN LIMITS: versionCode 4 and 5 neither send nor act on `join`. A phone in a pocket still
+  misses the announcement by design; items 2 and 3 are what cover it.
+- NEEDS A NEW BUILD (versionCode 6). Built, not validated on a device.
+- STRIDE HOOKS: D103 claimed from python urllib; worktree `../vechelon-d103` and PR by hand.
+
+- D103 REVIEW r1 (2026-11-24, stride:task-reviewer: approved, 0 critical, 0 important, 7
+  minor). Addressed: (1, 2) the debounce is now a pure helper `lib/trailingDebounce.ts` with
+  node tests, and an immediate read cancels an overdue deferred one; (3) `useRideRoster`
+  returns `rosterLoaded` (a read has succeeded), used instead of "roster is non-empty";
+  (4) a failed roster read is retried through the debounce, at most three times in a row;
+  (5) `markRail3Joined` reports whether it wrote the mark, and the resume-time re-mark
+  announces the join when it is the write that landed; (6) the join handler no longer logs
+  the sender-supplied id; (7) a `join` also re-reads stored positions and departure marks
+  (debounced at 3 s). `markRail3Joined` now returns its own row (`.select('account_id')`):
+  the caller's own participant row, readable under the old policy and under D50.
+- STILL BY CODE READING ONLY: the refresh on resume and reconnect, the join send and its
+  delivery on staging. Device validation owed on the next build.

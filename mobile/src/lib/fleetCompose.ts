@@ -68,6 +68,11 @@ export interface ComposeInput {
 export interface ComposeResult {
   fleet: FleetParticipant[];
   unknownLiveRiderIds: string[]; // live ping, no roster entry → the caller refetches the roster
+  // D103: a STORED position with no roster entry and no live ping. Since D50 the server hands a
+  // device only the positions its role may see, and the roster function names everyone on the
+  // ride, so this is no longer "a rider RLS hid from us": it is a stale roster (someone joined
+  // while this phone was not listening and has not moved since). The caller refetches the roster.
+  unknownStoredRiderIds: string[];
   departedSuppressed: string[]; // ids dropped by the departed rule (evidence only, never coords)
 }
 
@@ -80,14 +85,19 @@ export function composeFleet(input: ComposeInput): ComposeResult {
   const { pings, lastKnown, roster, departed, nowMs, deriveState } = input;
   const fleet: FleetParticipant[] = [];
   const unknownLiveRiderIds: string[] = [];
+  const unknownStoredRiderIds: string[] = [];
   const departedSuppressed: string[] = [];
   const riderIds = new Set([...Object.keys(pings), ...Object.keys(lastKnown)]);
   for (const riderId of riderIds) {
     const entry = roster[riderId];
     if (!entry) {
-      // Only a LIVE ping from an unidentified rider signals a mid-ride joiner. A stored last-known
-      // with no roster row is just a rider RLS hid from us — stay quiet; the §4.1 boundary holds.
+      // No roster row = nothing is drawn, whatever arrived (the §4.1 boundary holds: a marker
+      // needs a name the server chose to give this device). Both cases are reported so the caller
+      // can refetch the roster: a LIVE ping from an unidentified rider (a mid-ride joiner), and
+      // (D103) a STORED position for one, unless they carry a departure mark (a departed rider's
+      // stored position is never a reason to look them up).
       if (pings[riderId]) unknownLiveRiderIds.push(riderId);
+      else if (!departed[riderId]) unknownStoredRiderIds.push(riderId);
       continue;
     }
     const mark = departed[riderId];
@@ -133,7 +143,7 @@ export function composeFleet(input: ComposeInput): ComposeResult {
       });
     }
   }
-  return { fleet, unknownLiveRiderIds, departedSuppressed };
+  return { fleet, unknownLiveRiderIds, unknownStoredRiderIds, departedSuppressed };
 }
 
 export interface LastKnownRow {
