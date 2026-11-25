@@ -42,8 +42,8 @@ still open).** Build identity confirmed on device (`embedded ff9a88e · producti
 | Two database-only test participants (a SAG and a rider, stored positions, no pings): Captain's map shows both, rider's map shows the SAG only | Pass after reopening the map | Seed read: Captain 4 positions, rider 3 (never the other rider's). **Finding: D103** (not drawn after a resume; needs a map reopen on this build) |
 | Beacon: rider raises and cancels; rider raises, Captain cancels | Pass | `beacon_alerts`: 02:37:21 cancelled by the rider, 02:37:40 cancelled by the Captain |
 | End ride closes the map on both phones | Pass | ride status `saved` |
-| Ride-start timing (W245), warm and cold | Reported "pass easily"; **numbers not recorded** | none |
-| Play reviewer account sign-in | Reported pass; **not corroborated** (that account's last sign-in on staging is 01:22 UTC, before the rest of the check) | to confirm |
+| Ride-start timing (W245), warm and cold | Pass by the Senior PM's judgement ("pass easily"; W245 ruled not needed, 2026-11-24). Numbers not recorded | none |
+| Play reviewer account sign-in (password path), lands in the reviewer club, starts an Ad Hoc ride | Pass | Account signed in 02:49 UTC; ride "Ad Hoc Ride — Glacier" created 02:51 UTC in Bikes and Beers — Reviewer Edition |
 
 Observation (Senior PM): force-stopping the app without leaving the ride leaves the marker on
 the other phone. That is the designed treatment of signal loss (no departure is announced, so
