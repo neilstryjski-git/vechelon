@@ -17,9 +17,20 @@ also ping and announce itself, which an awake phone acts on at once).
 | Rider's phone locked, stationary late SAG added, unlock | Pass: SAG marker appeared | 03:50:58: roster and fleet include the SAG; the other test rider is in the roster, never in the fleet |
 | Captain's phone, stationary late SAG, lock and unlock | Pass (Senior PM) | not read from the log |
 
-Not yet done on versionCode 6: the short regression (roster on both phones, one beacon raise
-and cancel), a late joiner with an open beacon, and the same checks with a real third phone.
-Before the cutover: the old table-read policy was still open on staging.
+| Awake phones: a moving Captain added with NO join announcement | Pass on both phones (Senior PM saw it join) | On the ride 03:59:24; named and drawn on both phones by 03:59:25 |
+| Awake phones: a SAG added WITH the join announcement | Pass on both phones | Announcement 04:00:04; `joined_recv` and marker on both phones at 04:00:05, before its first ping |
+| A rider's phone never receives another rider's live position | Pass | Rider's phone received 0 of 81 pings from the other test rider; the Captain's phone received 81 |
+| Regression: beacon raise and cancel | Pass | Three beacons on this ride: rider's own cancel, Captain's own cancel, Captain cancelling the rider's |
+
+Moving joiners were simulated by REST position pings sent as test accounts
+(`~/vechelon-backups/w317-staging/simulate_moving.py`, `simulate_join.py`).
+
+**Senior PM, 2026-11-24: enough to close D103; add it to the ride tests when they resume.** To
+re-check on a real ride with three or more phones: a late joiner standing still appears on a
+leader's phone after unlock; the same with the late joiner holding an open beacon (never
+tried); a late-joining leader appears on riders' phones; a rider's phone never shows another
+rider. Also not covered: behaviour after the cutover (the old table-read policy was still open
+on staging).
 
 ## 2026-11-24 — D103: late joiner standing still missing from the map after unlock
 
