@@ -30,9 +30,33 @@ Reports: `~/vechelon-backups/w317-staging/denial-phase1*/`.
 only: both staging hosts return 200 and serve the new bundle, which names the staging project
 and contains the attendee function calls. **Not checked in a browser as a signed-in user.**
 
-Still to record here: a signed-in page check of the staging portal, the device check of the
-new build, the cutover applies, the full `denial:staging --strict` run, and the schema
-comparison.
+**Device check of versionCode 5, 2026-11-24 (Senior PM; Play internal testing; S23 as Captain,
+S21 as rider; staging ride e746e536; before the cutover, so the old table-read policy was
+still open).** Build identity confirmed on device (`embedded ff9a88e · production`).
+
+| Step | Result | Corroboration on staging |
+|---|---|---|
+| Sign-in, sign-out, second sign-in (two ordinary accounts) | Pass | Both accounts signed in |
+| Join; map both ways (Captain sees rider, rider sees Captain) | Pass | `fleet_compose` log lines from both phones |
+| Roster: rider sees names and leaders' phones only; Captain sees every phone | Pass | none (screen only) |
+| Two database-only test participants (a SAG and a rider, stored positions, no pings): Captain's map shows both, rider's map shows the SAG only | Pass after reopening the map | Seed read: Captain 4 positions, rider 3 (never the other rider's). **Finding: D103** (not drawn after a resume; needs a map reopen on this build) |
+| Beacon: rider raises and cancels; rider raises, Captain cancels | Pass | `beacon_alerts`: 02:37:21 cancelled by the rider, 02:37:40 cancelled by the Captain |
+| End ride closes the map on both phones | Pass | ride status `saved` |
+| Ride-start timing (W245), warm and cold | Reported "pass easily"; **numbers not recorded** | none |
+| Play reviewer account sign-in | Reported pass; **not corroborated** (that account's last sign-in on staging is 01:22 UTC, before the rest of the check) | to confirm |
+
+Observation (Senior PM): force-stopping the app without leaving the ride leaves the marker on
+the other phone. That is the designed treatment of signal loss (no departure is announced, so
+the last position stays and ages to stopped, inactive, then dark at the club's thresholds:
+2, 5 and 15 minutes); only a deliberate Leave or sign-out removes a marker at once.
+
+The two test participants were removed from the ride afterwards. Not covered by this check: a
+second rider's view of a beacon (the reduced sheet), SAG on a real phone, and anything after
+the cutover.
+
+Still to record here: a signed-in page check of the staging portal, the device check of
+versionCode 6 (D103), the cutover applies, the full `denial:staging --strict` run, and the
+schema comparison.
 
 ## 2026-11-23 — W315: riders see every beacon on the ride; reduced sheet; disclosure wording
 
