@@ -9,7 +9,7 @@ App-only change on `rail3-integration`. No migration. **Built, not validated on 
 | Acceptance criterion | Evidence | Status |
 |---|---|---|
 | A stored position for an account missing from the roster triggers a roster refetch | Unit: `composeFleet` reports `unknownStoredRiderIds` (two cases, incl. departed and live-and-stored) | Unit green; device check owed |
-| Resume and reconnect refresh the roster | Code reading only (hook wiring, no unit seam) | **Not tested**; device check owed |
+| Resume and reconnect refresh the roster | Debounce logic: unit (`trailingDebounce`, 7 cases: deferred not dropped, one run per window, overdue timer cancelled). Hook wiring: code reading and review r1 | Unit green for the debounce; wiring **not tested**; device check owed |
 | `join` is sent and heard on `all` only, rider id and time only | Unit: `channelLayout` routing; payload by code reading | Unit green |
 | A rider still never draws another rider | Unit: no roster row = no marker; denial suite in CI | See the CI run on the D103 PR |
 | Late joiner standing still (with and without a beacon) appears after unlock | None yet | **Owed: Senior PM on the next build** |

@@ -2179,3 +2179,16 @@ Notes:
   misses the announcement by design; items 2 and 3 are what cover it.
 - NEEDS A NEW BUILD (versionCode 6). Built, not validated on a device.
 - STRIDE HOOKS: D103 claimed from python urllib; worktree `../vechelon-d103` and PR by hand.
+
+- D103 REVIEW r1 (2026-11-24, stride:task-reviewer: approved, 0 critical, 0 important, 7
+  minor). Addressed: (1, 2) the debounce is now a pure helper `lib/trailingDebounce.ts` with
+  node tests, and an immediate read cancels an overdue deferred one; (3) `useRideRoster`
+  returns `rosterLoaded` (a read has succeeded), used instead of "roster is non-empty";
+  (4) a failed roster read is retried through the debounce, at most three times in a row;
+  (5) `markRail3Joined` reports whether it wrote the mark, and the resume-time re-mark
+  announces the join when it is the write that landed; (6) the join handler no longer logs
+  the sender-supplied id; (7) a `join` also re-reads stored positions and departure marks
+  (debounced at 3 s). `markRail3Joined` now returns its own row (`.select('account_id')`):
+  the caller's own participant row, readable under the old policy and under D50.
+- STILL BY CODE READING ONLY: the refresh on resume and reconnect, the join send and its
+  delivery on staging. Device validation owed on the next build.
