@@ -64,7 +64,7 @@
         "EXPO_PUBLIC_TENANT_SLUG": "racer-sportif",
         "EXPO_PUBLIC_FALLBACK_CLUB_SLUG": "bikes-and-beers",
         "EXPO_PUBLIC_REVIEWER_EMAIL": "play-review@vechelon.ca",
-        "EXPO_PUBLIC_GIT_COMMIT": "ff9a88e"
+        "EXPO_PUBLIC_GIT_COMMIT": "c3b73e0"
       }
     },
     "validate": {
