@@ -72,14 +72,21 @@ export async function selfRsvpWithIdentity(opts: {
 // W288: stamp the app-tracked signal on MY existing participant row (own row under
 // participant_update_policy). Idempotent — only a NULL is written, so a rejoin never moves the
 // first-open timestamp and a zero-row match is not an error. Best-effort, never blocks the open.
-export async function markRail3Joined(rideId: string, accountId: string): Promise<{ error: unknown }> {
-  const { error } = await supabase
+// D103: `wrote` says whether THIS call set the mark (one row came back) or found it already set
+// (none): the caller announces the join only for the write that actually landed it. The returned
+// row is the caller's own, which every participant may read.
+export async function markRail3Joined(
+  rideId: string,
+  accountId: string,
+): Promise<{ error: unknown; wrote: boolean }> {
+  const { data, error } = await supabase
     .from('ride_participants')
     .update({ rail3_joined_at: new Date().toISOString() })
     .eq('ride_id', rideId)
     .eq('account_id', accountId)
-    .is('rail3_joined_at', null);
-  return { error };
+    .is('rail3_joined_at', null)
+    .select('account_id');
+  return { error, wrote: !error && Array.isArray(data) && data.length > 0 };
 }
 
 // W292 (C3 item 7, R3-68): a return AFTER a departure is a FRESH join - clear the durable departed
