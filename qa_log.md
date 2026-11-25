@@ -2,6 +2,25 @@
 
 Validation records against Pillar III and the sprint briefs. Newest first.
 
+## 2026-11-24 — D103 device check on versionCode 6 (Senior PM; Play internal testing)
+
+Build `a64c21c0`, version line `embedded c3b73e0 · production`, staging ride 59b7fdf1 ("Ad Hoc
+Ride — Quartz"). Phones swapped from the day before: S21 = Captain, S23 = rider. Late joiners
+were database-only test participants with a stored position and no ping (a real phone would
+also ping and announce itself, which an awake phone acts on at once).
+
+| Check | Result | Corroboration (the phone's own log on staging) |
+|---|---|---|
+| Join announcement is delivered | Pass | Captain's phone logged `joined_recv` at 03:43:43 UTC when the rider joined |
+| Captain's phone locked, stationary late RIDER added, unlock | Pass: marker appeared without reopening the map | Unlock 03:48:55; at 03:48:58 roster and fleet both include the newcomer, source `lastKnown` |
+| Rider's phone locked, stationary late RIDER added, unlock | Pass: no marker (a rider never sees another rider) | Roster grew to include the newcomer; seed returned 2 usable positions, never the other rider's |
+| Rider's phone locked, stationary late SAG added, unlock | Pass: SAG marker appeared | 03:50:58: roster and fleet include the SAG; the other test rider is in the roster, never in the fleet |
+| Captain's phone, stationary late SAG, lock and unlock | Pass (Senior PM) | not read from the log |
+
+Not yet done on versionCode 6: the short regression (roster on both phones, one beacon raise
+and cancel), a late joiner with an open beacon, and the same checks with a real third phone.
+Before the cutover: the old table-read policy was still open on staging.
+
 ## 2026-11-24 — D103: late joiner standing still missing from the map after unlock
 
 App-only change on `rail3-integration`. No migration. **Built, not validated on a device.**
