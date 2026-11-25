@@ -56,6 +56,11 @@ export const POSITION_EVENT = 'pos';
 // rider's marker on this event, distinct from the passive greying of a rider who just went quiet.
 // Mirrored (inlined) in backgroundLocation.ts to avoid a circular import — keep in sync.
 export const DEPARTED_EVENT = 'depart';
+// D103: a device announces that its join to the ride has just settled (first open in the app, or a
+// rejoin). Sent on the `all` topic like 'depart'. Payload: { riderId, ts } and nothing else, never
+// a position. Receivers treat it ONLY as a reason to re-read the roster from the server, which
+// decides what this device may know; the payload is never used as data.
+export const JOINED_EVENT = 'join';
 
 // The ping payload is MINIMAL by design (review finding, W172): no phone, no
 // display name, no self-reported role. Identity attributes come from the
@@ -93,6 +98,10 @@ export function useRideRoster(rideId: string | null): {
   const [roster, setRoster] = useState<RideRoster>({});
   const [fetchTick, setFetchTick] = useState(0);
   const lastFetchRef = useRef(0);
+  // D103: a refetch asked for inside the debounce window is deferred to the end of the window,
+  // not dropped. An unknown live ping repeats, so dropping it cost nothing; a resume, a join
+  // announcement or an unknown stored position happens ONCE, and dropping it lost the refresh.
+  const trailingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A ping from a rider the roster can't identify usually means someone joined
   // mid-ride (e.g. scanned the QR after this viewer opened the map) — refetch,
@@ -100,14 +109,35 @@ export function useRideRoster(rideId: string | null): {
   // at meaningful events, per Pillar II §2).
   const refetchRoster = useCallback(() => {
     const now = Date.now();
-    if (now - lastFetchRef.current < ROSTER_REFETCH_DEBOUNCE_MS) return;
+    const wait = ROSTER_REFETCH_DEBOUNCE_MS - (now - lastFetchRef.current);
+    if (wait > 0) {
+      // At most one deferred read per window, however many asks arrive inside it.
+      if (!trailingRef.current) {
+        trailingRef.current = setTimeout(() => {
+          trailingRef.current = null;
+          lastFetchRef.current = Date.now();
+          setFetchTick((t) => t + 1);
+        }, wait);
+      }
+      return;
+    }
     lastFetchRef.current = now;
     setFetchTick((t) => t + 1);
   }, []);
+  useEffect(
+    () => () => {
+      if (trailingRef.current) clearTimeout(trailingRef.current);
+      trailingRef.current = null;
+    },
+    [rideId],
+  );
 
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
+    // D103: the read on open counts for the debounce too, so a refresh asked for a moment later
+    // (the channel connecting) waits out the window instead of doubling the open's read.
+    lastFetchRef.current = Date.now();
     (async () => {
       // D50: a rider can no longer read other riders' participant rows. Names, roles and the
       // phones this role may see come from the roster function (W313); the participation
@@ -213,6 +243,9 @@ export function useFleetPositions(
   // can read the current ride/rider for W180 latency logging WITHOUT re-binding
   // the subscription (which would reset pings) when these props change.
   const rideIdRef = useRef(rideId);
+  // D103: the roster refetch (useRideRoster.refetchRoster) for the stable callbacks below.
+  const onUnknownRiderRef = useRef(onUnknownRider);
+  onUnknownRiderRef.current = onUnknownRider;
   rideIdRef.current = rideId;
   const myRiderIdRef = useRef(myRiderId);
   myRiderIdRef.current = myRiderId;
@@ -350,8 +383,17 @@ export function useFleetPositions(
   // D50: the channel object only exists once the ride join has settled (D94), which is the first
   // moment the seed function admits a rider. Read then. For a Captain, SAG or admin the mount
   // read already succeeded and this one is absorbed by the debounce.
+  // D103: a RE-connect (not the first connect, whose roster was read a moment ago on open) also
+  // refreshes the roster: whoever joined while the socket was down announced it to nobody here.
+  const channelSeenRef = useRef(false);
   useEffect(() => {
-    if (channel) connectFetchRef.current?.();
+    channelSeenRef.current = false;
+  }, [rideId]);
+  useEffect(() => {
+    if (!channel) return;
+    connectFetchRef.current?.();
+    if (channelSeenRef.current) onUnknownRiderRef.current?.();
+    channelSeenRef.current = true;
   }, [channel]);
 
   // W269: last-known refetch now rides the shared resume signal (clock-gap + AppState + staleness),
@@ -360,6 +402,10 @@ export function useFleetPositions(
   // logging here instead would emit a resume_signal for a refetch that never ran.
   const onResume = useCallback((source: ResumeSource) => {
     resumeFetchRef.current?.(source);
+    // D103: names are refreshed wherever stored positions are. Before this, a resume re-read
+    // positions but not the roster, so someone who joined while this phone was locked and has
+    // stood still since had a position here and no marker (the map draws only named riders).
+    onUnknownRiderRef.current?.();
     // D89 + D90 (prong 2) — UNIFIED engine re-assert. On every resume, nudge the tracking engine
     // back to moving. This ONE idempotent action subsumes three previously-separate concerns:
     //   • D90 warm-up strand — a ride can start dark if the phone is locked before the engine
@@ -465,6 +511,17 @@ export function useFleetPositions(
           payload: { event: 'departed_recv', riderId, self: riderId === myRiderIdRef.current, hadTs: typeof payloadTs === 'number' },
         });
       }
+    });
+    // D103: someone's join to the ride has just settled. Re-read the roster (debounced) so the map
+    // can name them when their position arrives. The payload is a trigger only: who they are, their
+    // role and whether this device may see them all come from the server's roster function.
+    channel.on('broadcast', { event: JOINED_EVENT }, ({ payload }) => {
+      noteChannelActivity();
+      const riderId = (payload as { riderId?: unknown })?.riderId;
+      if (typeof riderId !== 'string' || riderId === myRiderIdRef.current) return;
+      onUnknownRiderRef.current?.();
+      const rid = rideIdRef.current;
+      if (rid) void logMeasurement({ rideId: rid, kind: 'app_state_change', payload: { event: 'joined_recv', riderId } });
     });
     // Broadcast/Presence handlers may bind after subscribe() (useRideChannel
     // already subscribed); postgres_changes may not — none are used here.
@@ -842,9 +899,28 @@ export function useFleetPositions(
     deriveState: (s, t, n) => deriveRenderState(s, t, n, thresholds),
   });
   const fleet: FleetParticipant[] = composed.fleet;
-  // Only a LIVE ping from an unidentified rider signals a mid-ride joiner (refetch the roster,
-  // debounced in useRideRoster). A stored last-known with no roster row is a rider RLS hid from us.
+  // A LIVE ping from an unidentified rider signals a mid-ride joiner (refetch the roster,
+  // debounced in useRideRoster).
   if (composed.unknownLiveRiderIds.length > 0) onUnknownRider?.();
+  // D103: so does a STORED position for someone the roster cannot name. Asked once per set of
+  // unknown ids and only once the roster has loaded (on open the two reads race, and an empty
+  // roster is "not loaded yet", not "stale"): an id the roster function never returns must not
+  // turn into a read every debounce window.
+  const unknownStoredKey = composed.unknownStoredRiderIds.slice().sort().join(',');
+  const rosterLoaded = Object.keys(roster).length > 0;
+  const askedStoredRef = useRef('');
+  useEffect(() => {
+    if (!unknownStoredKey) {
+      askedStoredRef.current = '';
+      return;
+    }
+    if (!rosterLoaded || askedStoredRef.current === unknownStoredKey) return;
+    askedStoredRef.current = unknownStoredKey;
+    onUnknownRiderRef.current?.();
+    const rid = rideIdRef.current;
+    if (rid) void logMeasurement({ rideId: rid, kind: 'app_state_change', payload: { event: 'roster_stale', unknown: composed.unknownStoredRiderIds.length } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unknownStoredKey, rosterLoaded]);
 
   return { fleet, myCoords, channelStatus: status };
 }

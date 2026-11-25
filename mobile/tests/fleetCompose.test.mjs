@@ -37,8 +37,20 @@ test('no marks: (pings ∪ lastKnown) ∩ roster, live wins when fresher, else l
   assert.equal(byId.r1.source, 'lastKnown', 'a fresher stop write beats an older live ping');
   assert.equal(byId.r1.state, 'stopped');
   assert.equal(byId.r2.source, 'lastKnown');
-  assert.deepEqual(out.unknownLiveRiderIds, ['ghost'], 'only a LIVE ping from an unknown id is a joiner signal');
+  assert.deepEqual(out.unknownLiveRiderIds, ['ghost'], 'a LIVE ping from an unknown id is a joiner signal');
+  assert.deepEqual(out.unknownStoredRiderIds, ['hidden'], 'D103: a STORED position from an unknown id is reported too (stale roster), and still not drawn');
   assert.deepEqual(out.departedSuppressed, []);
+});
+
+test('D103: an unknown id with both a live ping and a stored position is reported once, as live; a departed unknown id is not reported as stored', () => {
+  const out = compose({
+    pings: { both: ping('both', T) },
+    lastKnown: { both: lk(T - 1_000), gone: lk(T), late: lk(T) },
+    departed: { gone: { atMs: T + 1, seenAtMs: T + 1 } },
+  });
+  assert.deepEqual(out.unknownLiveRiderIds, ['both']);
+  assert.deepEqual(out.unknownStoredRiderIds, ['late'], 'a departed rider is never looked up from a stored position');
+  assert.equal(out.fleet.some((f) => ['both', 'gone', 'late'].includes(f.riderId)), false, 'no roster row = no marker, whatever arrived');
 });
 
 test('live ping equal to the last-known ts wins (>=), matching the inline join it replaced', () => {

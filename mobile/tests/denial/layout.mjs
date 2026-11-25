@@ -13,7 +13,8 @@
 export const LAYOUT = 'four role-scoped channels per ride: crew, lead, all, sos (W193); legacy rail3:ride closed (W317)';
 
 // Event names on the wire (mobile/src/hooks: useFleetPositions, useBeacons, useRideChannel).
-export const EVENTS = { pos: 'pos', beacon: 'beacon', depart: 'depart', rideEnded: 'ride_ended' };
+// D103 added 'join' (a device's join to the ride has settled): rider id and time only, on `all`.
+export const EVENTS = { pos: 'pos', beacon: 'beacon', depart: 'depart', rideEnded: 'ride_ended', join: 'join' };
 
 // The pre-W193 topic. It stays in allTopics() for good: if a later layout leaves it open,
 // T1 / T2 / T9 must still catch it.

@@ -34,8 +34,8 @@ import FirstRideExplainer from '../components/FirstRideExplainer';
 import LocationDisclosure from '../components/LocationDisclosure';
 import { useRideDetails } from '../hooks/useRideDetails';
 import { useRideChannel, RIDE_ENDED_EVENT } from '../hooks/useRideChannel';
-import { useFleetPositions, useRideRoster } from '../hooks/useFleetPositions';
-import { broadcastDeparture, awaitPendingDeparture } from '../lib/backgroundLocation';
+import { useFleetPositions, useRideRoster, JOINED_EVENT } from '../hooks/useFleetPositions';
+import { broadcastDeparture, awaitPendingDeparture, restBroadcast } from '../lib/backgroundLocation';
 import { clearActiveRide, clearPersistedActiveRide } from '../lib/activeRide';
 import { useRideEndWatch } from '../hooks/useRideEndWatch';
 import { useBeacons } from '../hooks/useBeacons';
@@ -276,6 +276,15 @@ const RideMapScreen: React.FC = () => {
       if (!cancelled) setJoinSettled(true);
     };
     const settleAnyway = setTimeout(settle, 5000); // D94: a slow or failed join never blocks the channel for good
+    // D103: tell the ride that this device's join has just settled, so every map that is awake
+    // re-reads its roster and can name us when our position arrives. Only when THIS open wrote the
+    // join (new row, first-open mark, or rejoin): a plain re-open changes nothing for anyone.
+    // Rider id and time only, never a position. Sent over REST after the write, because the server
+    // admits a sender only once the row carries the mark. Best-effort: a phone that misses it
+    // refreshes its roster on its next resume or reconnect anyway.
+    const announceJoin = () => {
+      if (!cancelled) void restBroadcast(rideId, { riderId: myRiderId, ts: Date.now() }, JOINED_EVENT);
+    };
     void (async () => {
      try {
       // W292: a quick leave → re-open must read the row AFTER the departure's UPDATE has landed, or
@@ -298,6 +307,7 @@ const RideMapScreen: React.FC = () => {
         if (existing.departed_at) {
           const { error: rejoinErr } = await markRail3Rejoined(rideId, myRiderId);
           if (rejoinErr) console.warn('[Rail3] markRail3Rejoined failed', rejoinErr);
+          else announceJoin();
           return;
         }
         // W288 (slate 17): an existing row (admin-added, web RSVP) becomes app-tracked the first
@@ -305,6 +315,7 @@ const RideMapScreen: React.FC = () => {
         if (!existing.rail3_joined_at) {
           const { error: markErr } = await markRail3Joined(rideId, myRiderId);
           if (markErr) console.warn('[Rail3] markRail3Joined failed', markErr);
+          else announceJoin();
         }
         return;
       }
@@ -316,6 +327,7 @@ const RideMapScreen: React.FC = () => {
         role: 'member',
       });
       if (rsvpErr) console.warn('[Rail3] self-RSVP failed', rsvpErr);
+      else announceJoin();
      } finally {
       settle(); // D94: the row or mark is written (or the attempt failed): open the channel now
      }
